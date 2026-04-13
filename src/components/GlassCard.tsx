@@ -4,13 +4,22 @@ import React from 'react';
 interface GlassCardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   hover?: boolean;
+  variant?: 'default' | 'elevated' | 'subtle' | 'critical';
 }
 
-export function GlassCard({ children, className, hover = false, ...props }: GlassCardProps) {
+const variantClasses = {
+  default: 'glass-card',
+  elevated: 'glass-card-elevated',
+  subtle: 'glass-card-subtle',
+  critical: 'glass-card-critical',
+};
+
+export function GlassCard({ children, className, hover = false, variant = 'default', ...props }: GlassCardProps) {
   return (
     <div
       className={cn(
-        'glass-card p-5',
+        variantClasses[variant],
+        'p-5',
         hover && 'metric-card',
         className
       )}
