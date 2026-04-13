@@ -1,102 +1,151 @@
 
 
-# Sistema Premium de Gestão de CNDs — Fase 1
+# Refinamento Premium — Sistema CND Manager
 
-## Visão Geral
-Sistema completo de gestão de certidões negativas com design liquid glass premium, navegação por sidebar, dados mock para demonstração, e toda a estrutura operacional funcional no frontend.
+## Scope
+Deep visual and UX refinement across all screens, components, and the design system to achieve a proprietary, enterprise-grade SaaS appearance.
 
-## Design System
-- Tema **liquid glass**: backgrounds com glassmorphism sutil (backdrop-blur, transparências), sombras suaves, bordas refinadas com brilho
-- Paleta profissional: tons de azul-escuro/slate como primário, acentos em violet/indigo, alertas em amber/red/green
-- Tipografia com hierarquia clara, espaçamento generoso, cards sob medida
-- Skeleton loaders e transições suaves em toda a UI
+## 1. Design System Overhaul
 
-## Estrutura de Navegação (Sidebar)
-1. **Dashboard** — visão executiva-operacional
-2. **Empresas** — cadastro, listagem, detalhe com abas
-3. **Agenda** — vencimentos em lista, calendário e timeline
-4. **Certidões / CNDs** — checklist por empresa
-5. **Documentos** — biblioteca centralizada de PDFs
-6. **Envios** — histórico de e-mail/WhatsApp
-7. **Alertas** — centro de notificações
-8. **Logs** — rastreamento de acesso e leitura
-9. **Configurações** — tipos de CND, perfis, preferências
+**index.css** — Refine the glass system and add new utility layers:
+- Add noise/grain texture overlay to glass cards via CSS pseudo-element (subtle SVG noise pattern)
+- Introduce `--glass-highlight` token for top-edge shimmer on cards
+- Add `animate-slide-in` and `animate-pulse-soft` keyframes (currently referenced but missing)
+- Refine `.metric-card` with fixed min-height for consistent card alignment
+- Add `.glass-card-elevated` variant with stronger shadow for priority sections
+- Create `.filter-bar` component class with inner glow and subtle inset shadow
+- Add transition utilities for hover states (scale, shadow, border-glow)
 
-## Módulos e Telas
+**tailwind.config.ts** — Add custom colors (`success`, `warning`, `info`) to theme, keyframes for `slide-in`, `fade-in`, `pulse-soft`, and custom font family for `JetBrains Mono` as `font-mono`.
 
-### 1. Dashboard
-- Cards de métricas: vencidas, vencendo, pendentes, enviados, acessos pendentes, empresas críticas
-- Gráfico de distribuição de status (chart elegante)
-- Lista de ações urgentes com atalhos rápidos
-- Resumo de alertas ativos
+## 2. Component Refinements
 
-### 2. Empresas
-- **Listagem**: busca por razão social/CNPJ/município, filtros por status/regime/responsável, indicadores visuais por empresa
-- **Cadastro/Edição**: formulário completo com validação de CNPJ, máscaras, todos os campos especificados
-- **Detalhe**: cabeçalho com dados principais + abas (Visão Geral, Checklist CNDs, Documentos, Vencimentos, Envios, Logs, Observações) + bloco de ações rápidas + resumo de saúde documental
+**GlassCard** — Add `variant` prop: `default | elevated | subtle | critical`. Each variant has distinct shadow depth, border opacity, and optional colored left-border accent. Add noise texture overlay.
 
-### 3. Agenda de Vencimentos
-- Vista em lista com prioridades visuais (vencido → vermelho, hoje → laranja, 3 dias → amarelo, 7 dias → azul, válido → verde)
-- Vista calendário mensal
-- Vista timeline
-- Ações rápidas: abrir empresa, marcar revisão, anexar PDF, reenviar, gerar alerta
+**MetricCard** — Redesign: fixed height (`h-[120px]`), icon moved to top-right with larger rounded container, value font size increased to `text-3xl`, subtle animated gradient underline when hovered, add sparkline placeholder area.
 
-### 4. Checklist de CNDs
-- Tipos: Receita Federal, FGTS, SEFAZ, Municipal, Trabalhista, Personalizada
-- Cada item: tipo, status calculado, datas, origem, PDF vinculado, observação, responsável, histórico
-- Status: válida, vencendo, vencida, pendente, erro, não aplicável
-- Checklist padrão por regime + edição manual por empresa
+**StatusBadge** — Add animated pulse dot for `vencida`/`critica` statuses. Refine border-radius to pill shape. Slightly increase padding for better touch targets.
 
-### 5. Documentos / PDFs
-- Upload com versionamento (substituir sem perder histórico)
-- Biblioteca com filtros por empresa, tipo, data, validade, status
-- Preview rápido, download, metadados (nome, data upload, responsável, validade)
+**AppSidebar** — Add gradient accent line on active item left edge. Refine spacing between items. Add subtle separator lines between menu groups. Improve logo area with gradient background. Add hover animation on menu items.
 
-### 6. Envios
-- Fluxo assistido: selecionar empresa → documentos → canal (e-mail/WhatsApp) → destinatário → mensagem
-- Histórico completo com filtros por canal, empresa, período, status
-- Registro: data/hora, canal, usuário, destinatário, documentos, status
+**AppLayout** — Refine header: add breadcrumb area, subtle bottom-border gradient, search command palette trigger (Cmd+K style button). Improve user avatar section with dropdown indicator.
 
-### 7. Alertas
-- Motor de regras: vencimento 7/3/1/0 dias, documento vencido, ausência de PDF, checklist incompleto
-- Centro de notificações: lido/não lido, prioridade visual, snooze, resolver
-- Exibição no dashboard e na página da empresa
+## 3. Dashboard Refinement
 
-### 8. Logs
-- Timeline de acesso por empresa: envio, abertura, visualização, download
-- Visão admin: quem acessou, quem não, quando, por qual canal
-- Filtros por empresa, envio, canal, período
+Restructure layout into clear visual zones:
 
-## Dados e Lógica
-- Dados mock realistas para ~10 empresas com CNDs em diversos estados
-- Cálculo automático de status baseado em datas
-- Recálculo imediato ao alterar dados (otimistic updates)
-- Contadores e cards sempre refletindo estado real
+```text
++--------------------------------------------------+
+| Metrics Row (6 cards, fixed height, aligned)      |
++--------------------------------------------------+
+| Status Chart (1/3)  | Urgent Actions (2/3)        |
+|                     | - better row design           |
+|                     | - progress indicator per item |
++--------------------------------------------------+
+| At-Risk Companies   | Recent Activity Timeline      |
+| (new section)       | (new section)                 |
++--------------------------------------------------+
+| Active Alerts (full width, refined cards)         |
++--------------------------------------------------+
+```
 
-## Responsividade
-- Desktop: layout completo com sidebar, grids, tabelas elegantes
-- Tablet: reorganização de blocos mantendo usabilidade
-- Mobile: sidebar em drawer, tabelas viram cards, filtros em sheet, ações rápidas priorizadas
+- Add "At-Risk Companies" block: top 4 companies with worst document health, mini progress bar showing % valid
+- Add "Recent Activity" block: last 5 log entries in mini-timeline format
+- Redesign urgent actions rows with left color-bar accent, better spacing, countdown badge
+- Add quick action buttons row: "Novo Upload", "Enviar Documentos", "Ver Agenda"
+- PieChart: add center label showing total count, use custom colors matching design tokens
 
-## Componentes Reutilizáveis
-- GlassCard, StatusBadge, PriorityIndicator, MetricCard
-- DataTable com paginação, sort e filtros
-- SearchBar com filtros avançados
-- FileUploader com preview e versionamento
-- TimelineView, CalendarView
-- NotificationCenter, AlertBanner
-- SkeletonLoaders para cada tipo de conteúdo
-- EmptyState elegante por contexto
+## 4. Empresas Listing Refinement
 
-## Estrutura de Arquivos
-- `/src/pages/` — uma página por rota principal
-- `/src/components/` — componentes compartilhados e específicos por módulo
-- `/src/data/` — dados mock e tipos TypeScript
-- `/src/hooks/` — hooks customizados (filtros, cálculos de status, alertas)
-- `/src/lib/` — utilitários (validação CNPJ, formatação, cálculos de datas)
+- Convert cards to a table-card hybrid: consistent row height, alternating subtle backgrounds
+- Add column-like alignment: company info (left), CND health mini-bar (center), status indicators (right)
+- Health mini-bar: horizontal stacked bar showing red/yellow/green proportions
+- Add sort controls in header area (by name, status, # vencidas)
+- Improve empty state with illustration and CTA
+- Add pagination component at bottom
 
-## Preparação para Fase 2
-- Interfaces e tipos bem definidos para futura integração com Supabase
-- Estrutura de serviços separada para substituir mock por API real
-- Hooks abstraídos para facilitar migração para React Query + backend
+## 5. Empresa Detalhe Refinement
+
+- Redesign header as hero section: larger, with gradient background accent, health score ring (circular progress showing % valid CNDs)
+- Quick actions toolbar below header: Upload PDF, Send Documents, Generate Alert, Edit Company
+- Tabs: add count badges, better visual treatment with underline style instead of default
+- Checklist tab: group by CND type with collapsible sections, add progress bar per group
+- Documents tab: grid view option alongside list view
+- Logs tab: improved timeline with colored nodes, action icons, and better spacing
+- Add "Document Health Summary" sidebar card on desktop
+
+## 6. Agenda Refinement
+
+- List view: add date group headers ("Vencidos", "Hoje", "Proximos 3 dias", "Proximos 7 dias", "Validos")
+- Calendar: highlight dates with color-coded dots (red/yellow/green), show event count on each day
+- Timeline: add date markers, improve card design within timeline nodes
+- Add summary bar at top showing counts per urgency level
+
+## 7. Certidoes, Documentos, Envios Pages
+
+- Certidoes: add summary counter bar (X validas, Y vencendo, Z vencidas) above filter
+- Documentos: add grid/list view toggle, file type icon variations, storage usage indicator
+- Envios: add channel icon differentiation (email blue, WhatsApp green), delivery status timeline per envio
+
+## 8. Alertas Refinement
+
+- Priority grouping with section headers ("Criticas", "Alta", "Media")
+- Add snooze button with time picker
+- Improve resolved state with strikethrough-like visual
+- Add bulk actions: "Mark all as read", "Resolve all"
+
+## 9. Logs Refinement
+
+- Better timeline nodes: larger, color-coded by action type
+- Add user avatar circles on timeline nodes
+- Add "no access" warning indicators for companies that never opened documents
+- Add date group separators in timeline
+
+## 10. Microinteractions & Polish
+
+- Add `framer-motion` (or CSS-only) transitions for page route changes
+- Hover states: cards lift with shadow increase, border brightens
+- Click feedback: subtle scale-down on buttons
+- Loading skeletons matching each card type shape
+- Empty states: custom illustrations per module, helpful CTAs
+- Toast notifications styled to match glass theme
+- Smooth filter transitions (no layout jumps)
+
+## 11. Responsiveness Refinement
+
+- Mobile sidebar: improve drawer with swipe gesture support
+- Mobile metric cards: 2-column grid with proper spacing
+- Mobile tables/lists: card-based layout with swipe actions
+- Mobile filters: collapsible filter bar or bottom sheet
+- Tablet: 2-column dashboard layout, side-by-side chart+actions
+
+## Files to Create/Modify
+
+**Modified:**
+- `src/index.css` — Design tokens, glass refinements, new component classes
+- `tailwind.config.ts` — Colors, keyframes, animations, fonts
+- `src/components/GlassCard.tsx` — Variants, texture overlay
+- `src/components/MetricCard.tsx` — Redesigned layout, fixed height
+- `src/components/StatusBadge.tsx` — Pulse animation, refined styles
+- `src/components/AppSidebar.tsx` — Visual polish, active states
+- `src/components/AppLayout.tsx` — Header refinement, breadcrumbs
+- `src/pages/Dashboard.tsx` — New sections, restructured layout
+- `src/pages/Empresas.tsx` — Health bar, sorting, pagination
+- `src/pages/EmpresaDetalhe.tsx` — Hero header, health ring, improved tabs
+- `src/pages/Agenda.tsx` — Date grouping, summary bar
+- `src/pages/Certidoes.tsx` — Summary counters
+- `src/pages/Documentos.tsx` — Grid toggle, file icons
+- `src/pages/Envios.tsx` — Channel styling, status timeline
+- `src/pages/Alertas.tsx` — Priority grouping, bulk actions
+- `src/pages/Logs.tsx` — Improved timeline, date separators
+- `src/pages/Configuracoes.tsx` — Visual polish
+
+**New:**
+- `src/components/HealthBar.tsx` — Stacked bar showing CND health distribution
+- `src/components/HealthRing.tsx` — Circular progress for empresa detail
+- `src/components/QuickActions.tsx` — Dashboard quick action buttons
+- `src/components/EmptyState.tsx` — Reusable empty state with icon, title, description, CTA
+- `src/components/SectionHeader.tsx` — Consistent section headers with action buttons
+- `src/components/FilterBar.tsx` — Refined filter bar component
+- `src/components/PageHeader.tsx` — Consistent page header with title, subtitle, actions
 
