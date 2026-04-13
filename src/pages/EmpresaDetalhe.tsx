@@ -2,10 +2,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { mockEmpresas, mockCNDItems, mockDocumentos, mockEnvios, mockAlertas, mockLogs } from '@/data/mockData';
 import { GlassCard } from '@/components/GlassCard';
 import { StatusBadge } from '@/components/StatusBadge';
+import { HealthRing } from '@/components/HealthRing';
+import { HealthBar } from '@/components/HealthBar';
+import { SectionHeader } from '@/components/SectionHeader';
+import { EmptyState } from '@/components/EmptyState';
 import { formatCNPJ, formatPhone, formatDate, formatDateTime, getRegimeLabel, getCNDTipoLabel } from '@/lib/formatters';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Building2, Mail, Phone, MapPin, FileText, Send, Clock, Download, Eye } from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Phone, MapPin, FileText, Send, Clock, Download, Eye, Upload, Bell, Edit, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function EmpresaDetalhe() {
@@ -15,9 +19,7 @@ export default function EmpresaDetalhe() {
 
   if (!empresa) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Empresa não encontrada</p>
-      </div>
+      <EmptyState icon={Building2} title="Empresa não encontrada" description="Verifique o ID da empresa ou volte à listagem." actionLabel="Voltar" onAction={() => navigate('/empresas')} />
     );
   }
 
@@ -30,117 +32,188 @@ export default function EmpresaDetalhe() {
   const vencidas = cnds.filter(c => c.status === 'vencida').length;
   const vencendo = cnds.filter(c => c.status === 'vencendo').length;
   const validas = cnds.filter(c => c.status === 'valida').length;
+  const pendentes = cnds.filter(c => c.status === 'pendente' || c.status === 'erro').length;
+  const pctValid = cnds.length > 0 ? Math.round((validas / cnds.length) * 100) : 100;
+
+  // Group CNDs by type
+  const cndsByType = cnds.reduce<Record<string, typeof cnds>>((acc, c) => {
+    if (!acc[c.tipo]) acc[c.tipo] = [];
+    acc[c.tipo].push(c);
+    return acc;
+  }, {});
 
   return (
     <div className="space-y-6 animate-slide-in">
-      <Button variant="ghost" size="sm" onClick={() => navigate('/empresas')} className="gap-1.5 -ml-2">
+      <Button variant="ghost" size="sm" onClick={() => navigate('/empresas')} className="gap-1.5 -ml-2 text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Voltar
       </Button>
 
-      <GlassCard>
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Building2 className="h-6 w-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl font-bold">{empresa.nomeFantasia}</h1>
-                <StatusBadge status={empresa.status} variant="empresa" />
+      {/* Hero Header */}
+      <GlassCard variant="elevated" className="p-0 overflow-hidden">
+        <div className="bg-gradient-to-r from-primary/5 via-transparent to-accent/5 p-6">
+          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+            <div className="flex items-start gap-4 min-w-0 flex-1">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-accent/15 text-primary text-lg font-bold">
+                {empresa.nomeFantasia.substring(0, 2).toUpperCase()}
               </div>
-              <p className="text-sm text-muted-foreground">{empresa.razaoSocial}</p>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
-                <span className="font-mono">{formatCNPJ(empresa.cnpj)}</span>
-                <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{empresa.municipio}/{empresa.estado}</span>
-                <span>{getRegimeLabel(empresa.regimeTributario)}</span>
-                <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{empresa.emailPrincipal}</span>
-                <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{formatPhone(empresa.whatsappPrincipal)}</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h1 className="text-xl font-bold tracking-tight">{empresa.nomeFantasia}</h1>
+                  <StatusBadge status={empresa.status} variant="empresa" />
+                </div>
+                <p className="text-sm text-muted-foreground mt-0.5">{empresa.razaoSocial}</p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-xs text-muted-foreground">
+                  <span className="font-mono bg-muted/50 px-2 py-0.5 rounded">{formatCNPJ(empresa.cnpj)}</span>
+                  <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{empresa.municipio}/{empresa.estado}</span>
+                  <span>{getRegimeLabel(empresa.regimeTributario)}</span>
+                  <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{empresa.emailPrincipal}</span>
+                  <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{formatPhone(empresa.whatsappPrincipal)}</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="flex gap-3">
-            <div className="text-center px-3">
-              <p className="text-lg font-bold text-destructive">{vencidas}</p>
-              <p className="text-[10px] text-muted-foreground">Vencidas</p>
-            </div>
-            <div className="text-center px-3 border-l border-border">
-              <p className="text-lg font-bold text-warning">{vencendo}</p>
-              <p className="text-[10px] text-muted-foreground">Vencendo</p>
-            </div>
-            <div className="text-center px-3 border-l border-border">
-              <p className="text-lg font-bold text-success">{validas}</p>
-              <p className="text-[10px] text-muted-foreground">Válidas</p>
+            <div className="flex items-center gap-6 shrink-0">
+              <HealthRing percentage={pctValid} label="Saúde" />
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-xl font-bold text-destructive">{vencidas}</p>
+                  <p className="text-[10px] text-muted-foreground font-medium">Vencidas</p>
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-warning">{vencendo}</p>
+                  <p className="text-[10px] text-muted-foreground font-medium">Vencendo</p>
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-success">{validas}</p>
+                  <p className="text-[10px] text-muted-foreground font-medium">Válidas</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Quick Actions */}
+        <div className="flex gap-2 px-6 py-3 border-t border-border/40 bg-muted/20">
+          <Button variant="outline" size="sm" className="text-xs gap-1.5 h-8">
+            <Upload className="h-3.5 w-3.5" /> Upload PDF
+          </Button>
+          <Button variant="outline" size="sm" className="text-xs gap-1.5 h-8">
+            <Send className="h-3.5 w-3.5" /> Enviar Documentos
+          </Button>
+          <Button variant="outline" size="sm" className="text-xs gap-1.5 h-8">
+            <Bell className="h-3.5 w-3.5" /> Gerar Alerta
+          </Button>
+          <Button variant="outline" size="sm" className="text-xs gap-1.5 h-8">
+            <Edit className="h-3.5 w-3.5" /> Editar
+          </Button>
+        </div>
       </GlassCard>
 
+      {/* Alerts strip */}
       {alertas.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
           {alertas.map(a => (
-            <div key={a.id} className={cn('shrink-0 rounded-lg border px-3 py-1.5 text-xs', !a.lido && 'border-l-2 border-l-warning')}>
-              <StatusBadge status={a.prioridade} variant="prioridade" dot={false} className="mr-1.5 text-[10px]" />
-              {a.titulo}
+            <div key={a.id} className={cn(
+              'shrink-0 rounded-lg border px-3 py-2 text-xs flex items-center gap-2 transition-colors hover:bg-card/80',
+              !a.lido && 'border-l-3 border-l-warning'
+            )}>
+              <StatusBadge status={a.prioridade} variant="prioridade" dot={false} className="text-[10px]" />
+              <span className="font-medium">{a.titulo}</span>
             </div>
           ))}
         </div>
       )}
 
-      <Tabs defaultValue="checklist">
-        <TabsList className="w-full justify-start overflow-x-auto">
-          <TabsTrigger value="checklist">Checklist CNDs</TabsTrigger>
-          <TabsTrigger value="documentos">Documentos ({docs.length})</TabsTrigger>
-          <TabsTrigger value="envios">Envios ({envios.length})</TabsTrigger>
-          <TabsTrigger value="logs">Logs ({logs.length})</TabsTrigger>
-          <TabsTrigger value="observacoes">Observações</TabsTrigger>
+      {/* Tabs */}
+      <Tabs defaultValue="checklist" className="space-y-4">
+        <TabsList className="w-full justify-start overflow-x-auto bg-muted/30 p-1">
+          <TabsTrigger value="checklist" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <ShieldCheck className="h-3.5 w-3.5" /> Checklist CNDs
+            <span className="ml-1 text-[10px] text-muted-foreground">({cnds.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="documentos" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <FileText className="h-3.5 w-3.5" /> Documentos
+            <span className="ml-1 text-[10px] text-muted-foreground">({docs.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="envios" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Send className="h-3.5 w-3.5" /> Envios
+            <span className="ml-1 text-[10px] text-muted-foreground">({envios.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="logs" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Clock className="h-3.5 w-3.5" /> Logs
+            <span className="ml-1 text-[10px] text-muted-foreground">({logs.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="observacoes" className="text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            Observações
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="checklist" className="space-y-2 mt-4">
+        <TabsContent value="checklist" className="space-y-4">
           {cnds.length === 0 ? (
-            <GlassCard className="text-center py-8"><p className="text-sm text-muted-foreground">Nenhuma certidão cadastrada</p></GlassCard>
+            <EmptyState icon={ShieldCheck} title="Nenhuma certidão cadastrada" description="Adicione certidões ao checklist desta empresa." />
           ) : (
-            cnds.map(cnd => (
-              <GlassCard key={cnd.id} className="p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium">{getCNDTipoLabel(cnd.tipo)}</p>
-                      <StatusBadge status={cnd.status} />
+            <>
+              <HealthBar validas={validas} vencendo={vencendo} vencidas={vencidas} pendentes={pendentes} total={cnds.length} showLabels className="px-1" />
+              {Object.entries(cndsByType).map(([tipo, items]) => {
+                const tipoValidas = items.filter(c => c.status === 'valida').length;
+                return (
+                  <div key={tipo}>
+                    <div className="flex items-center justify-between mb-2 px-1">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{getCNDTipoLabel(tipo)}</h4>
+                      <span className="text-[10px] text-muted-foreground">{tipoValidas}/{items.length} válidas</span>
                     </div>
-                    <div className="flex gap-4 text-[11px] text-muted-foreground">
-                      {cnd.dataEmissao && <span>Emissão: {formatDate(cnd.dataEmissao)}</span>}
-                      {cnd.dataVencimento && <span>Vencimento: {formatDate(cnd.dataVencimento)}</span>}
-                      {cnd.origem && <span>Origem: {cnd.origem}</span>}
+                    <div className="space-y-1.5">
+                      {items.map(cnd => (
+                        <div key={cnd.id} className={cn(
+                          'glass-card-subtle p-4 transition-all duration-200 hover:shadow-sm',
+                          cnd.status === 'vencida' && 'border-l-3 border-l-destructive'
+                        )}>
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium">{getCNDTipoLabel(cnd.tipo)}</p>
+                                <StatusBadge status={cnd.status} />
+                              </div>
+                              <div className="flex gap-4 text-[11px] text-muted-foreground">
+                                {cnd.dataEmissao && <span>Emissão: {formatDate(cnd.dataEmissao)}</span>}
+                                {cnd.dataVencimento && <span>Vencimento: {formatDate(cnd.dataVencimento)}</span>}
+                                {cnd.origem && <span>Origem: {cnd.origem}</span>}
+                              </div>
+                              {cnd.observacao && <p className="text-[11px] text-muted-foreground italic mt-0.5">{cnd.observacao}</p>}
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {cnd.arquivoId ? (
+                                <Button variant="outline" size="sm" className="text-xs gap-1.5 h-8">
+                                  <Eye className="h-3 w-3" /> Ver PDF
+                                </Button>
+                              ) : (
+                                <Button variant="outline" size="sm" className="text-xs gap-1.5 h-8">
+                                  <FileText className="h-3 w-3" /> Anexar PDF
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    {cnd.observacao && <p className="text-[11px] text-muted-foreground italic">{cnd.observacao}</p>}
                   </div>
-                  <div className="flex items-center gap-2">
-                    {cnd.arquivoId ? (
-                      <Button variant="outline" size="sm" className="text-xs gap-1.5">
-                        <Eye className="h-3 w-3" /> Ver PDF
-                      </Button>
-                    ) : (
-                      <Button variant="outline" size="sm" className="text-xs gap-1.5">
-                        <FileText className="h-3 w-3" /> Anexar PDF
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </GlassCard>
-            ))
+                );
+              })}
+            </>
           )}
         </TabsContent>
 
-        <TabsContent value="documentos" className="space-y-2 mt-4">
+        <TabsContent value="documentos" className="space-y-2">
           {docs.length === 0 ? (
-            <GlassCard className="text-center py-8"><p className="text-sm text-muted-foreground">Nenhum documento</p></GlassCard>
+            <EmptyState icon={FileText} title="Nenhum documento" description="Faça upload de PDFs para esta empresa." actionLabel="Upload" onAction={() => {}} />
           ) : (
             docs.map(doc => (
-              <GlassCard key={doc.id} className="p-4">
+              <div key={doc.id} className="glass-card-subtle p-4 transition-all hover:shadow-sm">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-3 min-w-0">
-                    <FileText className="h-5 w-5 text-primary shrink-0" />
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/8">
+                      <FileText className="h-5 w-5 text-primary" />
+                    </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{doc.nome}</p>
                       <div className="flex gap-3 text-[11px] text-muted-foreground">
@@ -151,22 +224,30 @@ export default function EmpresaDetalhe() {
                       </div>
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" className="shrink-0"><Download className="h-4 w-4" /></Button>
+                  <div className="flex gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" className="h-8 w-8"><Eye className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8"><Download className="h-4 w-4" /></Button>
+                  </div>
                 </div>
-              </GlassCard>
+              </div>
             ))
           )}
         </TabsContent>
 
-        <TabsContent value="envios" className="space-y-2 mt-4">
+        <TabsContent value="envios" className="space-y-2">
           {envios.length === 0 ? (
-            <GlassCard className="text-center py-8"><p className="text-sm text-muted-foreground">Nenhum envio</p></GlassCard>
+            <EmptyState icon={Send} title="Nenhum envio" description="Envie documentos para esta empresa." actionLabel="Novo Envio" onAction={() => {}} />
           ) : (
             envios.map(envio => (
-              <GlassCard key={envio.id} className="p-4">
+              <div key={envio.id} className="glass-card-subtle p-4 transition-all hover:shadow-sm">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-3">
-                    <Send className="h-4 w-4 text-primary" />
+                    <div className={cn(
+                      'flex h-9 w-9 items-center justify-center rounded-lg shrink-0',
+                      envio.canal === 'email' ? 'bg-primary/10 text-primary' : 'bg-success/10 text-success'
+                    )}>
+                      {envio.canal === 'email' ? <Mail className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
+                    </div>
                     <div>
                       <p className="text-sm font-medium">{envio.canal === 'email' ? envio.assunto || 'E-mail' : 'WhatsApp'}</p>
                       <div className="flex gap-3 text-[11px] text-muted-foreground">
@@ -178,22 +259,27 @@ export default function EmpresaDetalhe() {
                   </div>
                   <StatusBadge status={envio.status} dot={false} />
                 </div>
-              </GlassCard>
+              </div>
             ))
           )}
         </TabsContent>
 
-        <TabsContent value="logs" className="space-y-2 mt-4">
+        <TabsContent value="logs" className="space-y-0">
           {logs.length === 0 ? (
-            <GlassCard className="text-center py-8"><p className="text-sm text-muted-foreground">Nenhum log</p></GlassCard>
+            <EmptyState icon={Clock} title="Nenhum log registrado" />
           ) : (
-            <div className="relative border-l-2 border-border ml-4 space-y-4 py-2">
+            <div className="relative border-l-2 border-border/60 ml-4 space-y-4 py-2">
               {logs.map(log => (
                 <div key={log.id} className="relative pl-6">
-                  <div className="absolute -left-[9px] top-1 h-4 w-4 rounded-full border-2 border-primary bg-background" />
+                  <div className={cn(
+                    'absolute -left-[7px] top-1.5 h-3 w-3 rounded-full border-2 bg-background',
+                    log.acao === 'envio' ? 'border-primary' :
+                    log.acao === 'download' ? 'border-success' :
+                    log.acao === 'visualizacao' ? 'border-info' : 'border-warning'
+                  )} />
                   <div className="text-sm font-medium">{log.detalhes}</div>
-                  <div className="flex gap-3 text-[11px] text-muted-foreground">
-                    <span><Clock className="h-3 w-3 inline mr-1" />{formatDateTime(log.dataHora)}</span>
+                  <div className="flex gap-3 text-[11px] text-muted-foreground mt-0.5">
+                    <span>{formatDateTime(log.dataHora)}</span>
                     <span>{log.usuario}</span>
                     {log.canal && <span className="capitalize">{log.canal}</span>}
                   </div>
@@ -203,9 +289,9 @@ export default function EmpresaDetalhe() {
           )}
         </TabsContent>
 
-        <TabsContent value="observacoes" className="mt-4">
+        <TabsContent value="observacoes">
           <GlassCard>
-            <p className="text-sm">{empresa.observacoes || 'Nenhuma observação registrada.'}</p>
+            <p className="text-sm leading-relaxed">{empresa.observacoes || 'Nenhuma observação registrada.'}</p>
           </GlassCard>
         </TabsContent>
       </Tabs>

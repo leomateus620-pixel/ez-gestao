@@ -14,15 +14,18 @@ export function StatusBadge({ status, variant = 'cnd', className, dot = true }: 
                   variant === 'prioridade' ? getAlertaPrioridadeColor :
                   getStatusColor;
 
+  const isPulsing = status === 'vencida' || status === 'critica' || status === 'erro';
+
   return (
     <span className={cn('status-badge border', colorFn(status), className)}>
       {dot && (
         <span className={cn(
-          'h-1.5 w-1.5 rounded-full',
+          'h-1.5 w-1.5 rounded-full shrink-0',
           status === 'valida' || status === 'ativa' ? 'bg-success' :
           status === 'vencendo' || status === 'pausada' || status === 'alta' ? 'bg-warning' :
           status === 'vencida' || status === 'erro' || status === 'critica' ? 'bg-destructive' :
-          'bg-muted-foreground'
+          'bg-muted-foreground',
+          isPulsing && 'animate-pulse-soft'
         )} />
       )}
       {getStatusLabel(status)}
