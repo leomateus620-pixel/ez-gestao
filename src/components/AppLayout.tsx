@@ -1,9 +1,21 @@
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
-import { Bell } from 'lucide-react';
+import { Bell, Search } from 'lucide-react';
 import { mockAlertas } from '@/data/mockData';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+
+const routeNames: Record<string, string> = {
+  '/': 'Dashboard',
+  '/empresas': 'Empresas',
+  '/agenda': 'Agenda',
+  '/certidoes': 'Certidões',
+  '/documentos': 'Documentos',
+  '/envios': 'Envios',
+  '/alertas': 'Alertas',
+  '/logs': 'Logs',
+  '/configuracoes': 'Configurações',
+};
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -12,42 +24,60 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const alertasNaoLidos = mockAlertas.filter(a => !a.lido && !a.resolvido).length;
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const basePath = '/' + (location.pathname.split('/')[1] || '');
+  const currentRoute = routeNames[basePath] || '';
 
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b bg-background/80 backdrop-blur-md px-4">
-            <div className="flex items-center gap-2">
+          <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border/60 bg-background/80 backdrop-blur-xl px-4">
+            <div className="flex items-center gap-3">
               <SidebarTrigger />
+              {currentRoute && (
+                <div className="hidden sm:flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground/60">/</span>
+                  <span className="font-medium text-foreground/80">{currentRoute}</span>
+                </div>
+              )}
             </div>
+
             <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" className="hidden md:flex gap-2 text-xs text-muted-foreground h-8 px-3 border border-border/50 bg-muted/30">
+                <Search className="h-3.5 w-3.5" />
+                <span>Buscar...</span>
+                <kbd className="ml-2 pointer-events-none inline-flex h-5 items-center rounded border border-border/50 bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">⌘K</kbd>
+              </Button>
+
               <Button
                 variant="ghost"
                 size="icon"
-                className="relative"
+                className="relative h-9 w-9"
                 onClick={() => navigate('/alertas')}
               >
                 <Bell className="h-4 w-4" />
                 {alertasNaoLidos > 0 && (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                  <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground shadow-sm shadow-destructive/30">
                     {alertasNaoLidos}
                   </span>
                 )}
               </Button>
-              <div className="flex items-center gap-2 pl-2 border-l border-border">
-                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary">
+
+              <div className="flex items-center gap-2.5 pl-3 ml-1 border-l border-border/50">
+                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-xs font-bold text-primary ring-2 ring-primary/10">
                   AS
                 </div>
                 <div className="hidden sm:block">
-                  <p className="text-xs font-medium">Ana Silva</p>
-                  <p className="text-[10px] text-muted-foreground">Administrador</p>
+                  <p className="text-xs font-semibold leading-none">Ana Silva</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Administrador</p>
                 </div>
               </div>
             </div>
           </header>
-          <main className="flex-1 overflow-auto p-4 md:p-6 scrollbar-thin">
+          <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 scrollbar-thin">
             {children}
           </main>
         </div>

@@ -1,15 +1,18 @@
 import { useState, useMemo } from 'react';
 import { mockDocumentos, mockEmpresas } from '@/data/mockData';
-import { GlassCard } from '@/components/GlassCard';
+import { PageHeader } from '@/components/PageHeader';
+import { EmptyState } from '@/components/EmptyState';
 import { formatDate, getCNDTipoLabel } from '@/lib/formatters';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Search, FileText, Download, Eye, Upload } from 'lucide-react';
+import { Search, FileText, Download, Eye, Upload, Grid, List } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export default function Documentos() {
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState('todos');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   const docsFiltrados = useMemo(() => {
     return mockDocumentos.filter(d => {
@@ -22,19 +25,15 @@ export default function Documentos() {
 
   return (
     <div className="space-y-6 animate-slide-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Documentos</h1>
-          <p className="text-sm text-muted-foreground mt-1">Biblioteca centralizada de PDFs</p>
-        </div>
+      <PageHeader title="Documentos" subtitle="Biblioteca centralizada de PDFs">
         <Button className="gap-2"><Upload className="h-4 w-4" />Upload</Button>
-      </div>
+      </PageHeader>
 
-      <GlassCard className="p-3">
+      <div className="filter-bar">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar documento ou empresa..." value={busca} onChange={e => setBusca(e.target.value)} className="pl-9" />
+            <Input placeholder="Buscar documento ou empresa..." value={busca} onChange={e => setBusca(e.target.value)} className="pl-9 bg-transparent" />
           </div>
           <Select value={filtroTipo} onValueChange={setFiltroTipo}>
             <SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
@@ -47,17 +46,52 @@ export default function Documentos() {
               <SelectItem value="trabalhista">Trabalhista</SelectItem>
             </SelectContent>
           </Select>
+          <div className="flex gap-1 border border-border/50 rounded-md p-0.5">
+            <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="icon" className="h-8 w-8" onClick={() => setViewMode('list')}>
+              <List className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant={viewMode === 'grid' ? 'secondary' : 'ghost'} size="icon" className="h-8 w-8" onClick={() => setViewMode('grid')}>
+              <Grid className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
-      </GlassCard>
+      </div>
 
-      <div className="grid gap-2">
+      {/* Storage indicator */}
+      <div className="flex items-center gap-3 text-[11px] text-muted-foreground px-1">
+        <span>{docsFiltrados.length} documentos</span>
+        <span>•</span>
+        <span>~{(docsFiltrados.length * 0.2).toFixed(1)} MB utilizados</span>
+      </div>
+
+      <div className={cn(
+        viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3' : 'space-y-1.5'
+      )}>
         {docsFiltrados.map(doc => {
           const empresa = mockEmpresas.find(e => e.id === doc.empresaId);
+          
+          if (viewMode === 'grid') {
+            return (
+              <div key={doc.id} className="glass-card-subtle p-4 hover:shadow-sm transition-all flex flex-col items-center text-center gap-2">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/8">
+                  <FileText className="h-6 w-6 text-primary" />
+                </div>
+                <p className="text-xs font-medium truncate w-full">{doc.nome}</p>
+                <p className="text-[10px] text-muted-foreground">{empresa?.nomeFantasia}</p>
+                <p className="text-[10px] text-muted-foreground">{doc.tamanho} • v{doc.versao}</p>
+                <div className="flex gap-1 mt-1">
+                  <Button variant="ghost" size="icon" className="h-7 w-7"><Eye className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7"><Download className="h-3.5 w-3.5" /></Button>
+                </div>
+              </div>
+            );
+          }
+
           return (
-            <GlassCard key={doc.id} className="p-4">
+            <div key={doc.id} className="glass-card-subtle p-4 hover:shadow-sm transition-all">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/8">
                     <FileText className="h-5 w-5 text-primary" />
                   </div>
                   <div className="min-w-0">
@@ -72,19 +106,16 @@ export default function Documentos() {
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="icon"><Eye className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon"><Download className="h-4 w-4" /></Button>
+                <div className="flex gap-1 shrink-0">
+                  <Button variant="ghost" size="icon" className="h-8 w-8"><Eye className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8"><Download className="h-4 w-4" /></Button>
                 </div>
               </div>
-            </GlassCard>
+            </div>
           );
         })}
         {docsFiltrados.length === 0 && (
-          <GlassCard className="text-center py-12">
-            <FileText className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-            <p className="text-sm text-muted-foreground">Nenhum documento encontrado</p>
-          </GlassCard>
+          <EmptyState icon={FileText} title="Nenhum documento encontrado" description="Tente ajustar os filtros ou faça upload de novos documentos." actionLabel="Upload" onAction={() => {}} />
         )}
       </div>
     </div>

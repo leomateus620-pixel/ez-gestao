@@ -3,20 +3,27 @@ import { useNavigate } from 'react-router-dom';
 import { mockEmpresas, mockCNDItems } from '@/data/mockData';
 import { GlassCard } from '@/components/GlassCard';
 import { StatusBadge } from '@/components/StatusBadge';
+import { HealthBar } from '@/components/HealthBar';
+import { PageHeader } from '@/components/PageHeader';
+import { EmptyState } from '@/components/EmptyState';
 import { formatCNPJ, getRegimeLabel } from '@/lib/formatters';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Plus, Building2, MapPin, ArrowRight } from 'lucide-react';
+import { Search, Plus, Building2, MapPin, ArrowRight, ArrowUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+type SortField = 'nome' | 'vencidas' | 'status';
 
 export default function Empresas() {
   const navigate = useNavigate();
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   const [filtroRegime, setFiltroRegime] = useState<string>('todos');
+  const [sortBy, setSortBy] = useState<SortField>('nome');
 
   const empresasFiltradas = useMemo(() => {
-    return mockEmpresas.filter(e => {
+    const filtered = mockEmpresas.filter(e => {
       const matchBusca = !busca || 
         e.razaoSocial.toLowerCase().includes(busca.toLowerCase()) ||
         e.nomeFantasia.toLowerCase().includes(busca.toLowerCase()) ||
@@ -26,30 +33,38 @@ export default function Empresas() {
       const matchRegime = filtroRegime === 'todos' || e.regimeTributario === filtroRegime;
       return matchBusca && matchStatus && matchRegime;
     });
-  }, [busca, filtroStatus, filtroRegime]);
+
+    return filtered.sort((a, b) => {
+      if (sortBy === 'nome') return a.nomeFantasia.localeCompare(b.nomeFantasia);
+      if (sortBy === 'vencidas') {
+        const va = mockCNDItems.filter(c => c.empresaId === a.id && c.status === 'vencida').length;
+        const vb = mockCNDItems.filter(c => c.empresaId === b.id && c.status === 'vencida').length;
+        return vb - va;
+      }
+      return 0;
+    });
+  }, [busca, filtroStatus, filtroRegime, sortBy]);
 
   const getEmpresaResumo = (empresaId: string) => {
     const cnds = mockCNDItems.filter(c => c.empresaId === empresaId);
     const vencidas = cnds.filter(c => c.status === 'vencida').length;
     const vencendo = cnds.filter(c => c.status === 'vencendo').length;
     const validas = cnds.filter(c => c.status === 'valida').length;
-    return { total: cnds.length, vencidas, vencendo, validas };
+    const pendentes = cnds.filter(c => c.status === 'pendente' || c.status === 'erro').length;
+    return { total: cnds.length, vencidas, vencendo, validas, pendentes };
   };
 
   return (
     <div className="space-y-6 animate-slide-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Empresas</h1>
-          <p className="text-sm text-muted-foreground mt-1">{mockEmpresas.length} empresas cadastradas</p>
-        </div>
+      <PageHeader title="Empresas" subtitle={`${mockEmpresas.length} empresas cadastradas`}>
         <Button className="gap-2">
           <Plus className="h-4 w-4" />
           Nova Empresa
         </Button>
-      </div>
+      </PageHeader>
 
-      <GlassCard className="p-3">
+      {/* Filter Bar */}
+      <div className="filter-bar">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -57,13 +72,11 @@ export default function Empresas() {
               placeholder="Buscar por razão social, CNPJ, município..."
               value={busca}
               onChange={e => setBusca(e.target.value)}
-              className="pl-9"
+              className="pl-9 bg-transparent"
             />
           </div>
           <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-            <SelectTrigger className="w-full sm:w-36">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
+            <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos</SelectItem>
               <SelectItem value="ativa">Ativa</SelectItem>
@@ -72,9 +85,7 @@ export default function Empresas() {
             </SelectContent>
           </Select>
           <Select value={filtroRegime} onValueChange={setFiltroRegime}>
-            <SelectTrigger className="w-full sm:w-44">
-              <SelectValue placeholder="Regime" />
-            </SelectTrigger>
+            <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="Regime" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos os regimes</SelectItem>
               <SelectItem value="simples_nacional">Simples Nacional</SelectItem>
@@ -83,30 +94,45 @@ export default function Empresas() {
               <SelectItem value="mei">MEI</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortField)}>
+            <SelectTrigger className="w-full sm:w-40">
+              <div className="flex items-center gap-1.5">
+                <ArrowUpDown className="h-3 w-3" />
+                <SelectValue />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="nome">Nome A-Z</SelectItem>
+              <SelectItem value="vencidas">Mais vencidas</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-      </GlassCard>
+      </div>
 
-      <div className="grid gap-3">
-        {empresasFiltradas.map(empresa => {
+      {/* Company List */}
+      <div className="space-y-2">
+        {empresasFiltradas.map((empresa, i) => {
           const resumo = getEmpresaResumo(empresa.id);
           return (
-            <GlassCard
+            <div
               key={empresa.id}
-              hover
-              className="cursor-pointer"
+              className={cn(
+                'glass-card p-4 cursor-pointer transition-all duration-200 hover:shadow-md group',
+                i % 2 === 1 && 'bg-card/30'
+              )}
               onClick={() => navigate(`/empresas/${empresa.id}`)}
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Building2 className="h-5 w-5" />
+                <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary text-xs font-bold">
+                    {empresa.nomeFantasia.substring(0, 2).toUpperCase()}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold truncate">{empresa.nomeFantasia}</p>
                       <StatusBadge status={empresa.status} variant="empresa" />
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">{empresa.razaoSocial}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{empresa.razaoSocial}</p>
                     <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
                       <span className="font-mono">{formatCNPJ(empresa.cnpj)}</span>
                       <span className="flex items-center gap-1">
@@ -118,36 +144,51 @@ export default function Empresas() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="flex gap-2">
-                    {resumo.vencidas > 0 && (
-                      <span className="flex items-center gap-1 text-[11px] font-medium text-destructive">
-                        <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
-                        {resumo.vencidas}
-                      </span>
-                    )}
-                    {resumo.vencendo > 0 && (
-                      <span className="flex items-center gap-1 text-[11px] font-medium text-warning">
-                        <span className="h-1.5 w-1.5 rounded-full bg-warning" />
-                        {resumo.vencendo}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1 text-[11px] font-medium text-success">
-                      <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                      {resumo.validas}
-                    </span>
-                  </div>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                <div className="flex items-center gap-4 sm:gap-5 shrink-0">
+                  {resumo.total > 0 && (
+                    <div className="flex flex-col items-end gap-1.5">
+                      <div className="flex gap-3">
+                        {resumo.vencidas > 0 && (
+                          <span className="flex items-center gap-1 text-[11px] font-semibold text-destructive">
+                            <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+                            {resumo.vencidas}
+                          </span>
+                        )}
+                        {resumo.vencendo > 0 && (
+                          <span className="flex items-center gap-1 text-[11px] font-semibold text-warning">
+                            <span className="h-1.5 w-1.5 rounded-full bg-warning" />
+                            {resumo.vencendo}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1 text-[11px] font-semibold text-success">
+                          <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                          {resumo.validas}
+                        </span>
+                      </div>
+                      <HealthBar
+                        validas={resumo.validas}
+                        vencendo={resumo.vencendo}
+                        vencidas={resumo.vencidas}
+                        pendentes={resumo.pendentes}
+                        total={resumo.total}
+                        className="w-32"
+                      />
+                    </div>
+                  )}
+                  <ArrowRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
                 </div>
               </div>
-            </GlassCard>
+            </div>
           );
         })}
         {empresasFiltradas.length === 0 && (
-          <GlassCard className="text-center py-12">
-            <Building2 className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-            <p className="text-sm text-muted-foreground">Nenhuma empresa encontrada</p>
-          </GlassCard>
+          <EmptyState
+            icon={Building2}
+            title="Nenhuma empresa encontrada"
+            description="Tente ajustar os filtros ou adicione uma nova empresa."
+            actionLabel="Nova Empresa"
+            onAction={() => {}}
+          />
         )}
       </div>
     </div>
