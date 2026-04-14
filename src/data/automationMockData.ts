@@ -55,7 +55,7 @@ export const mockConnectors: Connector[] = [
   },
 ];
 
-function makeSteps(runId: string, status: 'sucesso' | 'falha', failAt?: string): ConnectorRunStep[] {
+function makeSteps(runId: string, _status: 'sucesso' | 'falha', failAt?: ConnectorRunStep['etapa']): ConnectorRunStep[] {
   const etapas: ConnectorRunStep['etapa'][] = ['autenticacao', 'consulta', 'captura', 'parsing', 'persistencia'];
   return etapas.map((etapa, i) => {
     const isFail = failAt === etapa;
