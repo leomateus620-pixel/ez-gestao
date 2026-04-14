@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useReducer, useCallback, useMemo } from 'react';
 import type {
   AutomationState, ConnectorRun, ExceptionItem, AutomationBatch,
-  IntegrationHealthLog, Connector,
+  IntegrationHealthLog, Connector, ExceptionTipologia,
 } from './automation-types';
 import {
   mockConnectors, mockRuns, mockExceptions, mockBatches,
@@ -15,6 +15,7 @@ type AutomationAction =
   | { type: 'RESOLVE_EXCEPTION'; payload: { id: string; resolvidoPor: string } }
   | { type: 'REQUEUE_EXCEPTION'; payload: string }
   | { type: 'DISCARD_EXCEPTION'; payload: string }
+  | { type: 'ASSIGN_EXCEPTION'; payload: { id: string; responsavel: string } }
   | { type: 'UPDATE_CONNECTOR_STATUS'; payload: { id: string; status: Connector['status'] } }
   | { type: 'ADD_BATCH'; payload: AutomationBatch }
   | { type: 'UPDATE_BATCH'; payload: AutomationBatch }
@@ -41,7 +42,7 @@ function automationReducer(state: AutomationState, action: AutomationAction): Au
       return {
         ...state,
         exceptions: state.exceptions.map(e =>
-          e.id === action.payload ? { ...e, statusExcecao: 'pendente' as const } : e
+          e.id === action.payload ? { ...e, statusExcecao: 'pendente' as const, tentativas: e.tentativas + 1 } : e
         ),
       };
     case 'DISCARD_EXCEPTION':
@@ -49,6 +50,13 @@ function automationReducer(state: AutomationState, action: AutomationAction): Au
         ...state,
         exceptions: state.exceptions.map(e =>
           e.id === action.payload ? { ...e, statusExcecao: 'descartada' as const } : e
+        ),
+      };
+    case 'ASSIGN_EXCEPTION':
+      return {
+        ...state,
+        exceptions: state.exceptions.map(e =>
+          e.id === action.payload.id ? { ...e, responsavel: action.payload.responsavel, statusExcecao: 'em_analise' as const } : e
         ),
       };
     case 'UPDATE_CONNECTOR_STATUS':
@@ -78,7 +86,12 @@ interface AutomationContextValue {
   resolveException: (id: string, user: string) => void;
   requeueException: (id: string) => void;
   discardException: (id: string) => void;
+  assignException: (id: string, responsavel: string) => void;
+  updateConnectorStatus: (id: string, status: Connector['status']) => void;
   pendingExceptions: number;
+  criticalExceptions: ExceptionItem[];
+  exceptionsByTipologia: Record<ExceptionTipologia, number>;
+  unstableConnectors: Connector[];
 }
 
 const AutomationContext = createContext<AutomationContextValue | null>(null);
@@ -102,14 +115,33 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
   const resolveException = useCallback((id: string, user: string) => dispatch({ type: 'RESOLVE_EXCEPTION', payload: { id, resolvidoPor: user } }), []);
   const requeueException = useCallback((id: string) => dispatch({ type: 'REQUEUE_EXCEPTION', payload: id }), []);
   const discardException = useCallback((id: string) => dispatch({ type: 'DISCARD_EXCEPTION', payload: id }), []);
+  const assignException = useCallback((id: string, responsavel: string) => dispatch({ type: 'ASSIGN_EXCEPTION', payload: { id, responsavel } }), []);
+  const updateConnectorStatus = useCallback((id: string, status: Connector['status']) => dispatch({ type: 'UPDATE_CONNECTOR_STATUS', payload: { id, status } }), []);
 
   const pendingExceptions = useMemo(() =>
     state.exceptions.filter(e => e.statusExcecao === 'pendente' || e.statusExcecao === 'em_analise').length
   , [state.exceptions]);
 
+  const criticalExceptions = useMemo(() =>
+    state.exceptions.filter(e => e.criticidade === 'critica' && (e.statusExcecao === 'pendente' || e.statusExcecao === 'em_analise'))
+  , [state.exceptions]);
+
+  const exceptionsByTipologia = useMemo(() => {
+    const active = state.exceptions.filter(e => e.statusExcecao === 'pendente' || e.statusExcecao === 'em_analise');
+    const counts = {} as Record<ExceptionTipologia, number>;
+    active.forEach(e => { counts[e.tipologia] = (counts[e.tipologia] || 0) + 1; });
+    return counts;
+  }, [state.exceptions]);
+
+  const unstableConnectors = useMemo(() =>
+    state.connectors.filter(c => c.taxaSucesso < 80 || c.status === 'erro' || c.status === 'manutencao')
+  , [state.connectors]);
+
   const value = useMemo(() => ({
-    state, dispatch, addRun, updateRun, addException, resolveException, requeueException, discardException, pendingExceptions,
-  }), [state, addRun, updateRun, addException, resolveException, requeueException, discardException, pendingExceptions]);
+    state, dispatch, addRun, updateRun, addException, resolveException, requeueException, discardException,
+    assignException, updateConnectorStatus, pendingExceptions, criticalExceptions, exceptionsByTipologia, unstableConnectors,
+  }), [state, addRun, updateRun, addException, resolveException, requeueException, discardException,
+    assignException, updateConnectorStatus, pendingExceptions, criticalExceptions, exceptionsByTipologia, unstableConnectors]);
 
   return <AutomationContext.Provider value={value}>{children}</AutomationContext.Provider>;
 }
