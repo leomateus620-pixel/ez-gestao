@@ -80,6 +80,8 @@ export function useOrchestrator() {
         motivo: decision.motivo, criticidade: 'alta', statusExcecao: 'pendente',
         acaoSugerida: 'Revisão manual necessária',
         criadoEm: new Date().toISOString(), resolvidoEm: null, resolvidoPor: null,
+        tipologia: 'baixa_confianca', tentativas: 1, slaHoras: 12, responsavel: null,
+        cnpj: empresa.cnpj, cndTipo: cndTipo, connectorNome: connector.nome,
       };
       addException(exc);
     }

@@ -7,6 +7,35 @@ export type ExceptionStatus = 'pendente' | 'em_analise' | 'resolvida' | 'descart
 export type ConfidenceLevel = 'alta' | 'media' | 'baixa';
 export type RunStepEtapa = 'autenticacao' | 'consulta' | 'captura' | 'parsing' | 'persistencia';
 
+export type ExceptionTipologia =
+  | 'cnpj_inconsistente'
+  | 'pdf_ausente'
+  | 'validade_ambigua'
+  | 'portal_indisponivel'
+  | 'captcha_bloqueante'
+  | 'documento_incompativel'
+  | 'baixa_confianca'
+  | 'erro_parsing'
+  | 'falha_integracao'
+  | 'dado_cadastral_insuficiente'
+  | 'certidao_positiva'
+  | 'retorno_inesperado';
+
+export const tipologiaLabels: Record<ExceptionTipologia, string> = {
+  cnpj_inconsistente: 'CNPJ Inconsistente',
+  pdf_ausente: 'PDF Ausente',
+  validade_ambigua: 'Validade Ambígua',
+  portal_indisponivel: 'Portal Indisponível',
+  captcha_bloqueante: 'CAPTCHA Bloqueante',
+  documento_incompativel: 'Doc. Incompatível',
+  baixa_confianca: 'Baixa Confiança',
+  erro_parsing: 'Erro de Parsing',
+  falha_integracao: 'Falha Integração',
+  dado_cadastral_insuficiente: 'Dado Insuficiente',
+  certidao_positiva: 'Certidão Positiva',
+  retorno_inesperado: 'Retorno Inesperado',
+};
+
 export interface Connector {
   id: string;
   nome: string;
@@ -16,7 +45,7 @@ export interface Connector {
   versao: string;
   ultimoTeste: string;
   taxaSucesso: number;
-  tempoMedio: number; // seconds
+  tempoMedio: number;
   config: Record<string, unknown>;
   descricao: string;
 }
@@ -40,7 +69,7 @@ export interface ConnectorRun {
   inicioExecucao: string;
   fimExecucao: string | null;
   tentativa: number;
-  duracao: number | null; // seconds
+  duracao: number | null;
   resultadoBruto: string;
   statusNormalizado: string;
   confianca: ConfidenceLevel;
@@ -61,6 +90,14 @@ export interface ExceptionItem {
   criadoEm: string;
   resolvidoEm: string | null;
   resolvidoPor: string | null;
+  // Fase 2 refinement fields
+  tipologia: ExceptionTipologia;
+  tentativas: number;
+  slaHoras: number;
+  responsavel: string | null;
+  cnpj: string;
+  cndTipo: string;
+  connectorNome: string;
 }
 
 export interface CaptureResult {

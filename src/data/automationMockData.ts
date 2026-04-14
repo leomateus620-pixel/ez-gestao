@@ -177,6 +177,42 @@ export const mockRuns: ConnectorRun[] = [
     confianca: 'alta', evidencias: ['PDF baixado da prefeitura BH'], erroDetalhes: null,
     steps: makeSteps('run-15', 'sucesso'),
   },
+  // New runs for variety
+  {
+    id: 'run-16', connectorId: 'conn-rf', empresaId: '5', cndItemId: 'c16', status: 'sucesso',
+    inicioExecucao: ts(0, 7, 10), fimExecucao: ts(0, 7, 13), tentativa: 1, duracao: 3.0,
+    resultadoBruto: 'CERTIDAO_NEGATIVA_DEBITOS_VALIDA', statusNormalizado: 'valida',
+    confianca: 'alta', evidencias: ['PDF baixado'], erroDetalhes: null,
+    steps: makeSteps('run-16', 'sucesso'),
+  },
+  {
+    id: 'run-17', connectorId: 'conn-sefaz', empresaId: '5', cndItemId: 'c18', status: 'falha',
+    inicioExecucao: ts(0, 7, 20), fimExecucao: ts(0, 7, 28), tentativa: 2, duracao: 7.6,
+    resultadoBruto: 'CAPTCHA_DETECTED', statusNormalizado: 'erro',
+    confianca: 'baixa', evidencias: ['Screenshot: CAPTCHA exibido'], erroDetalhes: 'CAPTCHA detectado no portal SEFAZ SP. Automação bloqueada.',
+    steps: makeSteps('run-17', 'falha', 'autenticacao'),
+  },
+  {
+    id: 'run-18', connectorId: 'conn-fgts', empresaId: '3', cndItemId: 'c11', status: 'sucesso',
+    inicioExecucao: ts(0, 10, 5), fimExecucao: ts(0, 10, 7), tentativa: 1, duracao: 2.3,
+    resultadoBruto: 'REGULARIDADE_CONFIRMADA', statusNormalizado: 'valida',
+    confianca: 'alta', evidencias: ['CRF emitido'], erroDetalhes: null,
+    steps: makeSteps('run-18', 'sucesso'),
+  },
+  {
+    id: 'run-19', connectorId: 'conn-mun', empresaId: '2', cndItemId: 'c8', status: 'revisao',
+    inicioExecucao: ts(0, 11, 30), fimExecucao: ts(0, 11, 45), tentativa: 1, duracao: 14.8,
+    resultadoBruto: 'SITUACAO_REGULAR_COM_PENDENCIA_MENOR', statusNormalizado: 'exige_revisao',
+    confianca: 'media', evidencias: ['Texto parcial extraído', 'PDF com qualidade baixa'], erroDetalhes: null,
+    steps: makeSteps('run-19', 'sucesso'),
+  },
+  {
+    id: 'run-20', connectorId: 'conn-tst', empresaId: '3', cndItemId: 'c12', status: 'sucesso',
+    inicioExecucao: ts(0, 10, 10), fimExecucao: ts(0, 10, 11), tentativa: 1, duracao: 1.2,
+    resultadoBruto: 'NADA_CONSTA', statusNormalizado: 'valida',
+    confianca: 'alta', evidencias: ['CNDT emitida'], erroDetalhes: null,
+    steps: makeSteps('run-20', 'sucesso'),
+  },
 ];
 
 export const mockExceptions: ExceptionItem[] = [
@@ -186,6 +222,8 @@ export const mockExceptions: ExceptionItem[] = [
     criticidade: 'alta', statusExcecao: 'pendente',
     acaoSugerida: 'Reenfileirar em horário alternativo ou upload manual',
     criadoEm: ts(-1, 9, 9), resolvidoEm: null, resolvidoPor: null,
+    tipologia: 'portal_indisponivel', tentativas: 3, slaHoras: 24, responsavel: null,
+    cnpj: '23.456.789/0001-01', cndTipo: 'sefaz', connectorNome: 'SEFAZ Browser',
   },
   {
     id: 'exc-2', runId: 'run-8', empresaId: '4', cndItemId: 'c14',
@@ -193,6 +231,8 @@ export const mockExceptions: ExceptionItem[] = [
     criticidade: 'critica', statusExcecao: 'pendente',
     acaoSugerida: 'Verificar dados cadastrais do FGTS da empresa',
     criadoEm: ts(0, 6, 8), resolvidoEm: null, resolvidoPor: null,
+    tipologia: 'cnpj_inconsistente', tentativas: 2, slaHoras: 4, responsavel: null,
+    cnpj: '45.678.901/0001-23', cndTipo: 'fgts', connectorNome: 'FGTS / CRF Online',
   },
   {
     id: 'exc-3', runId: 'run-10', empresaId: '7', cndItemId: 'c23',
@@ -200,6 +240,8 @@ export const mockExceptions: ExceptionItem[] = [
     criticidade: 'media', statusExcecao: 'em_analise',
     acaoSugerida: 'Tentar novamente em horário de menor tráfego',
     criadoEm: ts(0, 8, 30), resolvidoEm: null, resolvidoPor: null,
+    tipologia: 'portal_indisponivel', tentativas: 3, slaHoras: 48, responsavel: 'Ana Silva',
+    cnpj: '78.901.234/0001-67', cndTipo: 'sefaz', connectorNome: 'SEFAZ Browser',
   },
   {
     id: 'exc-4', runId: 'run-12', empresaId: '7', cndItemId: 'c22',
@@ -207,6 +249,8 @@ export const mockExceptions: ExceptionItem[] = [
     criticidade: 'alta', statusExcecao: 'pendente',
     acaoSugerida: 'Revisão manual do resultado e decisão sobre status',
     criadoEm: ts(0, 9, 5), resolvidoEm: null, resolvidoPor: null,
+    tipologia: 'baixa_confianca', tentativas: 1, slaHoras: 12, responsavel: null,
+    cnpj: '78.901.234/0001-67', cndTipo: 'fgts', connectorNome: 'FGTS / CRF Online',
   },
   {
     id: 'exc-5', runId: 'run-5', empresaId: '1', cndItemId: 'c4',
@@ -214,6 +258,71 @@ export const mockExceptions: ExceptionItem[] = [
     criticidade: 'media', statusExcecao: 'resolvida',
     acaoSugerida: 'Aprovar leitura ou fazer upload manual',
     criadoEm: ts(-1, 10, 15), resolvidoEm: ts(0, 14, 0), resolvidoPor: 'Ana Silva',
+    tipologia: 'certidao_positiva', tentativas: 1, slaHoras: 24, responsavel: 'Ana Silva',
+    cnpj: '12.345.678/0001-90', cndTipo: 'municipal', connectorNome: 'Municipal Assistida',
+  },
+  {
+    id: 'exc-6', runId: 'run-17', empresaId: '5', cndItemId: 'c18',
+    motivo: 'CAPTCHA detectado no portal SEFAZ SP — automação bloqueada',
+    criticidade: 'alta', statusExcecao: 'pendente',
+    acaoSugerida: 'Resolver CAPTCHA manualmente ou aguardar janela sem proteção',
+    criadoEm: ts(0, 7, 28), resolvidoEm: null, resolvidoPor: null,
+    tipologia: 'captcha_bloqueante', tentativas: 2, slaHoras: 8, responsavel: null,
+    cnpj: '56.789.012/0001-34', cndTipo: 'sefaz', connectorNome: 'SEFAZ Browser',
+  },
+  {
+    id: 'exc-7', runId: 'run-19', empresaId: '2', cndItemId: 'c8',
+    motivo: 'Documento retornado é de tipo diferente do esperado (alvará vs CND municipal)',
+    criticidade: 'media', statusExcecao: 'pendente',
+    acaoSugerida: 'Verificar URL do conector e reconfigurar consulta municipal',
+    criadoEm: ts(0, 11, 45), resolvidoEm: null, resolvidoPor: null,
+    tipologia: 'documento_incompativel', tentativas: 1, slaHoras: 24, responsavel: null,
+    cnpj: '23.456.789/0001-01', cndTipo: 'municipal', connectorNome: 'Municipal Assistida',
+  },
+  {
+    id: 'exc-8', runId: 'run-6', empresaId: '2', cndItemId: 'c6',
+    motivo: 'Certidão positiva detectada — empresa com débitos fiscais federais',
+    criticidade: 'critica', statusExcecao: 'pendente',
+    acaoSugerida: 'Notificar cliente e registrar pendência fiscal',
+    criadoEm: ts(-2, 8, 4), resolvidoEm: null, resolvidoPor: null,
+    tipologia: 'certidao_positiva', tentativas: 1, slaHoras: 4, responsavel: null,
+    cnpj: '23.456.789/0001-01', cndTipo: 'receita_federal', connectorNome: 'Receita Federal API',
+  },
+  {
+    id: 'exc-9', runId: 'run-11', empresaId: '7', cndItemId: 'c21',
+    motivo: 'PDF da certidão não foi gerado pela fonte — apenas resposta textual',
+    criticidade: 'baixa', statusExcecao: 'pendente',
+    acaoSugerida: 'Fazer download manual do PDF pelo portal ou aceitar evidência textual',
+    criadoEm: ts(0, 8, 38), resolvidoEm: null, resolvidoPor: null,
+    tipologia: 'pdf_ausente', tentativas: 1, slaHoras: 48, responsavel: null,
+    cnpj: '78.901.234/0001-67', cndTipo: 'receita_federal', connectorNome: 'Receita Federal API',
+  },
+  {
+    id: 'exc-10', runId: 'run-19', empresaId: '2', cndItemId: 'c8',
+    motivo: 'Data de validade extraída (2019) é anterior à data de emissão (2024)',
+    criticidade: 'alta', statusExcecao: 'pendente',
+    acaoSugerida: 'Corrigir parsing de data ou inserir validade manualmente',
+    criadoEm: ts(0, 11, 46), resolvidoEm: null, resolvidoPor: null,
+    tipologia: 'validade_ambigua', tentativas: 1, slaHoras: 12, responsavel: null,
+    cnpj: '23.456.789/0001-01', cndTipo: 'municipal', connectorNome: 'Municipal Assistida',
+  },
+  {
+    id: 'exc-11', runId: 'run-3', empresaId: '2', cndItemId: 'c9',
+    motivo: 'Erro ao parsear HTML do portal — estrutura da página mudou',
+    criticidade: 'alta', statusExcecao: 'descartada',
+    acaoSugerida: 'Atualizar seletores do conector SEFAZ Browser',
+    criadoEm: ts(-3, 14, 0), resolvidoEm: ts(-2, 10, 0), resolvidoPor: 'Carlos Mendes',
+    tipologia: 'erro_parsing', tentativas: 3, slaHoras: 8, responsavel: 'Carlos Mendes',
+    cnpj: '23.456.789/0001-01', cndTipo: 'sefaz', connectorNome: 'SEFAZ Browser',
+  },
+  {
+    id: 'exc-12', runId: 'run-8', empresaId: '4', cndItemId: 'c14',
+    motivo: 'Empresa sem inscrição estadual cadastrada — dado obrigatório para SEFAZ',
+    criticidade: 'media', statusExcecao: 'pendente',
+    acaoSugerida: 'Completar cadastro da empresa com inscrição estadual',
+    criadoEm: ts(0, 6, 10), resolvidoEm: null, resolvidoPor: null,
+    tipologia: 'dado_cadastral_insuficiente', tentativas: 1, slaHoras: 24, responsavel: null,
+    cnpj: '45.678.901/0001-23', cndTipo: 'sefaz', connectorNome: 'SEFAZ Browser',
   },
 ];
 
@@ -233,13 +342,24 @@ export const mockBatches: AutomationBatch[] = [
 ];
 
 export const mockHealthLogs: IntegrationHealthLog[] = [
+  // Today
   { id: 'hl-1', connectorId: 'conn-rf', timestamp: ts(0, 8, 0), status: 'ok', latencia: 320, detalhes: 'API respondendo normalmente' },
   { id: 'hl-2', connectorId: 'conn-fgts', timestamp: ts(0, 8, 0), status: 'ok', latencia: 210, detalhes: 'Serviço operacional' },
   { id: 'hl-3', connectorId: 'conn-sefaz', timestamp: ts(0, 8, 0), status: 'degradado', latencia: 4500, detalhes: 'Latência alta nos portais estaduais' },
   { id: 'hl-4', connectorId: 'conn-mun', timestamp: ts(0, 8, 0), status: 'ok', latencia: 1200, detalhes: 'Integração assistida funcional' },
   { id: 'hl-5', connectorId: 'conn-tst', timestamp: ts(0, 8, 0), status: 'ok', latencia: 150, detalhes: 'API TST com resposta rápida' },
+  // Yesterday
   { id: 'hl-6', connectorId: 'conn-rf', timestamp: ts(-1, 8, 0), status: 'ok', latencia: 280, detalhes: 'API respondendo normalmente' },
   { id: 'hl-7', connectorId: 'conn-sefaz', timestamp: ts(-1, 8, 0), status: 'indisponivel', latencia: 0, detalhes: 'Portal SEFAZ RJ fora do ar' },
+  { id: 'hl-8', connectorId: 'conn-fgts', timestamp: ts(-1, 8, 0), status: 'ok', latencia: 195, detalhes: 'Serviço operacional' },
+  { id: 'hl-9', connectorId: 'conn-tst', timestamp: ts(-1, 8, 0), status: 'ok', latencia: 140, detalhes: 'API TST com resposta rápida' },
+  { id: 'hl-10', connectorId: 'conn-mun', timestamp: ts(-1, 8, 0), status: 'degradado', latencia: 3200, detalhes: 'Prefeitura com resposta lenta' },
+  // 2 days ago
+  { id: 'hl-11', connectorId: 'conn-rf', timestamp: ts(-2, 8, 0), status: 'ok', latencia: 310, detalhes: 'API operacional' },
+  { id: 'hl-12', connectorId: 'conn-sefaz', timestamp: ts(-2, 8, 0), status: 'ok', latencia: 1800, detalhes: 'Portais respondendo' },
+  { id: 'hl-13', connectorId: 'conn-fgts', timestamp: ts(-2, 8, 0), status: 'ok', latencia: 220, detalhes: 'Serviço operacional' },
+  { id: 'hl-14', connectorId: 'conn-tst', timestamp: ts(-2, 8, 0), status: 'ok', latencia: 165, detalhes: 'API TST operacional' },
+  { id: 'hl-15', connectorId: 'conn-mun', timestamp: ts(-2, 8, 0), status: 'ok', latencia: 1100, detalhes: 'Integração funcional' },
 ];
 
 export const mockRetryPolicies: Record<string, RetryPolicy> = {
