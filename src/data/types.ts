@@ -108,7 +108,31 @@ export interface DashboardMetrics {
   vencidas: number;
   vencendo: number;
   pendentes: number;
+  validas: number;
+  erros: number;
+  totalCNDs: number;
   enviados: number;
   acessosPendentes: number;
   empresasCriticas: number;
+}
+
+export interface AuditEntry {
+  id: string;
+  timestamp: string;
+  userId: string;
+  action: string;
+  entityType: 'empresa' | 'cnd' | 'documento' | 'envio' | 'alerta' | 'log';
+  entityId: string;
+  details: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface EmpresaResumo {
+  total: number;
+  vencidas: number;
+  vencendo: number;
+  validas: number;
+  pendentes: number;
+  score: number;
+  pctValid: number;
 }

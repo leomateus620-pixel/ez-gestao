@@ -93,6 +93,31 @@ export function getStatusLabel(status: string): string {
     ativa: 'Ativa',
     pausada: 'Pausada',
     arquivada: 'Arquivada',
+    enviado: 'Enviado',
+    entregue: 'Entregue',
+    lido: 'Lido',
+    critica: 'Crítica',
+    alta: 'Alta',
+    media: 'Média',
+    baixa: 'Baixa',
   };
   return labels[status] || status;
+}
+
+export function validarDataVencimento(emissao: string | null, vencimento: string | null): boolean {
+  if (!emissao || !vencimento) return true;
+  return new Date(vencimento) > new Date(emissao);
+}
+
+export function validateEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+export function sanitizeInput(value: string): string {
+  return value
+    .trim()
+    .replace(/<script[^>]*>.*?<\/script>/gi, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&/g, '&amp;')
+    .slice(0, 1000);
 }
