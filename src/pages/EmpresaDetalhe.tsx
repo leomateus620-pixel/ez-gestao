@@ -35,7 +35,6 @@ export default function EmpresaDetalhe() {
   const pendentes = cnds.filter(c => c.status === 'pendente' || c.status === 'erro').length;
   const pctValid = cnds.length > 0 ? Math.round((validas / cnds.length) * 100) : 100;
 
-  // Group CNDs by type
   const cndsByType = cnds.reduce<Record<string, typeof cnds>>((acc, c) => {
     if (!acc[c.tipo]) acc[c.tipo] = [];
     acc[c.tipo].push(c);
@@ -44,7 +43,7 @@ export default function EmpresaDetalhe() {
 
   return (
     <div className="space-y-6 animate-slide-in">
-      <Button variant="ghost" size="sm" onClick={() => navigate('/empresas')} className="gap-1.5 -ml-2 text-muted-foreground hover:text-foreground">
+      <Button variant="ghost" size="sm" onClick={() => navigate('/empresas')} className="gap-1.5 -ml-2 text-foreground/60 hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Voltar
       </Button>
 
@@ -61,8 +60,8 @@ export default function EmpresaDetalhe() {
                   <h1 className="text-xl font-bold tracking-tight">{empresa.nomeFantasia}</h1>
                   <StatusBadge status={empresa.status} variant="empresa" />
                 </div>
-                <p className="text-sm text-muted-foreground mt-0.5">{empresa.razaoSocial}</p>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-xs text-muted-foreground">
+                <p className="text-sm text-foreground/60 mt-0.5">{empresa.razaoSocial}</p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-xs text-foreground/65">
                   <span className="font-mono bg-muted/50 px-2 py-0.5 rounded">{formatCNPJ(empresa.cnpj)}</span>
                   <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{empresa.municipio}/{empresa.estado}</span>
                   <span>{getRegimeLabel(empresa.regimeTributario)}</span>
@@ -77,15 +76,15 @@ export default function EmpresaDetalhe() {
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-xl font-bold text-destructive">{vencidas}</p>
-                  <p className="text-[10px] text-muted-foreground font-medium">Vencidas</p>
+                  <p className="text-[10px] text-foreground/50 font-medium">Vencidas</p>
                 </div>
                 <div>
                   <p className="text-xl font-bold text-warning">{vencendo}</p>
-                  <p className="text-[10px] text-muted-foreground font-medium">Vencendo</p>
+                  <p className="text-[10px] text-foreground/50 font-medium">Vencendo</p>
                 </div>
                 <div>
                   <p className="text-xl font-bold text-success">{validas}</p>
-                  <p className="text-[10px] text-muted-foreground font-medium">Válidas</p>
+                  <p className="text-[10px] text-foreground/50 font-medium">Válidas</p>
                 </div>
               </div>
             </div>
@@ -129,19 +128,19 @@ export default function EmpresaDetalhe() {
         <TabsList className="w-full justify-start overflow-x-auto bg-muted/30 p-1">
           <TabsTrigger value="checklist" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <ShieldCheck className="h-3.5 w-3.5" /> Checklist CNDs
-            <span className="ml-1 text-[10px] text-muted-foreground">({cnds.length})</span>
+            <span className="ml-1 text-[10px] text-foreground/50">({cnds.length})</span>
           </TabsTrigger>
           <TabsTrigger value="documentos" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <FileText className="h-3.5 w-3.5" /> Documentos
-            <span className="ml-1 text-[10px] text-muted-foreground">({docs.length})</span>
+            <span className="ml-1 text-[10px] text-foreground/50">({docs.length})</span>
           </TabsTrigger>
           <TabsTrigger value="envios" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Send className="h-3.5 w-3.5" /> Envios
-            <span className="ml-1 text-[10px] text-muted-foreground">({envios.length})</span>
+            <span className="ml-1 text-[10px] text-foreground/50">({envios.length})</span>
           </TabsTrigger>
           <TabsTrigger value="logs" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Clock className="h-3.5 w-3.5" /> Logs
-            <span className="ml-1 text-[10px] text-muted-foreground">({logs.length})</span>
+            <span className="ml-1 text-[10px] text-foreground/50">({logs.length})</span>
           </TabsTrigger>
           <TabsTrigger value="observacoes" className="text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
             Observações
@@ -159,8 +158,8 @@ export default function EmpresaDetalhe() {
                 return (
                   <div key={tipo}>
                     <div className="flex items-center justify-between mb-2 px-1">
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{getCNDTipoLabel(tipo)}</h4>
-                      <span className="text-[10px] text-muted-foreground">{tipoValidas}/{items.length} válidas</span>
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground/55">{getCNDTipoLabel(tipo)}</h4>
+                      <span className="text-[10px] text-foreground/50">{tipoValidas}/{items.length} válidas</span>
                     </div>
                     <div className="space-y-1.5">
                       {items.map(cnd => (
@@ -174,12 +173,12 @@ export default function EmpresaDetalhe() {
                                 <p className="text-sm font-medium">{getCNDTipoLabel(cnd.tipo)}</p>
                                 <StatusBadge status={cnd.status} />
                               </div>
-                              <div className="flex gap-4 text-[11px] text-muted-foreground">
+                              <div className="flex gap-4 text-[11px] text-foreground/60">
                                 {cnd.dataEmissao && <span>Emissão: {formatDate(cnd.dataEmissao)}</span>}
                                 {cnd.dataVencimento && <span>Vencimento: {formatDate(cnd.dataVencimento)}</span>}
                                 {cnd.origem && <span>Origem: {cnd.origem}</span>}
                               </div>
-                              {cnd.observacao && <p className="text-[11px] text-muted-foreground italic mt-0.5">{cnd.observacao}</p>}
+                              {cnd.observacao && <p className="text-[11px] text-foreground/55 italic mt-0.5">{cnd.observacao}</p>}
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               {cnd.arquivoId ? (
@@ -216,7 +215,7 @@ export default function EmpresaDetalhe() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{doc.nome}</p>
-                      <div className="flex gap-3 text-[11px] text-muted-foreground">
+                      <div className="flex gap-3 text-[11px] text-foreground/60">
                         <span>{getCNDTipoLabel(doc.tipo)}</span>
                         <span>v{doc.versao}</span>
                         <span>{doc.tamanho}</span>
@@ -250,7 +249,7 @@ export default function EmpresaDetalhe() {
                     </div>
                     <div>
                       <p className="text-sm font-medium">{envio.canal === 'email' ? envio.assunto || 'E-mail' : 'WhatsApp'}</p>
-                      <div className="flex gap-3 text-[11px] text-muted-foreground">
+                      <div className="flex gap-3 text-[11px] text-foreground/60">
                         <span>{envio.destinatario}</span>
                         <span>{formatDateTime(envio.dataEnvio)}</span>
                         <span>{envio.documentoIds.length} doc(s)</span>
@@ -278,7 +277,7 @@ export default function EmpresaDetalhe() {
                     log.acao === 'visualizacao' ? 'border-info' : 'border-warning'
                   )} />
                   <div className="text-sm font-medium">{log.detalhes}</div>
-                  <div className="flex gap-3 text-[11px] text-muted-foreground mt-0.5">
+                  <div className="flex gap-3 text-[11px] text-foreground/60 mt-0.5">
                     <span>{formatDateTime(log.dataHora)}</span>
                     <span>{log.usuario}</span>
                     {log.canal && <span className="capitalize">{log.canal}</span>}

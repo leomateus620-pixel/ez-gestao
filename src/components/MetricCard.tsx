@@ -39,14 +39,14 @@ export function MetricCard({ title, value, icon: Icon, trend, color = 'primary',
       onClick={onClick}
     >
       <div className="flex items-start justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{title}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-foreground/55">{title}</p>
         <div className={cn('rounded-xl p-2.5', colorMap[color])}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
       <div>
         <p className="text-3xl font-bold tracking-tight text-foreground">{value}</p>
-        {trend && <p className="text-[11px] text-muted-foreground mt-1">{trend}</p>}
+        {trend && <p className="text-[11px] text-foreground/55 mt-1">{trend}</p>}
       </div>
     </div>
   );

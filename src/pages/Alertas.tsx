@@ -28,14 +28,13 @@ export default function Alertas() {
   const marcarTodosLidos = () => setAlertas(prev => prev.map(a => ({ ...a, lido: true })));
   const resolverTodos = () => setAlertas(prev => prev.map(a => a.resolvido ? a : { ...a, resolvido: true }));
 
-  // Group by priority
   const grouped: Record<string, Alerta[]> = { critica: [], alta: [], media: [], baixa: [] };
   ativos.forEach(a => {
     if (grouped[a.prioridade]) grouped[a.prioridade].push(a);
   });
 
   const prioLabels: Record<string, string> = { critica: 'Críticas', alta: 'Alta Prioridade', media: 'Média Prioridade', baixa: 'Baixa Prioridade' };
-  const prioColors: Record<string, string> = { critica: 'text-destructive', alta: 'text-warning', media: 'text-info', baixa: 'text-muted-foreground' };
+  const prioColors: Record<string, string> = { critica: 'text-destructive', alta: 'text-warning', media: 'text-info', baixa: 'text-foreground/50' };
 
   const renderAlerta = (alerta: Alerta) => {
     const empresa = mockEmpresas.find(e => e.id === alerta.empresaId);
@@ -56,8 +55,8 @@ export default function Alertas() {
                 <p className={cn('text-sm font-medium', alerta.resolvido && 'line-through')}>{alerta.titulo}</p>
                 <StatusBadge status={alerta.prioridade} variant="prioridade" dot={false} className="text-[10px]" />
               </div>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{alerta.descricao}</p>
-              <div className="flex gap-3 text-[11px] text-muted-foreground mt-1.5">
+              <p className="text-[11px] text-foreground/60 mt-0.5">{alerta.descricao}</p>
+              <div className="flex gap-3 text-[11px] text-foreground/55 mt-1.5">
                 <span className="cursor-pointer hover:underline" onClick={() => navigate(`/empresas/${alerta.empresaId}`)}>{empresa?.nomeFantasia}</span>
                 <span>{formatDate(alerta.criadoEm)}</span>
               </div>
