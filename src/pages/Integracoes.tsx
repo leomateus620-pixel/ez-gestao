@@ -31,13 +31,11 @@ export default function Integracoes() {
       <PageHeader
         title="Integrações"
         subtitle={`${state.connectors.length} conectores configurados`}
-        icon={<Plug className="h-6 w-6 text-primary" />}
-        actions={
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => toast({ title: 'Health check', description: 'Todos os conectores verificados.' })}>
-            <RefreshCw className="h-4 w-4" /> Health Check
-          </Button>
-        }
-      />
+      >
+        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => toast({ title: 'Health check', description: 'Todos os conectores verificados.' })}>
+          <RefreshCw className="h-4 w-4" /> Health Check
+        </Button>
+      </PageHeader>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {connectorsWithStats.map(({ connector, health, stats, runsToday }) => (

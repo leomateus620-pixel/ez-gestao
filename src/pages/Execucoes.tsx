@@ -34,7 +34,6 @@ export default function Execucoes() {
       <PageHeader
         title="Execuções"
         subtitle={`${filtered.length} execuções registradas`}
-        icon={<ListChecks className="h-6 w-6 text-primary" />}
       />
 
       <div className="filter-bar flex flex-wrap gap-3">

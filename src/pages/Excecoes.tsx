@@ -30,7 +30,6 @@ export default function Excecoes() {
       <PageHeader
         title="Fila de Exceções"
         subtitle={`${pendingCount} exceções pendentes de ${state.exceptions.length} total`}
-        icon={<AlertTriangle className="h-6 w-6 text-warning" />}
       />
 
       <div className="filter-bar flex flex-wrap gap-3">
