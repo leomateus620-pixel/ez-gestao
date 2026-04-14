@@ -1,213 +1,129 @@
 
 
-# Fase 2 — Motor de Automação e Coleta Inteligente de CNDs
+# Refinamento Premium da Fase 2 — Central de Automação Enterprise
 
 ## Visão Geral
-Implementar sobre a Fase 1 existente (sem refatorações destrutivas) toda a camada de automação: conectores modulares, orquestrador de coleta, parsing de documentos, fila de exceções, e 4 novas telas administrativas premium.
+Transformar as 5 telas de automação (Central, Execuções, Detalhe, Integrações, Exceções) de "funcional" para "enterprise premium", adicionando blocos operacionais avançados, fila de exceções inteligente com tipologias, revisão assistida, e observabilidade profunda.
 
-## Arquitetura
+## 1. Dados Mock Enriquecidos (`src/data/automationMockData.ts`)
 
-```text
-┌─────────────────────────────────────────────────┐
-│                  DataProvider (Fase 1)           │
-│  empresas, cnds, docs, envios, alertas, logs    │
-├─────────────────────────────────────────────────┤
-│           AutomationProvider (Fase 2)            │
-│  connectors, runs, exceptions, batches, health  │
-├─────────────────────────────────────────────────┤
-│  Orchestrator → Adapter → Parser → Decision     │
-│  Engine          Registry   Pipeline  Engine     │
-└─────────────────────────────────────────────────┘
-```
+Expandir exceções de 5 para ~12, cobrindo todas as tipologias:
+- CNPJ inconsistente, PDF ausente, validade ambígua, portal indisponível, CAPTCHA, documento incompatível, baixa confiança, erro de parsing, falha de integração, dado cadastral insuficiente, certidão positiva, retorno inesperado
 
----
+Adicionar campos aos `ExceptionItem` mock: `tipologia`, `tentativas`, `slaHoras`, `responsavel`
 
-## 1. Tipos e Modelagem de Dados
+Expandir `mockRuns` para ~20 com mais variedade de resultados.
 
-**`src/data/automation-types.ts`** — Novos tipos para Fase 2:
+Expandir `mockHealthLogs` para ~15 entradas com histórico multi-dia.
 
-- `ConnectorType`: `'api_direta' | 'browser_headless' | 'integracao_assistida' | 'upload_manual'`
-- `ConnectorStatus`: `'ativo' | 'inativo' | 'manutencao' | 'erro'`
-- `RunStatus`: `'agendado' | 'executando' | 'sucesso' | 'falha' | 'revisao' | 'timeout'`
-- `ExceptionStatus`: `'pendente' | 'em_analise' | 'resolvida' | 'descartada'`
-- `ConfidenceLevel`: `'alta' | 'media' | 'baixa'`
-- `CNDStatusExtended` — adiciona `'positiva' | 'negativa_indisponivel' | 'exige_revisao' | 'erro_operacional'` ao tipo existente
+## 2. Tipos Expandidos (`src/data/automation-types.ts`)
 
-Interfaces principais:
-- `Connector` — id, nome, tipo, orgao (CNDTipo), status, versao, ultimoTeste, taxaSucesso, tempoMedio, config
-- `ConnectorRun` — id, connectorId, empresaId, cndItemId, status, inicioExecucao, fimExecucao, tentativa, duracao, resultadoBruto, statusNormalizado, confianca, evidencias, erroDetalhes, steps[]
-- `ConnectorRunStep` — id, runId, etapa ('autenticacao'|'consulta'|'captura'|'parsing'|'persistencia'), status, inicio, fim, detalhes
-- `ExceptionItem` — id, runId, empresaId, cndItemId, motivo, criticidade, statusExcecao, acaoSugerida, criadoEm, resolvidoEm, resolvidoPor
-- `CaptureResult` — cnpjConsultado, tipoCertidao, orgaoEmissor, statusBruto, statusNormalizado, dataEmissao, dataValidade, numeroCertidao, protocolo, hashDocumento, nomeArquivo, conectorUtilizado, confianca, necessitaRevisao, motivoExcecao
-- `AutomationBatch` — id, agendadoPara, empresaIds, status, progressoAtual, totalItems
-- `IntegrationHealthLog` — id, connectorId, timestamp, status, latencia, detalhes
-- `RetryPolicy` — maxTentativas, intervaloBase, backoffMultiplier, timeoutSegundos
-- `SchedulingRule` — connectorId, cndTipo, intervaloHoras, diasAntesVencimento, prioridade
+Adicionar a `ExceptionItem`:
+- `tipologia`: enum de 12 tipos de exceção (cnpj_inconsistente, pdf_ausente, validade_ambigua, portal_indisponivel, captcha_bloqueante, documento_incompativel, baixa_confianca, erro_parsing, falha_integracao, dado_cadastral_insuficiente, certidao_positiva, retorno_inesperado)
+- `tentativas: number`
+- `slaHoras: number`
+- `responsavel: string | null`
+- `cnpj: string`
+- `cndTipo: string`
+- `connectorNome: string`
 
-## 2. Dados Mock de Automação
+## 3. Central de Automação (`src/pages/Automacao.tsx`) — Redesign Completo
 
-**`src/data/automationMockData.ts`** — Dados mock realistas:
-- 6 conectores (Receita Federal API, FGTS/CRF, SEFAZ Browser, Municipal Assistida, TST API, Personalizada Manual)
-- ~15 execuções com diferentes status (sucesso, falha, revisão, timeout)
-- Steps por execução
-- ~5 exceções na fila
-- Batches agendados
-- Health logs dos conectores
-- Políticas de retry e scheduling rules
+Criar 4 blocos operacionais premium:
 
-## 3. Provider de Automação
+**Bloco 1 — Visão Operacional do Dia**: métricas top com coletas, sucesso, falha, revisão, exceções, agendados (já existe, refinar layout para 2 rows com cards mais expressivos)
 
-**`src/data/AutomationProvider.tsx`** — Contexto separado usando `useReducer`:
-- Estado: connectors, runs, exceptions, batches, healthLogs, schedulingRules, retryPolicies
-- Actions: `ADD_RUN`, `UPDATE_RUN`, `ADD_EXCEPTION`, `RESOLVE_EXCEPTION`, `UPDATE_CONNECTOR_STATUS`, `ADD_BATCH`, `UPDATE_BATCH`, `REQUEUE_EXCEPTION`, `ADD_HEALTH_LOG`
-- Hook `useAutomation()` para acessar
+**Bloco 2 — Visão de Risco**: card dedicado mostrando empresas sem atualização recente (>7d), CNDs vencidas sem coleta, conectores instáveis (taxa <80%), exceções críticas pendentes
 
-Wrappado no App.tsx ao redor de `DataProvider` (ou dentro), sem alterar a lógica existente.
+**Bloco 3 — Visão de Gargalos**: tempo médio por conector (mini bar chart visual), fila de retry pendente, lotes atrasados, exceções por tipologia (top 3)
 
-## 4. Motor de Automação (Hooks e Lógica)
+**Bloco 4 — Produtividade**: taxa de automação (% resolvido sem intervenção), tempo médio de resolução de exceções, coletas/dia trend (últimos 7 dias como mini sparkline CSS)
 
-**`src/hooks/useOrchestrator.ts`** — Orquestrador de coleta:
-- `getEmpresasElegiveis()` — filtra por prioridade (vencidas > vencendo > críticas > novas)
-- `executarColeta(empresaId, cndTipo)` — seleciona conector, dispara mock run, registra steps
-- `processarResultado(run)` — chama parser, decision engine, atualiza CND na Fase 1
+Quick actions refinadas: Executar Lote, Forçar Revalidação, Ver Exceções Críticas, Pausar Automação
 
-**`src/lib/connector-registry.ts`** — Registry de conectores:
-- `getConnectorForCND(cndTipo)` — retorna conector adequado
-- `getConnectorHealth(connectorId)` — retorna métricas de saúde
-- Status mapping entre respostas externas e status internos
+Conectores e execuções recentes mantidos mas com layout mais sofisticado.
 
-**`src/lib/capture-parser.ts`** — Pipeline de parsing:
-- `parseCapture(rawData, tipo)` — extrai dados estruturados do resultado bruto
-- `extractValidade(text)` — detecta data de validade em texto
-- `extractEmissao(text)` — detecta data de emissão
-- `calcularConfianca(result)` — retorna score de confiança
-- `normalizarStatus(statusBruto, orgao)` — mapeamento para status interno
-- Validações: validade > emissão, CNPJ match, hash deduplicação
+## 4. Execuções (`src/pages/Execucoes.tsx`) — Upgrade
 
-**`src/lib/decision-engine.ts`** — Motor de decisão:
-- `avaliarResultado(capture, cndAtual)` — decide: aplicar auto, flag revisão, ou exceção
-- Alta confiança → aplica automaticamente e atualiza CND no DataProvider
-- Média → aplica com flag de revisão
-- Baixa → cria exceção, não publica
+- Adicionar filtro por empresa (select com lista de empresas)
+- Adicionar filtro por período (hoje, 7d, 30d, todos)
+- Mostrar motivo da falha inline na row (coluna extra colapsável ou tooltip)
+- Mostrar tentativa como "2/3" (tentativa atual / max do retry policy)
+- Expandir row inline com collapsible para ver steps sem navegar
+- Adicionar ação "Reprocessar" e "Enviar para Exceção" inline
 
-**`src/hooks/useAutomationJobs.ts`** — Jobs internos:
-- `executarLoteColeta()` — processa batch de empresas elegíveis
-- `revalidarPeriodica()` — verifica CNDs que precisam reconsulta
-- `retryFalhasTransitorias()` — reprocessa falhas recentes elegíveis
-- `monitorarConectores()` — health check dos conectores
-- Tudo roda mock (simulação com timeouts), mas com estrutura pronta para async real
+## 5. Detalhe da Execução (`src/pages/ExecucaoDetalhe.tsx`) — Auditoria Premium
 
-## 5. Novas Telas
+- Timeline com etapas colapsáveis (usar Collapsible)
+- Adicionar seção "Motor de Decisão" explicando POR QUE o sistema publicou automaticamente ou exigiu revisão (mostrar score de confiança com breakdown visual)
+- Seção de resultado expandida: status bruto, normalizado, confiança com barra visual
+- Seção "Impacto": mostrar que alertas foram gerados, que CND foi atualizada, que exceção foi aberta
+- Botões de ação: Reprocessar, Criar Exceção Manual, Ver Empresa
 
-### 5a. Central de Automação (`src/pages/Automacao.tsx`)
-- Métricas do dia: coletas executadas, sucesso, falha, revisão, pendência
-- Próximos lotes agendados
-- Conectores ativos com indicador de saúde
-- Tempo médio por conector e taxa de sucesso
-- Quick actions: executar lote, forçar revalidação, pausar automação
-- Visual premium liquid glass
+## 6. Fila de Exceções (`src/pages/Excecoes.tsx`) — Redesign Completo
 
-### 5b. Execuções (`src/pages/Execucoes.tsx`)
-- Lista paginada de execuções automáticas
-- Filtros: período, empresa, conector, status, tipo CND
-- Colunas: empresa, conector, tipo, status, duração, tentativa, resultado
-- Ações: abrir detalhe, reprocessar, enviar para exceção
-- Row expandível ou link para detalhe
+**Header com contadores por criticidade**: pills mostrando Críticas (X), Altas (X), Médias (X), Baixas (X)
 
-### 5c. Detalhe de Execução (`src/pages/ExecucaoDetalhe.tsx`)
-- Header: empresa, CNPJ, conector, certidão, status final
-- Timeline técnica com steps (autenticação → consulta → captura → parsing → persistência)
-- Payloads seguros e metadados
-- Evidências coletadas
-- PDF gerado ou resposta textual
-- Alertas gerados
-- Vínculo com item da empresa
+**Filtros avançados**: status, criticidade, tipologia, empresa, conector
 
-### 5d. Integrações (`src/pages/Integracoes.tsx`)
-- Lista de conectores com cards de saúde
-- Status, disponibilidade, última execução, taxa de sucesso
-- Configuração por conector
-- Credenciais mascaradas
-- Health timeline resumida
-- Ação: testar conector, pausar, editar config
+**Cards de exceção redesenhados** (`ExceptionCard.tsx`):
+- Exibir: empresa, CNPJ, tipo CND, fonte/conector, motivo principal, criticidade badge, data/hora, tentativas, sugestão de ação, responsável, SLA (tempo restante)
+- Ações expandidas: Reenfileirar, Upload Manual, Aprovar Leitura, Corrigir Validade, Marcar N/A, Ignorar com Justificativa, Escalar, Vincular PDF, Reprocessar Parsing
+- Ações em dropdown menu para não poluir
 
-### 5e. Exceções (`src/pages/Excecoes.tsx`)
-- Fila de pendências com triagem por criticidade
-- Filtros: motivo, empresa, conector, status
-- Ações: corrigir dados, upload manual, reenfileirar, marcar N/A, aprovar leitura, vincular documento
-- Cards com visão rápida do que falhou
+**Revisão Assistida** (novo componente `ReviewPanel.tsx`):
+- Sheet/dialog que abre ao clicar "Revisar" em uma exceção
+- Comparação lado a lado: dados extraídos vs dados esperados
+- Confiança por campo (alta/média/baixa indicator)
+- Permitir aprovar campo a campo
+- Botão "Publicar Resultado Revisado"
+- Registra quem aprovou
 
-## 6. Navegação Atualizada
+## 7. Integrações (`src/pages/Integracoes.tsx`) — Refinamento
 
-**`src/components/AppSidebar.tsx`** — Expandir menu com grupo "Automação":
+- Cards de conector redesenhados com uptime visual (mini health bar últimas 24h)
+- Seção de "Últimas Falhas" por conector
+- Indicador de modo manutenção
+- Botão "Testar Conector" (simula health check)
+- Botão "Pausar/Ativar" conector
+- Tabela expandida com histórico de configuração
 
-```
-Menu Principal (existente)
-  Dashboard, Empresas, Agenda, Certidões, Documentos, Envios, Alertas
+## 8. Componentes Novos e Refinados
 
-Automação (novo grupo)
-  Central, Execuções, Integrações, Exceções
+**`src/components/ExceptionCard.tsx`** — Redesign completo com tipologia, CNPJ, CND tipo, tentativas, SLA, responsável, dropdown de ações
 
-Sistema (existente)
-  Logs, Configurações
-```
+**`src/components/ReviewPanel.tsx`** — Novo. Sheet lateral com revisão assistida campo a campo
 
-Badge de exceções pendentes no item "Exceções".
+**`src/components/RiskCard.tsx`** — Novo. Card premium para blocos de risco na Central
 
-## 7. Rotas
+**`src/components/ConnectorHealthCard.tsx`** — Adicionar mini health bar (últimas 24h), botões de ação
 
-**`src/App.tsx`** — Adicionar:
-- `/automacao` → Automacao
-- `/execucoes` → Execucoes
-- `/execucoes/:id` → ExecucaoDetalhe
-- `/integracoes` → Integracoes
-- `/excecoes` → Excecoes
+**`src/components/ExecutionTimeline.tsx`** — Etapas colapsáveis, mais detalhes visuais
 
-## 8. Componentes Reutilizáveis da Fase 2
+**`src/components/ConfidenceBreakdown.tsx`** — Novo. Breakdown visual do score de confiança com barras por critério
 
-- `ConnectorHealthCard.tsx` — card de saúde do conector com indicadores
-- `RunStatusBadge.tsx` — badge de status de execução com cores e pulse
-- `ExecutionTimeline.tsx` — timeline vertical dos steps da execução
-- `ConfidenceBadge.tsx` — indicador visual de confiança (alta/média/baixa)
-- `ExceptionCard.tsx` — card de exceção com ações inline
+## 9. AutomationProvider (`src/data/AutomationProvider.tsx`)
 
-## 9. Integração com Fase 1
+- Adicionar actions: `ASSIGN_EXCEPTION`, `ESCALATE_EXCEPTION`, `UPDATE_CONNECTOR_STATUS`
+- Adicionar computed: `exceptionsByTipologia`, `criticalExceptions`, `unstableConnectors`
 
-- Quando uma execução com confiança alta finaliza, chama `dispatch({ type: 'UPDATE_CND' })` no DataProvider existente
-- Quando gera documento, chama `addDocumento()` existente
-- Quando detecta vencimento/status change, `useAlertEngine` (Fase 1) já gera alertas automaticamente
-- Logs de automação usam `addLog()` existente
-- Audit trail usa o sistema já implementado
-- Sidebar usa `useDataStore()` para badge de alertas (já existente)
+## Arquivos
 
-## 10. Footer e Versão
+**Novos (3):**
+- `src/components/ReviewPanel.tsx`
+- `src/components/RiskCard.tsx`
+- `src/components/ConfidenceBreakdown.tsx`
 
-Atualizar footer da sidebar: "Fase 2 — v2.0.0 — Automação Ativa"
-
----
-
-## Arquivos Novos (~15)
-- `src/data/automation-types.ts`
-- `src/data/automationMockData.ts`
-- `src/data/AutomationProvider.tsx`
-- `src/hooks/useOrchestrator.ts`
-- `src/hooks/useAutomationJobs.ts`
-- `src/lib/connector-registry.ts`
-- `src/lib/capture-parser.ts`
-- `src/lib/decision-engine.ts`
-- `src/pages/Automacao.tsx`
-- `src/pages/Execucoes.tsx`
-- `src/pages/ExecucaoDetalhe.tsx`
-- `src/pages/Integracoes.tsx`
-- `src/pages/Excecoes.tsx`
-- `src/components/ConnectorHealthCard.tsx`
-- `src/components/RunStatusBadge.tsx`
-- `src/components/ExecutionTimeline.tsx`
-- `src/components/ConfidenceBadge.tsx`
-- `src/components/ExceptionCard.tsx`
-
-## Arquivos Modificados (~3)
-- `src/App.tsx` — AutomationProvider wrapper + novas rotas
-- `src/components/AppSidebar.tsx` — menu expandido com grupo Automação
-- `src/data/types.ts` — estender CNDStatus com novos valores (opcional, backward-compatible)
+**Modificados (10):**
+- `src/data/automation-types.ts` — tipologia enum, campos extras em ExceptionItem
+- `src/data/automationMockData.ts` — dados expandidos
+- `src/data/AutomationProvider.tsx` — novas actions
+- `src/pages/Automacao.tsx` — redesign com 4 blocos operacionais
+- `src/pages/Execucoes.tsx` — filtros avançados, row expandível, ações inline
+- `src/pages/ExecucaoDetalhe.tsx` — timeline colapsável, motor de decisão, impacto
+- `src/pages/Excecoes.tsx` — redesign com tipologias, contadores, revisão assistida
+- `src/pages/Integracoes.tsx` — health bar, ações, modo manutenção
+- `src/components/ExceptionCard.tsx` — redesign com todos os campos
+- `src/components/ConnectorHealthCard.tsx` — mini health bar, ações
+- `src/components/ExecutionTimeline.tsx` — etapas colapsáveis
 
