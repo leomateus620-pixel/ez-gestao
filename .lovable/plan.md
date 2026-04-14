@@ -1,168 +1,213 @@
 
 
-# Hardening Completo — Fase 1 CND Manager
+# Fase 2 — Motor de Automação e Coleta Inteligente de CNDs
 
-## Overview
-Strengthen the entire Phase 1 with robust data logic, validation, performance optimizations, proper state management, error handling, and automation-ready architecture.
+## Visão Geral
+Implementar sobre a Fase 1 existente (sem refatorações destrutivas) toda a camada de automação: conectores modulares, orquestrador de coleta, parsing de documentos, fila de exceções, e 4 novas telas administrativas premium.
 
-## 1. Data Layer Hardening
+## Arquitetura
 
-**New: `src/hooks/useDataStore.ts`** — Centralized reactive data store using React context + useReducer
-- Single source of truth for all entities (empresas, CNDs, docs, envios, alertas, logs)
-- Actions: `ADD_EMPRESA`, `UPDATE_EMPRESA`, `ADD_CND`, `UPDATE_CND_STATUS`, `ADD_DOCUMENTO`, `ADD_ENVIO`, `RESOLVE_ALERTA`, `MARK_ALERTA_LIDO`, `ADD_LOG`
-- Auto-recalculates CND status on every mutation (calls `calcularStatusCND`)
-- Auto-generates alerts when status changes (e.g., CND becomes "vencida" → create alert)
-- CNPJ uniqueness check on empresa creation
-- Date consistency validation (emissao < vencimento)
-- Prevents duplicate document IDs and orphan references
+```text
+┌─────────────────────────────────────────────────┐
+│                  DataProvider (Fase 1)           │
+│  empresas, cnds, docs, envios, alertas, logs    │
+├─────────────────────────────────────────────────┤
+│           AutomationProvider (Fase 2)            │
+│  connectors, runs, exceptions, batches, health  │
+├─────────────────────────────────────────────────┤
+│  Orchestrator → Adapter → Parser → Decision     │
+│  Engine          Registry   Pipeline  Engine     │
+└─────────────────────────────────────────────────┘
+```
 
-**New: `src/data/DataProvider.tsx`** — Context provider wrapping the app, initializes from mockData
+---
 
-**Modified: `src/data/mockData.ts`** — Add more test scenarios:
-- Empresa with 0 CNDs (id=10 Alpha already covers this partially — ensure it's complete)
-- Empresa with all CNDs valid (id=8 Campo Verde)
-- Empresa with all CNDs expired (add data for id=7 MetalNorte)
-- Add version history to some documents (versao 1, 2, 3)
+## 1. Tipos e Modelagem de Dados
 
-## 2. Status Calculation Engine
+**`src/data/automation-types.ts`** — Novos tipos para Fase 2:
 
-**Modified: `src/lib/status-utils.ts`** — Add:
-- `recalcularTodosStatus(cnds)`: batch recalculate all CND statuses
-- `gerarAlertasAutomaticos(cnds, alertasExistentes)`: derive alerts from CND state, avoiding duplicates
-- `consolidarDashboard(empresas, cnds, docs, envios, logs)`: returns pre-computed dashboard metrics object
-- `validarIntegridadeDados(store)`: checks for orphan references, missing required fields, inconsistent dates — returns array of warnings
+- `ConnectorType`: `'api_direta' | 'browser_headless' | 'integracao_assistida' | 'upload_manual'`
+- `ConnectorStatus`: `'ativo' | 'inativo' | 'manutencao' | 'erro'`
+- `RunStatus`: `'agendado' | 'executando' | 'sucesso' | 'falha' | 'revisao' | 'timeout'`
+- `ExceptionStatus`: `'pendente' | 'em_analise' | 'resolvida' | 'descartada'`
+- `ConfidenceLevel`: `'alta' | 'media' | 'baixa'`
+- `CNDStatusExtended` — adiciona `'positiva' | 'negativa_indisponivel' | 'exige_revisao' | 'erro_operacional'` ao tipo existente
 
-**Modified: `src/lib/formatters.ts`** — Add:
-- `validarDataVencimento(emissao, vencimento)`: ensures vencimento > emissao
-- `sanitizeInput(value)`: trim + basic XSS protection for text inputs
+Interfaces principais:
+- `Connector` — id, nome, tipo, orgao (CNDTipo), status, versao, ultimoTeste, taxaSucesso, tempoMedio, config
+- `ConnectorRun` — id, connectorId, empresaId, cndItemId, status, inicioExecucao, fimExecucao, tentativa, duracao, resultadoBruto, statusNormalizado, confianca, evidencias, erroDetalhes, steps[]
+- `ConnectorRunStep` — id, runId, etapa ('autenticacao'|'consulta'|'captura'|'parsing'|'persistencia'), status, inicio, fim, detalhes
+- `ExceptionItem` — id, runId, empresaId, cndItemId, motivo, criticidade, statusExcecao, acaoSugerida, criadoEm, resolvidoEm, resolvidoPor
+- `CaptureResult` — cnpjConsultado, tipoCertidao, orgaoEmissor, statusBruto, statusNormalizado, dataEmissao, dataValidade, numeroCertidao, protocolo, hashDocumento, nomeArquivo, conectorUtilizado, confianca, necessitaRevisao, motivoExcecao
+- `AutomationBatch` — id, agendadoPara, empresaIds, status, progressoAtual, totalItems
+- `IntegrationHealthLog` — id, connectorId, timestamp, status, latencia, detalhes
+- `RetryPolicy` — maxTentativas, intervaloBase, backoffMultiplier, timeoutSegundos
+- `SchedulingRule` — connectorId, cndTipo, intervaloHoras, diasAntesVencimento, prioridade
 
-## 3. Performance Optimizations
+## 2. Dados Mock de Automação
 
-**All pages** — Replace direct `mockEmpresas`/`mockCNDItems` imports with `useDataStore()` hook:
-- Memoize derived data with `useMemo` (already done in most pages — verify all)
-- Memoize callbacks with `useCallback` for event handlers passed to children
-- Add pagination to Empresas, Certidoes, Documentos, Envios, Logs (show 20 items per page with "Load More" or page controls)
+**`src/data/automationMockData.ts`** — Dados mock realistas:
+- 6 conectores (Receita Federal API, FGTS/CRF, SEFAZ Browser, Municipal Assistida, TST API, Personalizada Manual)
+- ~15 execuções com diferentes status (sucesso, falha, revisão, timeout)
+- Steps por execução
+- ~5 exceções na fila
+- Batches agendados
+- Health logs dos conectores
+- Políticas de retry e scheduling rules
 
-**Modified: `src/pages/Dashboard.tsx`** — Use `consolidarDashboard()` instead of inline calculations scattered across the component. Memoize all derived arrays.
+## 3. Provider de Automação
 
-**Modified: `src/pages/Empresas.tsx`** — `getEmpresaResumo` is called per-render per-empresa inside `.map()`. Precompute all resumos in a single `useMemo` pass.
+**`src/data/AutomationProvider.tsx`** — Contexto separado usando `useReducer`:
+- Estado: connectors, runs, exceptions, batches, healthLogs, schedulingRules, retryPolicies
+- Actions: `ADD_RUN`, `UPDATE_RUN`, `ADD_EXCEPTION`, `RESOLVE_EXCEPTION`, `UPDATE_CONNECTOR_STATUS`, `ADD_BATCH`, `UPDATE_BATCH`, `REQUEUE_EXCEPTION`, `ADD_HEALTH_LOG`
+- Hook `useAutomation()` para acessar
 
-## 4. Validation & Error Handling
+Wrappado no App.tsx ao redor de `DataProvider` (ou dentro), sem alterar a lógica existente.
 
-**New: `src/hooks/useConfirmAction.ts`** — Confirmation dialog hook for destructive actions (archive empresa, resolve all alerts, delete document)
+## 4. Motor de Automação (Hooks e Lógica)
 
-**New: `src/components/ConfirmDialog.tsx`** — Reusable alert dialog for destructive action confirmation
+**`src/hooks/useOrchestrator.ts`** — Orquestrador de coleta:
+- `getEmpresasElegiveis()` — filtra por prioridade (vencidas > vencendo > críticas > novas)
+- `executarColeta(empresaId, cndTipo)` — seleciona conector, dispara mock run, registra steps
+- `processarResultado(run)` — chama parser, decision engine, atualiza CND na Fase 1
 
-**New: `src/components/ErrorBoundary.tsx`** — Page-level error boundary with retry button and styled error state
+**`src/lib/connector-registry.ts`** — Registry de conectores:
+- `getConnectorForCND(cndTipo)` — retorna conector adequado
+- `getConnectorHealth(connectorId)` — retorna métricas de saúde
+- Status mapping entre respostas externas e status internos
 
-**Modified: All pages** — Wrap each page component in ErrorBoundary. Add try-catch to data operations.
+**`src/lib/capture-parser.ts`** — Pipeline de parsing:
+- `parseCapture(rawData, tipo)` — extrai dados estruturados do resultado bruto
+- `extractValidade(text)` — detecta data de validade em texto
+- `extractEmissao(text)` — detecta data de emissão
+- `calcularConfianca(result)` — retorna score de confiança
+- `normalizarStatus(statusBruto, orgao)` — mapeamento para status interno
+- Validações: validade > emissão, CNPJ match, hash deduplicação
 
-**Modified: `src/pages/Empresas.tsx`** — "Nova Empresa" button opens a dialog/form with:
-- CNPJ validation (already exists in formatters.ts) with real-time feedback
-- CNPJ uniqueness check against existing empresas
-- Required field validation (razaoSocial, nomeFantasia, cnpj, emailPrincipal)
-- Email format validation
-- Phone format validation
-- On submit: creates empresa + auto-generates base checklist by regime
+**`src/lib/decision-engine.ts`** — Motor de decisão:
+- `avaliarResultado(capture, cndAtual)` — decide: aplicar auto, flag revisão, ou exceção
+- Alta confiança → aplica automaticamente e atualiza CND no DataProvider
+- Média → aplica com flag de revisão
+- Baixa → cria exceção, não publica
 
-**Modified: `src/pages/EmpresaDetalhe.tsx`** — Quick action buttons actually work:
-- "Upload PDF" opens file input (mock — stores in state, validates PDF type/size < 10MB)
-- "Enviar Documentos" navigates to /envios with empresa pre-selected
-- "Gerar Alerta" creates manual alert
-- "Editar" opens edit form
+**`src/hooks/useAutomationJobs.ts`** — Jobs internos:
+- `executarLoteColeta()` — processa batch de empresas elegíveis
+- `revalidarPeriodica()` — verifica CNDs que precisam reconsulta
+- `retryFalhasTransitorias()` — reprocessa falhas recentes elegíveis
+- `monitorarConectores()` — health check dos conectores
+- Tudo roda mock (simulação com timeouts), mas com estrutura pronta para async real
 
-## 5. Automation-Ready Architecture
+## 5. Novas Telas
 
-**New: `src/hooks/useAlertEngine.ts`** — Alert generation engine:
-- Runs on data store changes
-- Rules: vencimento 7d, 3d, 1d, today, vencido, sem PDF, checklist incompleto
-- Deduplication by (empresaId + cndItemId + tipo)
-- Returns generated alerts to store
+### 5a. Central de Automação (`src/pages/Automacao.tsx`)
+- Métricas do dia: coletas executadas, sucesso, falha, revisão, pendência
+- Próximos lotes agendados
+- Conectores ativos com indicador de saúde
+- Tempo médio por conector e taxa de sucesso
+- Quick actions: executar lote, forçar revalidação, pausar automação
+- Visual premium liquid glass
 
-**New: `src/hooks/useAgendaEngine.ts`** — Agenda consolidation:
-- Derives agenda items from all CNDs with vencimento dates
-- Groups and sorts by urgency
-- Provides pre-computed counts
+### 5b. Execuções (`src/pages/Execucoes.tsx`)
+- Lista paginada de execuções automáticas
+- Filtros: período, empresa, conector, status, tipo CND
+- Colunas: empresa, conector, tipo, status, duração, tentativa, resultado
+- Ações: abrir detalhe, reprocessar, enviar para exceção
+- Row expandível ou link para detalhe
 
-**New: `src/lib/queue.ts`** — Simple in-memory queue structure for future automated sends:
-- `EnvioQueue` interface with `add`, `process`, `retry`, `getStatus`
-- Currently processes immediately (mock), but structure is ready for async
+### 5c. Detalhe de Execução (`src/pages/ExecucaoDetalhe.tsx`)
+- Header: empresa, CNPJ, conector, certidão, status final
+- Timeline técnica com steps (autenticação → consulta → captura → parsing → persistência)
+- Payloads seguros e metadados
+- Evidências coletadas
+- PDF gerado ou resposta textual
+- Alertas gerados
+- Vínculo com item da empresa
 
-## 6. State Management & Loading States
+### 5d. Integrações (`src/pages/Integracoes.tsx`)
+- Lista de conectores com cards de saúde
+- Status, disponibilidade, última execução, taxa de sucesso
+- Configuração por conector
+- Credenciais mascaradas
+- Health timeline resumida
+- Ação: testar conector, pausar, editar config
 
-**New: `src/components/LoadingSkeleton.tsx`** — Skeleton variants for:
-- MetricCard skeleton
-- List row skeleton  
-- Card skeleton
-- Timeline skeleton
+### 5e. Exceções (`src/pages/Excecoes.tsx`)
+- Fila de pendências com triagem por criticidade
+- Filtros: motivo, empresa, conector, status
+- Ações: corrigir dados, upload manual, reenfileirar, marcar N/A, aprovar leitura, vincular documento
+- Cards com visão rápida do que falhou
 
-**Modified: All pages** — Add proper loading/error/empty states:
-- `isLoading` state with skeleton loaders (simulated 300ms delay on initial render for demo)
-- Error state with retry
-- Empty state (already exists — verify all pages have it)
-- Partial state (e.g., empresa with some CNDs loaded but others pending)
+## 6. Navegação Atualizada
 
-## 7. Audit Trail & Observability
+**`src/components/AppSidebar.tsx`** — Expandir menu com grupo "Automação":
 
-**Modified: `src/data/types.ts`** — Add:
-- `AuditEntry` interface: `{ id, timestamp, userId, action, entityType, entityId, before, after, metadata }`
-- Add `auditTrail` array to data store
+```
+Menu Principal (existente)
+  Dashboard, Empresas, Agenda, Certidões, Documentos, Envios, Alertas
 
-**Modified: `src/hooks/useDataStore.ts`** — Every mutation creates an audit entry automatically
+Automação (novo grupo)
+  Central, Execuções, Integrações, Exceções
 
-**Modified: `src/pages/Logs.tsx`** — Add "Audit Trail" tab showing all system mutations with before/after diffs
+Sistema (existente)
+  Logs, Configurações
+```
 
-## 8. File Upload Validation (Mock)
+Badge de exceções pendentes no item "Exceções".
 
-**New: `src/lib/file-validation.ts`**:
-- `validatePDF(file)`: checks type (application/pdf), size (< 10MB), name sanitization
-- `validateFileExtension(name)`: whitelist of allowed extensions
-- Returns structured error messages
+## 7. Rotas
 
-## 9. Toast Notifications & Feedback
+**`src/App.tsx`** — Adicionar:
+- `/automacao` → Automacao
+- `/execucoes` → Execucoes
+- `/execucoes/:id` → ExecucaoDetalhe
+- `/integracoes` → Integracoes
+- `/excecoes` → Excecoes
 
-**Modified: All pages with actions** — Add toast notifications for:
-- Empresa created/updated successfully
-- CND status changed
-- Document uploaded
-- Envio sent
-- Alerta resolved/marked read
-- Validation errors
+## 8. Componentes Reutilizáveis da Fase 2
 
-## 10. Security Preparations
+- `ConnectorHealthCard.tsx` — card de saúde do conector com indicadores
+- `RunStatusBadge.tsx` — badge de status de execução com cores e pulse
+- `ExecutionTimeline.tsx` — timeline vertical dos steps da execução
+- `ConfidenceBadge.tsx` — indicador visual de confiança (alta/média/baixa)
+- `ExceptionCard.tsx` — card de exceção com ações inline
 
-**New: `src/lib/permissions.ts`**:
-- `UserRole` type: `'admin' | 'operador'`
-- `canPerform(role, action)`: permission matrix
-- Actions: `create_empresa`, `delete_empresa`, `upload_doc`, `send_envio`, `resolve_alerta`, `view_logs`, `manage_settings`
-- Currently returns true for all (mock), but structure is ready for real auth
+## 9. Integração com Fase 1
 
-## Files Summary
+- Quando uma execução com confiança alta finaliza, chama `dispatch({ type: 'UPDATE_CND' })` no DataProvider existente
+- Quando gera documento, chama `addDocumento()` existente
+- Quando detecta vencimento/status change, `useAlertEngine` (Fase 1) já gera alertas automaticamente
+- Logs de automação usam `addLog()` existente
+- Audit trail usa o sistema já implementado
+- Sidebar usa `useDataStore()` para badge de alertas (já existente)
 
-**New files (8):**
-- `src/hooks/useDataStore.ts`
-- `src/data/DataProvider.tsx`
-- `src/hooks/useAlertEngine.ts`
-- `src/hooks/useConfirmAction.ts`
-- `src/components/ConfirmDialog.tsx`
-- `src/components/ErrorBoundary.tsx`
-- `src/components/LoadingSkeleton.tsx`
-- `src/lib/file-validation.ts`
-- `src/lib/permissions.ts`
+## 10. Footer e Versão
 
-**Modified files (14):**
-- `src/App.tsx` — Wrap with DataProvider + ErrorBoundary
-- `src/lib/status-utils.ts` — Add batch recalculation, alert generation, dashboard consolidation
-- `src/lib/formatters.ts` — Add date/input validation
-- `src/data/types.ts` — Add AuditEntry, EnvioQueue interfaces
-- `src/data/mockData.ts` — Enrich test scenarios
-- `src/pages/Dashboard.tsx` — Use consolidated metrics, memoize all
-- `src/pages/Empresas.tsx` — Add create form, pagination, precompute resumos
-- `src/pages/EmpresaDetalhe.tsx` — Wire up quick actions, add confirmations
-- `src/pages/Certidoes.tsx` — Add pagination
-- `src/pages/Documentos.tsx` — Add pagination, file validation
-- `src/pages/Envios.tsx` — Add pagination
-- `src/pages/Alertas.tsx` — Use data store, add confirmation for bulk actions
-- `src/pages/Logs.tsx` — Add audit trail tab, pagination
-- `src/pages/Configuracoes.tsx` — Add permission info
+Atualizar footer da sidebar: "Fase 2 — v2.0.0 — Automação Ativa"
+
+---
+
+## Arquivos Novos (~15)
+- `src/data/automation-types.ts`
+- `src/data/automationMockData.ts`
+- `src/data/AutomationProvider.tsx`
+- `src/hooks/useOrchestrator.ts`
+- `src/hooks/useAutomationJobs.ts`
+- `src/lib/connector-registry.ts`
+- `src/lib/capture-parser.ts`
+- `src/lib/decision-engine.ts`
+- `src/pages/Automacao.tsx`
+- `src/pages/Execucoes.tsx`
+- `src/pages/ExecucaoDetalhe.tsx`
+- `src/pages/Integracoes.tsx`
+- `src/pages/Excecoes.tsx`
+- `src/components/ConnectorHealthCard.tsx`
+- `src/components/RunStatusBadge.tsx`
+- `src/components/ExecutionTimeline.tsx`
+- `src/components/ConfidenceBadge.tsx`
+- `src/components/ExceptionCard.tsx`
+
+## Arquivos Modificados (~3)
+- `src/App.tsx` — AutomationProvider wrapper + novas rotas
+- `src/components/AppSidebar.tsx` — menu expandido com grupo Automação
+- `src/data/types.ts` — estender CNDStatus com novos valores (opcional, backward-compatible)
 
