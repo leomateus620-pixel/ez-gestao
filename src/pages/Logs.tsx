@@ -46,7 +46,6 @@ export default function Logs() {
     }).sort((a, b) => new Date(b.dataHora).getTime() - new Date(a.dataHora).getTime());
   }, [busca, filtroAcao]);
 
-  // Group by date
   const grouped = useMemo(() => {
     const groups: Record<string, typeof logsFiltrados> = {};
     logsFiltrados.forEach(log => {
@@ -87,7 +86,7 @@ export default function Logs() {
           {Object.entries(grouped).map(([dateKey, logs]) => (
             <div key={dateKey}>
               <div className="flex items-center gap-3 mb-3">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{dateKey}</span>
+                <span className="text-xs font-semibold text-foreground/55 uppercase tracking-wider">{dateKey}</span>
                 <div className="flex-1 h-px bg-border/60" />
               </div>
               <div className="relative border-l-2 border-border/60 ml-4 space-y-2.5">
@@ -102,10 +101,10 @@ export default function Logs() {
                       )} />
                       <div className="glass-card-subtle p-3.5 hover:shadow-sm transition-all">
                         <div className="flex items-start gap-3">
-                          <Icon className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                          <Icon className="h-4 w-4 text-foreground/50 shrink-0 mt-0.5" />
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium">{log.detalhes}</p>
-                            <div className="flex flex-wrap gap-x-3 text-[11px] text-muted-foreground mt-0.5">
+                            <div className="flex flex-wrap gap-x-3 text-[11px] text-foreground/60 mt-0.5">
                               <span className="cursor-pointer hover:underline" onClick={() => navigate(`/empresas/${log.empresaId}`)}>{empresa?.nomeFantasia}</span>
                               <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium">{acaoLabels[log.acao]}</span>
                               <span>{log.usuario}</span>

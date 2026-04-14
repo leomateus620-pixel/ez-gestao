@@ -53,7 +53,6 @@ export default function Agenda() {
     .filter(c => c.dataVencimento)
     .map(c => parseISO(c.dataVencimento!));
 
-  // Summary counts
   const counts = {
     vencidos: grouped['Vencidos'].length,
     hoje: grouped['Vence Hoje'].length,
@@ -102,7 +101,7 @@ export default function Agenda() {
             <div key={group}>
               <div className="flex items-center gap-2 mb-2 px-1">
                 <h3 className={cn('text-xs font-semibold uppercase tracking-wider', groupColors[group])}>{group}</h3>
-                <span className="text-[10px] text-muted-foreground">({items.length})</span>
+                <span className="text-[10px] text-foreground/50">({items.length})</span>
               </div>
               <div className="space-y-1.5">
                 {items.map(item => {
@@ -120,12 +119,12 @@ export default function Agenda() {
                         </span>
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{empresa?.nomeFantasia} — {getCNDTipoLabel(item.tipo)}</p>
-                          <p className="text-[11px] text-muted-foreground">Vencimento: {formatDate(item.dataVencimento)}</p>
+                          <p className="text-[11px] text-foreground/60">Vencimento: {formatDate(item.dataVencimento)}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <StatusBadge status={item.status} />
-                        <ArrowRight className="h-4 w-4 text-muted-foreground/40" />
+                        <ArrowRight className="h-4 w-4 text-foreground/30" />
                       </div>
                     </div>
                   );
@@ -162,7 +161,7 @@ export default function Agenda() {
                     <div className="flex items-center justify-between gap-2">
                       <div>
                         <p className="text-sm font-medium">{empresa?.nomeFantasia} — {getCNDTipoLabel(item.tipo)}</p>
-                        <p className="text-[11px] text-muted-foreground">{formatDate(item.dataVencimento)} • {prio.label}</p>
+                        <p className="text-[11px] text-foreground/60">{formatDate(item.dataVencimento)} • {prio.label}</p>
                       </div>
                       <StatusBadge status={item.status} />
                     </div>

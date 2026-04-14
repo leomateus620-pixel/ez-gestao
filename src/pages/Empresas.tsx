@@ -132,8 +132,8 @@ export default function Empresas() {
                       <p className="text-sm font-semibold truncate">{empresa.nomeFantasia}</p>
                       <StatusBadge status={empresa.status} variant="empresa" />
                     </div>
-                    <p className="text-[11px] text-muted-foreground truncate">{empresa.razaoSocial}</p>
-                    <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
+                    <p className="text-[11px] text-foreground/60 truncate">{empresa.razaoSocial}</p>
+                    <div className="flex items-center gap-3 mt-1 text-[11px] text-foreground/60">
                       <span className="font-mono">{formatCNPJ(empresa.cnpj)}</span>
                       <span className="flex items-center gap-1">
                         <MapPin className="h-3 w-3" />
@@ -175,7 +175,7 @@ export default function Empresas() {
                       />
                     </div>
                   )}
-                  <ArrowRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                  <ArrowRight className="h-4 w-4 text-foreground/30 group-hover:text-foreground/60 transition-colors" />
                 </div>
               </div>
             </div>

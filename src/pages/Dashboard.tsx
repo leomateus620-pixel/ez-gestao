@@ -53,7 +53,6 @@ export default function Dashboard() {
     })
     .slice(0, 5);
 
-  // At-risk companies
   const empresasRisco = mockEmpresas
     .filter(e => e.status === 'ativa')
     .map(e => {
@@ -70,7 +69,6 @@ export default function Dashboard() {
     .sort((a, b) => b.score - a.score)
     .slice(0, 4);
 
-  // Recent logs
   const recentLogs = [...mockLogs]
     .sort((a, b) => new Date(b.dataHora).getTime() - new Date(a.dataHora).getTime())
     .slice(0, 5);
@@ -137,13 +135,13 @@ export default function Dashboard() {
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="text-center">
                 <span className="text-2xl font-bold">{totalCNDs}</span>
-                <span className="block text-[10px] text-muted-foreground">Total</span>
+                <span className="block text-[10px] text-foreground/50">Total</span>
               </div>
             </div>
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-3">
             {statusData.filter(s => s.value > 0).map(s => (
-              <div key={s.name} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <div key={s.name} className="flex items-center gap-1.5 text-[11px] text-foreground/65">
                 <span className="h-2 w-2 rounded-full shrink-0" style={{ background: s.color }} />
                 {s.name} ({s.value})
               </div>
@@ -176,12 +174,12 @@ export default function Dashboard() {
                     </span>
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{empresa?.nomeFantasia}</p>
-                      <p className="text-[11px] text-muted-foreground">{getCNDTipoLabel(item.tipo)}</p>
+                      <p className="text-[11px] text-foreground/60">{getCNDTipoLabel(item.tipo)}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <StatusBadge status={item.status} />
-                    <span className="text-[11px] text-muted-foreground hidden sm:block">{formatDate(item.dataVencimento)}</span>
+                    <span className="text-[11px] text-foreground/60 hidden sm:block">{formatDate(item.dataVencimento)}</span>
                   </div>
                 </div>
               );
@@ -223,7 +221,7 @@ export default function Dashboard() {
                 </div>
                 <div className="text-right shrink-0 ml-3">
                   <span className="text-lg font-bold text-destructive">{e.vencidas}</span>
-                  <span className="text-[10px] text-muted-foreground block">vencidas</span>
+                  <span className="text-[10px] text-foreground/50 block">vencidas</span>
                 </div>
               </div>
             ))}
@@ -247,9 +245,9 @@ export default function Dashboard() {
                     log.acao === 'download' ? 'bg-success' : 'bg-info'
                   )} />
                   <p className="text-xs font-medium leading-snug">{log.detalhes}</p>
-                  <div className="flex gap-2 text-[10px] text-muted-foreground mt-0.5">
+                  <div className="flex gap-2 text-[10px] text-foreground/55 mt-0.5">
                     <span>{empresa?.nomeFantasia}</span>
-                    <span>•</span>
+                    <span className="text-foreground/30">•</span>
                     <span>{formatDateTime(log.dataHora)}</span>
                   </div>
                 </div>
@@ -280,7 +278,7 @@ export default function Dashboard() {
                 <p className="text-xs font-medium line-clamp-1">{alerta.titulo}</p>
                 <StatusBadge status={alerta.prioridade} variant="prioridade" dot={false} className="text-[10px] shrink-0" />
               </div>
-              <p className="text-[11px] text-muted-foreground mt-1.5 line-clamp-1">{alerta.descricao}</p>
+              <p className="text-[11px] text-foreground/60 mt-1.5 line-clamp-1">{alerta.descricao}</p>
             </div>
           ))}
         </div>

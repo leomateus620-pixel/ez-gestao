@@ -82,7 +82,7 @@ export default function Certidoes() {
       </div>
 
       <div className="space-y-1.5">
-        {itensFiltrados.map((item, i) => {
+        {itensFiltrados.map((item) => {
           const empresa = mockEmpresas.find(e => e.id === item.empresaId);
           return (
             <div key={item.id} className={cn(
@@ -97,11 +97,11 @@ export default function Certidoes() {
                       <p className="text-sm font-medium cursor-pointer hover:underline" onClick={() => navigate(`/empresas/${item.empresaId}`)}>
                         {empresa?.nomeFantasia}
                       </p>
-                      <span className="text-[10px] text-muted-foreground">•</span>
-                      <p className="text-sm text-muted-foreground">{getCNDTipoLabel(item.tipo)}</p>
+                      <span className="text-[10px] text-foreground/30">•</span>
+                      <p className="text-sm text-foreground/65">{getCNDTipoLabel(item.tipo)}</p>
                       <StatusBadge status={item.status} />
                     </div>
-                    <div className="flex gap-4 text-[11px] text-muted-foreground mt-0.5">
+                    <div className="flex gap-4 text-[11px] text-foreground/60 mt-0.5">
                       {item.dataEmissao && <span>Emissão: {formatDate(item.dataEmissao)}</span>}
                       {item.dataVencimento && <span>Vencimento: {formatDate(item.dataVencimento)}</span>}
                       <span>Resp: {item.responsavel}</span>

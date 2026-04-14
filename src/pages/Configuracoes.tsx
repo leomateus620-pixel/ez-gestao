@@ -23,7 +23,7 @@ export default function Configuracoes() {
               </div>
               <div>
                 <p className="text-sm font-semibold">{s.title}</p>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{s.desc}</p>
+                <p className="text-xs text-foreground/60 mt-1 leading-relaxed">{s.desc}</p>
               </div>
             </div>
           </div>
@@ -33,10 +33,10 @@ export default function Configuracoes() {
       <GlassCard variant="subtle">
         <div className="text-center py-10">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60 mx-auto mb-4">
-            <Settings className="h-7 w-7 text-muted-foreground/40 animate-pulse-soft" />
+            <Settings className="h-7 w-7 text-foreground/30 animate-pulse-soft" />
           </div>
           <p className="text-sm font-medium text-foreground">Configurações completas na Fase 2</p>
-          <p className="text-xs text-muted-foreground mt-1.5">Integração com backend, regras de acesso e automações</p>
+          <p className="text-xs text-foreground/55 mt-1.5">Integração com backend, regras de acesso e automações</p>
         </div>
       </GlassCard>
     </div>

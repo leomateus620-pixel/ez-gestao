@@ -58,9 +58,9 @@ export default function Documentos() {
       </div>
 
       {/* Storage indicator */}
-      <div className="flex items-center gap-3 text-[11px] text-muted-foreground px-1">
+      <div className="flex items-center gap-3 text-[11px] text-foreground/55 px-1">
         <span>{docsFiltrados.length} documentos</span>
-        <span>•</span>
+        <span className="text-foreground/30">•</span>
         <span>~{(docsFiltrados.length * 0.2).toFixed(1)} MB utilizados</span>
       </div>
 
@@ -77,8 +77,8 @@ export default function Documentos() {
                   <FileText className="h-6 w-6 text-primary" />
                 </div>
                 <p className="text-xs font-medium truncate w-full">{doc.nome}</p>
-                <p className="text-[10px] text-muted-foreground">{empresa?.nomeFantasia}</p>
-                <p className="text-[10px] text-muted-foreground">{doc.tamanho} • v{doc.versao}</p>
+                <p className="text-[10px] text-foreground/55">{empresa?.nomeFantasia}</p>
+                <p className="text-[10px] text-foreground/50">{doc.tamanho} • v{doc.versao}</p>
                 <div className="flex gap-1 mt-1">
                   <Button variant="ghost" size="icon" className="h-7 w-7"><Eye className="h-3.5 w-3.5" /></Button>
                   <Button variant="ghost" size="icon" className="h-7 w-7"><Download className="h-3.5 w-3.5" /></Button>
@@ -96,7 +96,7 @@ export default function Documentos() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{doc.nome}</p>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-foreground/60">
                       <span>{empresa?.nomeFantasia}</span>
                       <span>{getCNDTipoLabel(doc.tipo)}</span>
                       <span>v{doc.versao}</span>

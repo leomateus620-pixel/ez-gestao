@@ -40,7 +40,7 @@ export function AppSidebar() {
           {!collapsed && (
             <div className="animate-fade-in">
               <h1 className="text-sm font-bold text-sidebar-foreground tracking-tight">CND Manager</h1>
-              <p className="text-[10px] text-sidebar-foreground/40">Gestão de Certidões</p>
+              <p className="text-[10px] text-sidebar-foreground/50">Gestão de Certidões</p>
             </div>
           )}
         </div>
@@ -50,7 +50,7 @@ export function AppSidebar() {
 
       <SidebarContent className="px-2 pt-2">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/30 text-[10px] uppercase tracking-[0.15em] font-semibold">
+          <SidebarGroupLabel className="text-sidebar-foreground/40 text-[10px] uppercase tracking-[0.15em] font-semibold">
             {!collapsed ? 'Menu Principal' : ''}
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -66,7 +66,7 @@ export function AppSidebar() {
                       <NavLink
                         to={item.url}
                         end={item.url === '/'}
-                        className="relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-sidebar-foreground/60 transition-all duration-200 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
+                        className="relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-sidebar-foreground/70 transition-all duration-200 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground"
                         activeClassName="bg-sidebar-accent text-sidebar-primary font-semibold shadow-sm"
                       >
                         {isActive && (
@@ -92,8 +92,8 @@ export function AppSidebar() {
       <SidebarFooter className="p-4">
         {!collapsed && (
           <div className="rounded-lg bg-sidebar-accent/40 border border-sidebar-border/50 p-3 animate-fade-in">
-            <p className="text-[10px] font-semibold text-sidebar-foreground/40 uppercase tracking-widest">Fase 1</p>
-            <p className="text-xs text-sidebar-foreground/60 mt-0.5">v1.0.0 — Mock Data</p>
+            <p className="text-[10px] font-semibold text-sidebar-foreground/50 uppercase tracking-widest">Fase 1</p>
+            <p className="text-xs text-sidebar-foreground/65 mt-0.5">v1.0.0 — Mock Data</p>
           </div>
         )}
       </SidebarFooter>
