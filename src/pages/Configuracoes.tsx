@@ -1,8 +1,11 @@
 import { GlassCard } from '@/components/GlassCard';
 import { PageHeader } from '@/components/PageHeader';
-import { Settings, ShieldCheck, Users, Palette } from 'lucide-react';
+import { Settings, ShieldCheck, Users, Palette, Lock } from 'lucide-react';
+import { getCurrentRole } from '@/lib/permissions';
 
 export default function Configuracoes() {
+  const role = getCurrentRole();
+
   const sections = [
     { icon: ShieldCheck, title: 'Tipos de CND', desc: 'Gerenciar tipos de certidões disponíveis no sistema' },
     { icon: Users, title: 'Perfis e Usuários', desc: 'Configurar perfis de acesso e usuários internos' },
@@ -29,6 +32,19 @@ export default function Configuracoes() {
           </div>
         ))}
       </div>
+
+      <GlassCard variant="subtle">
+        <div className="flex items-center gap-3 mb-4">
+          <Lock className="h-4 w-4 text-foreground/50" />
+          <p className="text-sm font-medium">Perfil de Acesso</p>
+        </div>
+        <div className="flex items-center gap-3 text-xs">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-primary font-semibold capitalize">
+            {role}
+          </span>
+          <span className="text-foreground/60">Permissões completas do sistema</span>
+        </div>
+      </GlassCard>
 
       <GlassCard variant="subtle">
         <div className="text-center py-10">

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { mockEnvios, mockEmpresas, mockDocumentos } from '@/data/mockData';
+import { useDataStore } from '@/data/DataProvider';
 import { StatusBadge } from '@/components/StatusBadge';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
@@ -7,26 +7,34 @@ import { formatDateTime } from '@/lib/formatters';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Search, Send, Mail, MessageCircle, Plus, Phone } from 'lucide-react';
+import { Search, Send, Mail, MessageCircle, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+
+const ITEMS_PER_PAGE = 20;
 
 export default function Envios() {
+  const { state } = useDataStore();
   const [busca, setBusca] = useState('');
   const [filtroCanal, setFiltroCanal] = useState('todos');
+  const [page, setPage] = useState(1);
 
   const enviosFiltrados = useMemo(() => {
-    return mockEnvios.filter(e => {
-      const empresa = mockEmpresas.find(emp => emp.id === e.empresaId);
+    return state.envios.filter(e => {
+      const empresa = state.empresas.find(emp => emp.id === e.empresaId);
       const matchBusca = !busca || empresa?.nomeFantasia.toLowerCase().includes(busca.toLowerCase()) || e.destinatario.toLowerCase().includes(busca.toLowerCase());
       const matchCanal = filtroCanal === 'todos' || e.canal === filtroCanal;
       return matchBusca && matchCanal;
     }).sort((a, b) => new Date(b.dataEnvio).getTime() - new Date(a.dataEnvio).getTime());
-  }, [busca, filtroCanal]);
+  }, [state.envios, state.empresas, busca, filtroCanal]);
+
+  const paginatedEnvios = useMemo(() => enviosFiltrados.slice(0, page * ITEMS_PER_PAGE), [enviosFiltrados, page]);
+  const hasMore = paginatedEnvios.length < enviosFiltrados.length;
 
   return (
     <div className="space-y-6 animate-slide-in">
       <PageHeader title="Envios" subtitle="Histórico de envios por e-mail e WhatsApp">
-        <Button className="gap-2"><Plus className="h-4 w-4" />Novo Envio</Button>
+        <Button className="gap-2" onClick={() => toast.info('Novo Envio', { description: 'Fluxo assistido disponível na Fase 2.' })}><Plus className="h-4 w-4" />Novo Envio</Button>
       </PageHeader>
 
       <div className="filter-bar">
@@ -47,17 +55,14 @@ export default function Envios() {
       </div>
 
       <div className="space-y-2">
-        {enviosFiltrados.map(envio => {
-          const empresa = mockEmpresas.find(e => e.id === envio.empresaId);
-          const docs = mockDocumentos.filter(d => envio.documentoIds.includes(d.id));
+        {paginatedEnvios.map(envio => {
+          const empresa = state.empresas.find(e => e.id === envio.empresaId);
+          const docs = state.documentos.filter(d => envio.documentoIds.includes(d.id));
           return (
             <div key={envio.id} className="glass-card-subtle p-4 hover:shadow-sm transition-all">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className={cn(
-                    'flex h-9 w-9 items-center justify-center rounded-lg shrink-0',
-                    envio.canal === 'email' ? 'bg-primary/10 text-primary' : 'bg-success/10 text-success'
-                  )}>
+                  <div className={cn('flex h-9 w-9 items-center justify-center rounded-lg shrink-0', envio.canal === 'email' ? 'bg-primary/10 text-primary' : 'bg-success/10 text-success')}>
                     {envio.canal === 'email' ? <Mail className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
                   </div>
                   <div className="min-w-0">
@@ -78,6 +83,11 @@ export default function Envios() {
             </div>
           );
         })}
+        {hasMore && (
+          <div className="flex justify-center pt-4">
+            <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)}>Carregar mais</Button>
+          </div>
+        )}
         {enviosFiltrados.length === 0 && (
           <EmptyState icon={Send} title="Nenhum envio encontrado" description="Crie um novo envio para começar." actionLabel="Novo Envio" onAction={() => {}} />
         )}
