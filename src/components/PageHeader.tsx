@@ -12,7 +12,7 @@ export function PageHeader({ title, subtitle, children, className }: PageHeaderP
     <div className={cn('flex flex-col sm:flex-row sm:items-center justify-between gap-4', className)}>
       <div>
         <h1 className="page-title">{title}</h1>
-        {subtitle && <p className="page-subtitle">{subtitle}</p>}
+        {subtitle && <p className="text-sm text-foreground/60 mt-0.5">{subtitle}</p>}
       </div>
       {children && <div className="flex items-center gap-2 shrink-0">{children}</div>}
     </div>
