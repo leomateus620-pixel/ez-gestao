@@ -4,6 +4,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
+import { DataProvider } from "@/data/DataProvider";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Dashboard from "./pages/Dashboard";
 import Empresas from "./pages/Empresas";
 import EmpresaDetalhe from "./pages/EmpresaDetalhe";
@@ -23,23 +25,27 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <AppLayout>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/empresas" element={<Empresas />} />
-            <Route path="/empresas/:id" element={<EmpresaDetalhe />} />
-            <Route path="/agenda" element={<Agenda />} />
-            <Route path="/certidoes" element={<Certidoes />} />
-            <Route path="/documentos" element={<Documentos />} />
-            <Route path="/envios" element={<Envios />} />
-            <Route path="/alertas" element={<Alertas />} />
-            <Route path="/logs" element={<Logs />} />
-            <Route path="/configuracoes" element={<Configuracoes />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AppLayout>
-      </BrowserRouter>
+      <DataProvider>
+        <BrowserRouter>
+          <AppLayout>
+            <ErrorBoundary>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/empresas" element={<Empresas />} />
+                <Route path="/empresas/:id" element={<EmpresaDetalhe />} />
+                <Route path="/agenda" element={<Agenda />} />
+                <Route path="/certidoes" element={<Certidoes />} />
+                <Route path="/documentos" element={<Documentos />} />
+                <Route path="/envios" element={<Envios />} />
+                <Route path="/alertas" element={<Alertas />} />
+                <Route path="/logs" element={<Logs />} />
+                <Route path="/configuracoes" element={<Configuracoes />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </ErrorBoundary>
+          </AppLayout>
+        </BrowserRouter>
+      </DataProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

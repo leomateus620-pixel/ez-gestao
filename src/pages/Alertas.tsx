@@ -1,55 +1,67 @@
 import { useState, useMemo } from 'react';
-import { mockAlertas, mockEmpresas } from '@/data/mockData';
+import { useDataStore } from '@/data/DataProvider';
 import { StatusBadge } from '@/components/StatusBadge';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
-import { SectionHeader } from '@/components/SectionHeader';
 import { formatDate } from '@/lib/formatters';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useConfirmAction } from '@/hooks/useConfirmAction';
 import { Bell, BellOff, Check, AlertTriangle, CheckCircle, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import type { Alerta } from '@/data/types';
 
 export default function Alertas() {
   const navigate = useNavigate();
-  const [alertas, setAlertas] = useState(mockAlertas);
+  const { state, resolveAlerta, markAlertaLido, resolveAllAlertas, markAllAlertasLidos } = useDataStore();
+  const confirmAction = useConfirmAction();
 
-  const ativos = useMemo(() => alertas.filter(a => !a.resolvido).sort((a, b) => {
-    const pri = { critica: 0, alta: 1, media: 2, baixa: 3 };
+  const ativos = useMemo(() => state.alertas.filter(a => !a.resolvido).sort((a, b) => {
+    const pri: Record<string, number> = { critica: 0, alta: 1, media: 2, baixa: 3 };
     return (pri[a.prioridade] ?? 4) - (pri[b.prioridade] ?? 4);
-  }), [alertas]);
+  }), [state.alertas]);
 
-  const resolvidos = useMemo(() => alertas.filter(a => a.resolvido), [alertas]);
+  const resolvidos = useMemo(() => state.alertas.filter(a => a.resolvido), [state.alertas]);
 
-  const marcarLido = (id: string) => setAlertas(prev => prev.map(a => a.id === id ? { ...a, lido: true } : a));
-  const resolver = (id: string) => setAlertas(prev => prev.map(a => a.id === id ? { ...a, resolvido: true } : a));
-  const marcarTodosLidos = () => setAlertas(prev => prev.map(a => ({ ...a, lido: true })));
-  const resolverTodos = () => setAlertas(prev => prev.map(a => a.resolvido ? a : { ...a, resolvido: true }));
+  const handleResolver = (id: string) => {
+    resolveAlerta(id);
+    toast.success('Alerta resolvido');
+  };
+
+  const handleMarcarLido = (id: string) => {
+    markAlertaLido(id);
+    toast.info('Marcado como lido');
+  };
+
+  const handleResolverTodos = () => {
+    confirmAction.requestConfirm(
+      'Resolver todos os alertas',
+      `Tem certeza que deseja resolver ${ativos.length} alertas ativos? Esta ação não pode ser desfeita.`,
+      () => { resolveAllAlertas(); toast.success(`${ativos.length} alertas resolvidos`); }
+    );
+  };
+
+  const handleMarcarTodosLidos = () => {
+    markAllAlertasLidos();
+    toast.info('Todos marcados como lidos');
+  };
 
   const grouped: Record<string, Alerta[]> = { critica: [], alta: [], media: [], baixa: [] };
-  ativos.forEach(a => {
-    if (grouped[a.prioridade]) grouped[a.prioridade].push(a);
-  });
+  ativos.forEach(a => { if (grouped[a.prioridade]) grouped[a.prioridade].push(a); });
 
   const prioLabels: Record<string, string> = { critica: 'Críticas', alta: 'Alta Prioridade', media: 'Média Prioridade', baixa: 'Baixa Prioridade' };
   const prioColors: Record<string, string> = { critica: 'text-destructive', alta: 'text-warning', media: 'text-info', baixa: 'text-foreground/50' };
 
   const renderAlerta = (alerta: Alerta) => {
-    const empresa = mockEmpresas.find(e => e.id === alerta.empresaId);
+    const empresa = state.empresas.find(e => e.id === alerta.empresaId);
     return (
-      <div key={alerta.id} className={cn(
-        'glass-card-subtle p-4 transition-all hover:shadow-sm',
-        !alerta.lido && !alerta.resolvido && 'border-l-3 border-l-warning',
-        alerta.resolvido && 'opacity-60'
-      )}>
+      <div key={alerta.id} className={cn('glass-card-subtle p-4 transition-all hover:shadow-sm', !alerta.lido && !alerta.resolvido && 'border-l-3 border-l-warning', alerta.resolvido && 'opacity-60')}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">
-            <AlertTriangle className={cn('h-4 w-4 shrink-0 mt-0.5',
-              alerta.prioridade === 'critica' ? 'text-destructive' :
-              alerta.prioridade === 'alta' ? 'text-warning' : 'text-info'
-            )} />
+            <AlertTriangle className={cn('h-4 w-4 shrink-0 mt-0.5', alerta.prioridade === 'critica' ? 'text-destructive' : alerta.prioridade === 'alta' ? 'text-warning' : 'text-info')} />
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className={cn('text-sm font-medium', alerta.resolvido && 'line-through')}>{alerta.titulo}</p>
@@ -65,11 +77,11 @@ export default function Alertas() {
           {!alerta.resolvido && (
             <div className="flex gap-1 shrink-0">
               {!alerta.lido && (
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => marcarLido(alerta.id)} title="Marcar como lido">
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleMarcarLido(alerta.id)} title="Marcar como lido">
                   <Eye className="h-3.5 w-3.5" />
                 </Button>
               )}
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => resolver(alerta.id)} title="Resolver">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleResolver(alerta.id)} title="Resolver">
                 <Check className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -95,8 +107,8 @@ export default function Alertas() {
           </TabsList>
           {ativos.length > 0 && (
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="text-xs h-7" onClick={marcarTodosLidos}>Marcar todos como lidos</Button>
-              <Button variant="outline" size="sm" className="text-xs h-7" onClick={resolverTodos}>Resolver todos</Button>
+              <Button variant="outline" size="sm" className="text-xs h-7" onClick={handleMarcarTodosLidos}>Marcar todos como lidos</Button>
+              <Button variant="outline" size="sm" className="text-xs h-7" onClick={handleResolverTodos}>Resolver todos</Button>
             </div>
           )}
         </div>
@@ -110,9 +122,7 @@ export default function Alertas() {
                 <h3 className={cn('text-xs font-semibold uppercase tracking-wider mb-2 px-1', prioColors[prio])}>
                   {prioLabels[prio]} ({items.length})
                 </h3>
-                <div className="space-y-1.5">
-                  {items.map(renderAlerta)}
-                </div>
+                <div className="space-y-1.5">{items.map(renderAlerta)}</div>
               </div>
             ))
           )}
@@ -124,6 +134,16 @@ export default function Alertas() {
           ) : resolvidos.map(renderAlerta)}
         </TabsContent>
       </Tabs>
+
+      <ConfirmDialog
+        isOpen={confirmAction.isOpen}
+        title={confirmAction.title}
+        description={confirmAction.description}
+        onConfirm={confirmAction.confirm}
+        onCancel={confirmAction.cancel}
+        confirmLabel="Resolver todos"
+        variant="destructive"
+      />
     </div>
   );
 }

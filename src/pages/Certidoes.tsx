@@ -1,48 +1,56 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockCNDItems, mockEmpresas } from '@/data/mockData';
+import { useDataStore } from '@/data/DataProvider';
 import { StatusBadge } from '@/components/StatusBadge';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { formatDate, getCNDTipoLabel } from '@/lib/formatters';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Search, ShieldCheck, Eye, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Search, ShieldCheck, Eye, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+const ITEMS_PER_PAGE = 20;
 
 export default function Certidoes() {
   const navigate = useNavigate();
+  const { state } = useDataStore();
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [filtroTipo, setFiltroTipo] = useState('todos');
   const [busca, setBusca] = useState('');
+  const [page, setPage] = useState(1);
 
   const itensFiltrados = useMemo(() => {
-    return mockCNDItems.filter(c => {
-      const empresa = mockEmpresas.find(e => e.id === c.empresaId);
+    return state.cnds.filter(c => {
+      const empresa = state.empresas.find(e => e.id === c.empresaId);
       const matchBusca = !busca || empresa?.nomeFantasia.toLowerCase().includes(busca.toLowerCase());
       const matchStatus = filtroStatus === 'todos' || c.status === filtroStatus;
       const matchTipo = filtroTipo === 'todos' || c.tipo === filtroTipo;
       return matchBusca && matchStatus && matchTipo;
     });
-  }, [busca, filtroStatus, filtroTipo]);
+  }, [state.cnds, state.empresas, busca, filtroStatus, filtroTipo]);
 
-  const validas = mockCNDItems.filter(c => c.status === 'valida').length;
-  const vencendo = mockCNDItems.filter(c => c.status === 'vencendo').length;
-  const vencidas = mockCNDItems.filter(c => c.status === 'vencida').length;
-  const pendentes = mockCNDItems.filter(c => c.status === 'pendente').length;
+  const paginatedItems = useMemo(() => itensFiltrados.slice(0, page * ITEMS_PER_PAGE), [itensFiltrados, page]);
+  const hasMore = paginatedItems.length < itensFiltrados.length;
+
+  const counts = useMemo(() => ({
+    validas: state.cnds.filter(c => c.status === 'valida').length,
+    vencendo: state.cnds.filter(c => c.status === 'vencendo').length,
+    vencidas: state.cnds.filter(c => c.status === 'vencida').length,
+    pendentes: state.cnds.filter(c => c.status === 'pendente').length,
+  }), [state.cnds]);
 
   return (
     <div className="space-y-6 animate-slide-in">
       <PageHeader title="Certidões / CNDs" subtitle="Checklist de certidões por empresa" />
 
-      {/* Summary counters */}
       <div className="flex flex-wrap gap-2">
         {[
-          { label: 'Válidas', value: validas, color: 'bg-success/10 text-success border-success/20' },
-          { label: 'Vencendo', value: vencendo, color: 'bg-warning/10 text-warning border-warning/20' },
-          { label: 'Vencidas', value: vencidas, color: 'bg-destructive/10 text-destructive border-destructive/20' },
-          { label: 'Pendentes', value: pendentes, color: 'bg-info/10 text-info border-info/20' },
+          { label: 'Válidas', value: counts.validas, color: 'bg-success/10 text-success border-success/20' },
+          { label: 'Vencendo', value: counts.vencendo, color: 'bg-warning/10 text-warning border-warning/20' },
+          { label: 'Vencidas', value: counts.vencidas, color: 'bg-destructive/10 text-destructive border-destructive/20' },
+          { label: 'Pendentes', value: counts.pendentes, color: 'bg-info/10 text-info border-info/20' },
         ].map(s => (
           <div key={s.label} className={cn('rounded-lg border px-3 py-1.5 text-xs font-semibold', s.color)}>
             {s.value} {s.label}
@@ -82,21 +90,16 @@ export default function Certidoes() {
       </div>
 
       <div className="space-y-1.5">
-        {itensFiltrados.map((item) => {
-          const empresa = mockEmpresas.find(e => e.id === item.empresaId);
+        {paginatedItems.map((item) => {
+          const empresa = state.empresas.find(e => e.id === item.empresaId);
           return (
-            <div key={item.id} className={cn(
-              'glass-card-subtle p-4 transition-all hover:shadow-sm',
-              item.status === 'vencida' && 'border-l-3 border-l-destructive'
-            )}>
+            <div key={item.id} className={cn('glass-card-subtle p-4 transition-all hover:shadow-sm', item.status === 'vencida' && 'border-l-3 border-l-destructive')}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-3 min-w-0">
                   <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium cursor-pointer hover:underline" onClick={() => navigate(`/empresas/${item.empresaId}`)}>
-                        {empresa?.nomeFantasia}
-                      </p>
+                      <p className="text-sm font-medium cursor-pointer hover:underline" onClick={() => navigate(`/empresas/${item.empresaId}`)}>{empresa?.nomeFantasia}</p>
                       <span className="text-[10px] text-foreground/30">•</span>
                       <p className="text-sm text-foreground/65">{getCNDTipoLabel(item.tipo)}</p>
                       <StatusBadge status={item.status} />
@@ -119,6 +122,11 @@ export default function Certidoes() {
             </div>
           );
         })}
+        {hasMore && (
+          <div className="flex justify-center pt-4">
+            <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)}>Carregar mais ({itensFiltrados.length - paginatedItems.length} restantes)</Button>
+          </div>
+        )}
         {itensFiltrados.length === 0 && (
           <EmptyState icon={ShieldCheck} title="Nenhuma certidão encontrada" description="Tente ajustar os filtros." />
         )}
