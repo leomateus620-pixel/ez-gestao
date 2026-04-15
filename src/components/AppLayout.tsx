@@ -1,7 +1,7 @@
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { Bell, Search } from 'lucide-react';
-import { mockAlertas } from '@/data/mockData';
+import { useDataStore } from '@/data/DataProvider';
 import { Button } from '@/components/ui/button';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -22,7 +22,8 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const alertasNaoLidos = mockAlertas.filter(a => !a.lido && !a.resolvido).length;
+  const { state } = useDataStore();
+  const alertasNaoLidos = state.alertas.filter(a => !a.lido && !a.resolvido).length;
   const navigate = useNavigate();
   const location = useLocation();
 
