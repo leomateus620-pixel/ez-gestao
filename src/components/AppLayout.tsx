@@ -1,7 +1,7 @@
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
 import { Bell, Search } from 'lucide-react';
-import { mockAlertas } from '@/data/mockData';
+import { useDataStore } from '@/data/DataProvider';
 import { Button } from '@/components/ui/button';
 import { useNavigate, useLocation } from 'react-router-dom';
 
