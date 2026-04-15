@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { Plug, RefreshCw, Pause, Play, Activity } from 'lucide-react';
+import { Plug, RefreshCw, Pause, Play, Activity, ShieldOff } from 'lucide-react';
 import { useAutomation } from '@/data/AutomationProvider';
 import { getConnectorHealth, getConnectorStats } from '@/lib/connector-registry';
+import { getCircuitBreaker, resetCircuitBreaker } from '@/lib/automation-resilience';
 import { PageHeader } from '@/components/PageHeader';
 import { ConnectorHealthCard } from '@/components/ConnectorHealthCard';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ export default function Integracoes() {
       const connLogs = state.healthLogs
         .filter(l => l.connectorId === conn.id)
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      const cb = getCircuitBreaker(conn.id);
       return {
         connector: conn,
         health: getConnectorHealth(conn.id, state.healthLogs),
@@ -24,6 +26,7 @@ export default function Integracoes() {
         runsToday: state.runs.filter(r => r.connectorId === conn.id && r.inicioExecucao.startsWith(today)).length,
         recentLogs: connLogs.slice(0, 5),
         lastFailure: state.runs.find(r => r.connectorId === conn.id && (r.status === 'falha' || r.status === 'timeout')),
+        circuitBreaker: cb,
       };
     })
   , [state.connectors, state.healthLogs, state.runs, today]);
@@ -46,7 +49,7 @@ export default function Integracoes() {
 
       {/* Connector cards with health bars */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {connectorsWithStats.map(({ connector, health, runsToday, recentLogs }) => (
+        {connectorsWithStats.map(({ connector, health, runsToday, recentLogs, circuitBreaker }) => (
           <div key={connector.id} className="space-y-0">
             <ConnectorHealthCard
               connector={connector}
@@ -73,7 +76,7 @@ export default function Integracoes() {
                   ))}
                 </div>
               </div>
-              <div className="flex gap-2 mt-2">
+              <div className="flex gap-2 mt-2 flex-wrap">
                 <Button
                   size="sm" variant="ghost"
                   className="h-6 text-[10px] px-2 gap-1"
@@ -92,6 +95,18 @@ export default function Integracoes() {
                 >
                   <Activity className="h-3 w-3" /> Testar
                 </Button>
+                {circuitBreaker.estado !== 'closed' && (
+                  <Button
+                    size="sm" variant="ghost"
+                    className="h-6 text-[10px] px-2 gap-1 text-warning"
+                    onClick={() => {
+                      resetCircuitBreaker(connector.id);
+                      toast({ title: 'Circuit breaker resetado', description: `${connector.nome} reaberto para execuções.` });
+                    }}
+                  >
+                    <ShieldOff className="h-3 w-3" /> Reset CB
+                  </Button>
+                )}
               </div>
             </div>
           </div>

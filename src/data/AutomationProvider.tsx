@@ -104,6 +104,12 @@ const initialState: AutomationState = {
   healthLogs: mockHealthLogs,
   schedulingRules: mockSchedulingRules,
   retryPolicies: mockRetryPolicies,
+  automationConfig: {
+    confiancaMinima: 'media',
+    maxConcorrenciaPorConector: 3,
+    timeoutGlobalLote: 300_000,
+    circuitBreakerLimiar: 5,
+  },
 };
 
 export function AutomationProvider({ children }: { children: React.ReactNode }) {
