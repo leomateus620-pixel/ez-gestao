@@ -179,19 +179,7 @@ export function useOrchestrator() {
       };
       addException(exc);
 
-      dataDispatch({
-        type: 'ADD_LOG',
-        payload: {
-          id: `log-err-${Date.now()}`,
-          tipo: 'sistema',
-          acao: 'Falha de coleta',
-          detalhes: `${connector.nome} → ${empresa.nomeFantasia}: ${exc.motivo}`,
-          usuario: 'Sistema',
-          timestamp: new Date().toISOString(),
-          entidade: 'cnd',
-          entidadeId: cndItem?.id || runId,
-        },
-      });
+      console.error(`[Automação] Falha: ${connector.nome} → ${empresa.nomeFantasia}: ${exc.motivo}`);
     } finally {
       releaseConcurrency(connectorId);
       releaseDedup(empresaId, cndTipo);
