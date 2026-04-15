@@ -1,9 +1,10 @@
 import { useMemo, useState, useCallback } from 'react';
-import { Play, RefreshCw, Zap, CheckCircle2, XCircle, AlertTriangle, Clock, TrendingUp, Shield, Pause } from 'lucide-react';
+import { Play, RefreshCw, Zap, CheckCircle2, XCircle, AlertTriangle, Clock, TrendingUp, Shield, Pause, ShieldAlert } from 'lucide-react';
 import { useAutomation } from '@/data/AutomationProvider';
 import { useDataStore } from '@/data/DataProvider';
 import { useAutomationJobs } from '@/hooks/useAutomationJobs';
 import { getConnectorHealth } from '@/lib/connector-registry';
+import { getAllCircuitBreakers } from '@/lib/automation-resilience';
 import { PageHeader } from '@/components/PageHeader';
 import { MetricCard } from '@/components/MetricCard';
 import { ConnectorHealthCard } from '@/components/ConnectorHealthCard';
@@ -67,6 +68,10 @@ export default function Automacao() {
   const conectoresAtivos = useMemo(() =>
     state.connectors.filter(c => c.status === 'ativo')
   , [state.connectors]);
+
+  const circuitBreakers = useMemo(() =>
+    getAllCircuitBreakers().filter(cb => cb.estado !== 'closed')
+  , [state.runs]);
 
   const recentRuns = useMemo(() =>
     [...state.runs].sort((a, b) => new Date(b.inicioExecucao).getTime() - new Date(a.inicioExecucao).getTime()).slice(0, 6)
