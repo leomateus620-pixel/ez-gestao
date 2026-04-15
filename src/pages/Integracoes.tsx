@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { Plug, RefreshCw, Pause, Play, Activity } from 'lucide-react';
+import { Plug, RefreshCw, Pause, Play, Activity, ShieldOff } from 'lucide-react';
 import { useAutomation } from '@/data/AutomationProvider';
 import { getConnectorHealth, getConnectorStats } from '@/lib/connector-registry';
+import { getCircuitBreaker, resetCircuitBreaker } from '@/lib/automation-resilience';
 import { PageHeader } from '@/components/PageHeader';
 import { ConnectorHealthCard } from '@/components/ConnectorHealthCard';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ export default function Integracoes() {
       const connLogs = state.healthLogs
         .filter(l => l.connectorId === conn.id)
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      const cb = getCircuitBreaker(conn.id);
       return {
         connector: conn,
         health: getConnectorHealth(conn.id, state.healthLogs),
@@ -24,6 +26,7 @@ export default function Integracoes() {
         runsToday: state.runs.filter(r => r.connectorId === conn.id && r.inicioExecucao.startsWith(today)).length,
         recentLogs: connLogs.slice(0, 5),
         lastFailure: state.runs.find(r => r.connectorId === conn.id && (r.status === 'falha' || r.status === 'timeout')),
+        circuitBreaker: cb,
       };
     })
   , [state.connectors, state.healthLogs, state.runs, today]);
