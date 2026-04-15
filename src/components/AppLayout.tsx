@@ -22,7 +22,8 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const alertasNaoLidos = mockAlertas.filter(a => !a.lido && !a.resolvido).length;
+  const { state } = useDataStore();
+  const alertasNaoLidos = state.alertas.filter(a => !a.lido && !a.resolvido).length;
   const navigate = useNavigate();
   const location = useLocation();
 
