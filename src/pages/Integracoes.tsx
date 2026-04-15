@@ -49,7 +49,7 @@ export default function Integracoes() {
 
       {/* Connector cards with health bars */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {connectorsWithStats.map(({ connector, health, runsToday, recentLogs }) => (
+        {connectorsWithStats.map(({ connector, health, runsToday, recentLogs, circuitBreaker }) => (
           <div key={connector.id} className="space-y-0">
             <ConnectorHealthCard
               connector={connector}
@@ -76,7 +76,7 @@ export default function Integracoes() {
                   ))}
                 </div>
               </div>
-              <div className="flex gap-2 mt-2">
+              <div className="flex gap-2 mt-2 flex-wrap">
                 <Button
                   size="sm" variant="ghost"
                   className="h-6 text-[10px] px-2 gap-1"
@@ -95,6 +95,18 @@ export default function Integracoes() {
                 >
                   <Activity className="h-3 w-3" /> Testar
                 </Button>
+                {circuitBreaker.estado !== 'closed' && (
+                  <Button
+                    size="sm" variant="ghost"
+                    className="h-6 text-[10px] px-2 gap-1 text-warning"
+                    onClick={() => {
+                      resetCircuitBreaker(connector.id);
+                      toast({ title: 'Circuit breaker resetado', description: `${connector.nome} reaberto para execuções.` });
+                    }}
+                  >
+                    <ShieldOff className="h-3 w-3" /> Reset CB
+                  </Button>
+                )}
               </div>
             </div>
           </div>
