@@ -12,6 +12,8 @@ const config: Record<RunStatus, { label: string; classes: string; pulse?: boolea
   falha: { label: 'Falha', classes: 'bg-destructive/15 text-destructive border-destructive/30' },
   revisao: { label: 'Revisão', classes: 'bg-warning/15 text-warning border-warning/30' },
   timeout: { label: 'Timeout', classes: 'bg-destructive/15 text-destructive border-destructive/30' },
+  cancelado: { label: 'Cancelado', classes: 'bg-muted-foreground/15 text-muted-foreground border-muted-foreground/30' },
+  bloqueado: { label: 'Bloqueado', classes: 'bg-destructive/15 text-destructive border-destructive/30' },
 };
 
 export function RunStatusBadge({ status, className = '' }: RunStatusBadgeProps) {
