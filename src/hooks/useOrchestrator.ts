@@ -114,20 +114,8 @@ export function useOrchestrator() {
       addRun(run);
       registrarSucesso(connectorId);
 
-      // Audit log
-      dataDispatch({
-        type: 'ADD_LOG',
-        payload: {
-          id: `log-auto-${Date.now()}`,
-          tipo: 'sistema',
-          acao: decision.acao === 'aplicar_auto' ? 'Autopublicação de CND' : `Decisão: ${decision.acao}`,
-          detalhes: `${connector.nome} → ${empresa.nomeFantasia} (${cndTipo}): ${decision.motivo}`,
-          usuario: 'Sistema',
-          timestamp: new Date().toISOString(),
-          entidade: 'cnd',
-          entidadeId: cndItem?.id || runId,
-        },
-      });
+      // Audit log via console (LogAcesso has a fixed acao enum)
+      console.info(`[Automação] ${decision.acao}: ${connector.nome} → ${empresa.nomeFantasia} (${cndTipo}): ${decision.motivo}`);
 
       if (decision.acao === 'aplicar_auto' && cndItem) {
         dataDispatch({
