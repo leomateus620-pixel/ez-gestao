@@ -1,110 +1,156 @@
 
 
-# Hardening Completo — Fase 2 do Motor de Automação
+# Integração Real com Serpro + Backend Lovable Cloud
 
-## Visão Geral
-Endurecer toda a camada de automação com resiliência real (circuit breaker, retry com backoff, concurrency limiter), validações críticas no pipeline de captura, prevenção de duplicidades, monitoramento interno de degradação, e performance otimizada para alto volume.
+## Contexto Importante
 
-## 1. Infraestrutura de Resiliência (`src/lib/automation-resilience.ts`) — NOVO
+O sistema atual opera 100% com dados mock no frontend. Para conectar APIs reais do Serpro, precisamos:
 
-Criar módulo com primitivas de resiliência reutilizáveis:
+1. **Ativar Lovable Cloud** (Supabase gerenciado) para ter banco de dados + Edge Functions
+2. **Criar schema completo** no banco para todas as entidades (empresas, CNDs, documentos, envios, alertas, logs, automação)
+3. **Criar Edge Functions** que fazem proxy para a API do Serpro
+4. **Migrar o frontend** de `useReducer` com mock para `react-query` + Supabase client
+5. **Remover arquivos mock** (`mockData.ts`, `automationMockData.ts`)
 
-- **CircuitBreaker**: por conector — estados `closed | half_open | open`. Abre após N falhas consecutivas, fecha após teste bem-sucedido. Previne storm de retries contra portal degradado.
-- **RetryWithBackoff**: `retry(fn, policy)` — exponential backoff com jitter. Respeita `maxTentativas`, `intervaloBase`, `backoffMultiplier`, `timeoutSegundos` do `RetryPolicy` já existente.
-- **ConcurrencyLimiter**: limita execuções simultâneas por conector (max 2-3). Previne sobrecarga de portais e race conditions.
-- **DeduplicationGuard**: verifica se já existe run ativa para o mesmo `(empresaId, cndTipo)` antes de iniciar nova execução. Previne duplicidade por duplo-clique ou lotes sobrepostos.
+## Pré-requisito: Credenciais Serpro
 
-## 2. Validações Críticas no Pipeline (`src/lib/capture-validator.ts`) — NOVO
+Você precisará de:
+- **Consumer Key** e **Consumer Secret** do Serpro (obtidos no portal Serpro)
+- Contrato ativo para os serviços: CND Federal, CNDT, CRF/FGTS
 
-Módulo de validação pós-captura, chamado antes de qualquer publicação:
+As APIs Serpro disponíveis são:
+- **Consulta CNPJ** — dados cadastrais
+- **CND Federal / PGFN** — certidão negativa de débitos federais
+- **CNDT (TST)** — certidão negativa de débitos trabalhistas
+- **CRF/FGTS** — certificado de regularidade FGTS
 
-- `validarCNPJMatch(captura, empresa)` — CNPJ do documento deve coincidir com empresa alvo
-- `validarTipoCertidao(captura, cndTipo)` — tipo retornado deve corresponder ao solicitado
-- `validarCoerenciaDatas(emissao, validade)` — validade > emissão, ambas no futuro razoável (não >5 anos), emissão não no futuro
-- `validarHashDuplicidade(hash, runsExistentes)` — documento idêntico já processado não gera nova versão
-- `validarConfiancaMinima(confianca, limiar)` — bloqueia autopublicação abaixo do limiar configurável
-- `validarOrgaoEsperado(captura, connector)` — órgão do resultado deve coincidir com órgão do conector
-- Retorna `{ valido: boolean, erros: string[], avisos: string[] }` — erros bloqueiam, avisos geram flag de revisão
+Para SEFAZ e Municipal, o Serpro **não cobre** — essas fontes continuarão com fluxo de upload manual ou integração futura com outro provider.
 
-## 3. Orquestrador Endurecido (`src/hooks/useOrchestrator.ts`) — MODIFICAR
+## Plano de Implementação
 
-Refatorar `executarColeta` para incluir:
+### Etapa 1 — Ativar Lovable Cloud e Criar Banco
 
-1. **Guard de duplicidade**: verificar se já existe run ativa para `(empresaId, cndTipo)` antes de prosseguir
-2. **Circuit breaker check**: se conector está em estado `open`, rejeitar imediatamente e criar exceção `portal_indisponivel`
-3. **Retry automático**: envolver execução em `retryWithBackoff` usando a `RetryPolicy` do conector
-4. **Validação pós-captura**: chamar `validarCaptura()` antes de `avaliarResultado()`. Se inválido, criar exceção com tipologia correta em vez de publicar
-5. **Concurrency limiter**: respeitar limite por conector
-6. **Fallback para manual**: se conector principal falhar após max retries, verificar se existe conector alternativo ou marcar para upload manual
-7. **Tipologia automática**: derivar tipologia da exceção a partir do tipo de erro (timeout → `portal_indisponivel`, CNPJ mismatch → `cnpj_inconsistente`, etc.)
+Criar tabelas via migrations:
 
-## 4. Jobs Endurecidos (`src/hooks/useAutomationJobs.ts`) — MODIFICAR
+```text
+empresas          — cadastro de empresas (id uuid PK, cnpj, razao_social, etc.)
+cnd_items         — checklist de certidões por empresa
+documentos        — PDFs e arquivos armazenados no Storage
+envios            — registros de envio (email/whatsapp)
+alertas           — alertas de vencimento e pendências
+logs_acesso       — auditoria operacional
+audit_trail       — trilha de auditoria detalhada
 
-- **Batch com controle de concorrência**: processar lote com `Promise.allSettled` + semáforo (max 3 simultâneos)
-- **Progresso incremental**: atualizar `AutomationBatch.progressoAtual` a cada item processado
-- **Detecção de lote travado**: timeout global por lote (ex: 5min para mock)
-- **Retry de falhas transitórias**: novo job `retryFalhasTransitorias()` — reprocessa runs com status `falha` onde `tentativa < maxTentativas` e conector não está em circuit breaker aberto
-- **Health check**: novo job `monitorarConectores()` — compara taxa de sucesso atual vs. média e gera `IntegrationHealthLog` se degradou. Muda status do conector para `manutencao` se taxa cair abaixo de limiar
+connectors        — conectores de integração
+connector_runs    — execuções de coleta
+connector_run_steps — etapas de cada execução
+exceptions        — fila de exceções
+automation_batches — lotes de coleta
+health_logs       — logs de saúde dos conectores
+```
 
-## 5. Decision Engine Endurecido (`src/lib/decision-engine.ts`) — MODIFICAR
+RLS habilitado em todas as tabelas. Storage bucket para PDFs de certidões.
 
-- Adicionar `avaliarResultadoSeguro(capture, cndAtual, validacao)` que recebe o resultado da validação
-- Se validação tem erros → sempre `criar_excecao` independente da confiança
-- Se validação tem avisos → rebaixar confiança de `alta` para `media`
-- `deveSubstituirVersao()` agora também verifica: hash diferente, e confiança nova >= confiança atual
+### Etapa 2 — Edge Functions para Serpro
 
-## 6. Tipos Expandidos (`src/data/automation-types.ts`) — MODIFICAR
+Criar Edge Functions que fazem proxy autenticado para o Serpro:
 
-Adicionar:
-- `RunStatus`: adicionar `'cancelado'` e `'bloqueado'` (circuit breaker)
-- `ConnectorRun`: adicionar campos `hashDocumento?: string`, `validacaoErros?: string[]`, `validacaoAvisos?: string[]`
-- `CircuitBreakerState` interface: `{ connectorId, estado, falhasConsecutivas, ultimaFalha, proximoTeste }`
-- `AutomationConfig` interface: `{ confiancaMinima: ConfidenceLevel, maxConcorrenciaPorConector: number, timeoutGlobalLote: number, circuitBreakerLimiar: number }`
+- **`serpro-auth`** — obtém token OAuth2 do Serpro (client_credentials grant)
+- **`consulta-cnd-federal`** — consulta CND/CPDEN da Receita Federal por CNPJ
+- **`consulta-cndt`** — consulta CNDT do TST por CNPJ
+- **`consulta-crf-fgts`** — consulta CRF do FGTS por CNPJ
+- **`consulta-cnpj`** — consulta dados cadastrais do CNPJ
 
-## 7. AutomationProvider Expandido (`src/data/AutomationProvider.tsx`) — MODIFICAR
+Cada function: valida input (Zod), autentica usuário via JWT, chama Serpro, normaliza resposta, salva no banco.
 
-- Adicionar ao state: `circuitBreakers: Record<string, CircuitBreakerState>`, `automationConfig: AutomationConfig`
-- Novas actions: `UPDATE_CIRCUIT_BREAKER`, `UPDATE_AUTOMATION_CONFIG`, `CANCEL_RUN`
-- Computed: `connectorsDegradados` (taxa caindo), `runsDuplicadas` (mesmo empresa+tipo em paralelo)
+### Etapa 3 — Migrar Providers para Supabase
 
-## 8. Monitoramento e Alertas Técnicos — Integrado nas telas existentes
+- **`DataProvider.tsx`** — trocar `useReducer` + mock por queries Supabase (`useQuery`/`useMutation` via react-query)
+- **`AutomationProvider.tsx`** — idem, queries reativas ao banco
+- Criar hooks: `useEmpresas()`, `useCNDs(empresaId)`, `useDocumentos()`, `useExecucoes()`, etc.
+- Remover `mockData.ts` e `automationMockData.ts`
+- Criar `src/integrations/supabase/client.ts` e tipos gerados
 
-**`src/pages/Automacao.tsx`** — Adicionar novo bloco "Saúde dos Conectores":
-- Indicador de circuit breaker por conector (verde/amarelo/vermelho)
-- Alerta visual quando conector entrou em modo proteção
-- Contador de retries pendentes
-- Alerta de lote travado
+### Etapa 4 — Conectar Telas ao Backend Real
 
-**`src/pages/Integracoes.tsx`** — Adicionar:
-- Estado do circuit breaker por conector
-- Botão "Resetar Circuit Breaker" (reabrir manualmente)
-- Histórico de ativações do circuit breaker
+Cada tela passa a consumir dados do Supabase em vez do state local:
 
-## 9. Auditoria de Automação — Integrar com audit trail existente
+| Tela | Fonte de dados |
+|------|---------------|
+| Dashboard | Query agregada de empresas + cnds + alertas |
+| Empresas | `select * from empresas` com paginação |
+| EmpresaDetalhe | Join empresas + cnd_items + documentos |
+| Certidões | `select * from cnd_items` com joins |
+| Documentos | `select * from documentos` + Storage URLs |
+| Envios | `select * from envios` |
+| Alertas | `select * from alertas` |
+| Logs | `select * from logs_acesso + audit_trail` |
+| Automação | Queries em connector_runs + exceptions |
+| Execuções | `select * from connector_runs` com paginação |
+| Integrações | `select * from connectors + health_logs` |
+| Exceções | `select * from exceptions` com filtros |
 
-Toda ação de automação (publicação auto, criação de exceção, retry, circuit breaker ativado, validação falhou) gera entrada no audit trail da Fase 1 via `dataDispatch({ type: 'ADD_LOG' })`.
+### Etapa 5 — Orquestrador Real
 
-## 10. Performance
+Refatorar `useOrchestrator` para chamar Edge Functions reais:
+- `executarColeta(empresaId, cndTipo)` → chama a Edge Function correspondente
+- Resultado é persistido no banco automaticamente pela Edge Function
+- Frontend recebe atualização via react-query invalidation
 
-- `useOrchestrator`: memoizar `connectorMapping` e `empresasElegiveis` com `useMemo`
-- `useAutomationJobs`: usar `Promise.allSettled` em vez de loop sequencial para itens independentes
-- Limitar tamanho de `state.runs` mantido em memória (últimas 500 runs, paginação lazy para histórico)
-- `Automacao.tsx`: consolidar métricas em um único `useMemo` em vez de vários
+### Etapa 6 — Limpar Mocks
+
+Remover completamente:
+- `src/data/mockData.ts`
+- `src/data/automationMockData.ts`
+- Todas as referências a dados hardcoded
 
 ---
 
 ## Arquivos
 
-**Novos (2):**
-- `src/lib/automation-resilience.ts` — CircuitBreaker, RetryWithBackoff, ConcurrencyLimiter, DeduplicationGuard
-- `src/lib/capture-validator.ts` — Validações pós-captura
+**Novos (~15):**
+- `supabase/migrations/001_schema.sql` — schema completo
+- `supabase/functions/serpro-auth/index.ts`
+- `supabase/functions/consulta-cnd-federal/index.ts`
+- `supabase/functions/consulta-cndt/index.ts`
+- `supabase/functions/consulta-crf-fgts/index.ts`
+- `supabase/functions/consulta-cnpj/index.ts`
+- `src/integrations/supabase/client.ts`
+- `src/hooks/useEmpresas.ts`
+- `src/hooks/useCNDs.ts`
+- `src/hooks/useDocumentos.ts`
+- `src/hooks/useAlertas.ts`
+- `src/hooks/useEnvios.ts`
+- `src/hooks/useLogs.ts`
+- `src/hooks/useConnectorRuns.ts`
+- `src/hooks/useExceptions.ts`
 
-**Modificados (7):**
-- `src/data/automation-types.ts` — novos tipos (CircuitBreakerState, AutomationConfig, RunStatus expandido)
-- `src/data/AutomationProvider.tsx` — circuit breakers no state, novas actions
-- `src/hooks/useOrchestrator.ts` — pipeline com validação, circuit breaker, dedup, retry, fallback
-- `src/hooks/useAutomationJobs.ts` — concorrência controlada, health check, retry de falhas
-- `src/lib/decision-engine.ts` — validação integrada, substituição segura
-- `src/pages/Automacao.tsx` — bloco de saúde com circuit breakers
-- `src/pages/Integracoes.tsx` — circuit breaker visual e controle manual
+**Modificados (~15):**
+- `src/data/DataProvider.tsx` — Supabase queries
+- `src/data/AutomationProvider.tsx` — Supabase queries
+- `src/pages/Dashboard.tsx` — consumir hooks reais
+- `src/pages/Empresas.tsx` — idem
+- `src/pages/EmpresaDetalhe.tsx`
+- `src/pages/Certidoes.tsx`
+- `src/pages/Documentos.tsx`
+- `src/pages/Envios.tsx`
+- `src/pages/Alertas.tsx`
+- `src/pages/Logs.tsx`
+- `src/pages/Automacao.tsx`
+- `src/pages/Execucoes.tsx`
+- `src/pages/Integracoes.tsx`
+- `src/pages/Excecoes.tsx`
+- `src/hooks/useOrchestrator.ts`
+
+**Removidos (2):**
+- `src/data/mockData.ts`
+- `src/data/automationMockData.ts`
+
+## Ordem de Execução
+
+Dado o volume, sugiro implementar em 3 blocos sequenciais:
+
+1. **Bloco A**: Ativar Cloud, criar schema, criar Supabase client, secrets do Serpro
+2. **Bloco B**: Edge Functions + hooks de dados + migrar Providers
+3. **Bloco C**: Migrar todas as telas + remover mocks + testar
 
