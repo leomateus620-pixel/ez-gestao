@@ -2,7 +2,7 @@ import type { CNDTipo } from './types';
 
 export type ConnectorType = 'api_direta' | 'browser_headless' | 'integracao_assistida' | 'upload_manual';
 export type ConnectorStatus = 'ativo' | 'inativo' | 'manutencao' | 'erro';
-export type RunStatus = 'agendado' | 'executando' | 'sucesso' | 'falha' | 'revisao' | 'timeout';
+export type RunStatus = 'agendado' | 'executando' | 'sucesso' | 'falha' | 'revisao' | 'timeout' | 'cancelado' | 'bloqueado';
 export type ExceptionStatus = 'pendente' | 'em_analise' | 'resolvida' | 'descartada';
 export type ConfidenceLevel = 'alta' | 'media' | 'baixa';
 export type RunStepEtapa = 'autenticacao' | 'consulta' | 'captura' | 'parsing' | 'persistencia';
@@ -76,6 +76,9 @@ export interface ConnectorRun {
   evidencias: string[];
   erroDetalhes: string | null;
   steps: ConnectorRunStep[];
+  hashDocumento?: string;
+  validacaoErros?: string[];
+  validacaoAvisos?: string[];
 }
 
 export interface ExceptionItem {
@@ -151,6 +154,13 @@ export interface SchedulingRule {
   prioridade: number;
 }
 
+export interface AutomationConfig {
+  confiancaMinima: ConfidenceLevel;
+  maxConcorrenciaPorConector: number;
+  timeoutGlobalLote: number;
+  circuitBreakerLimiar: number;
+}
+
 export interface AutomationState {
   connectors: Connector[];
   runs: ConnectorRun[];
@@ -159,4 +169,5 @@ export interface AutomationState {
   healthLogs: IntegrationHealthLog[];
   schedulingRules: SchedulingRule[];
   retryPolicies: Record<string, RetryPolicy>;
+  automationConfig: AutomationConfig;
 }
