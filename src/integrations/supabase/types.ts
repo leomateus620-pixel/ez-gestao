@@ -14,7 +14,833 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      alertas: {
+        Row: {
+          cnd_item_id: string | null
+          created_at: string
+          descricao: string
+          empresa_id: string
+          id: string
+          lido: boolean
+          prioridade: Database["public"]["Enums"]["alerta_prioridade"]
+          resolvido: boolean
+          snoozed_ate: string | null
+          tipo: Database["public"]["Enums"]["alerta_tipo"]
+          titulo: string
+        }
+        Insert: {
+          cnd_item_id?: string | null
+          created_at?: string
+          descricao?: string
+          empresa_id: string
+          id?: string
+          lido?: boolean
+          prioridade?: Database["public"]["Enums"]["alerta_prioridade"]
+          resolvido?: boolean
+          snoozed_ate?: string | null
+          tipo: Database["public"]["Enums"]["alerta_tipo"]
+          titulo: string
+        }
+        Update: {
+          cnd_item_id?: string | null
+          created_at?: string
+          descricao?: string
+          empresa_id?: string
+          id?: string
+          lido?: boolean
+          prioridade?: Database["public"]["Enums"]["alerta_prioridade"]
+          resolvido?: boolean
+          snoozed_ate?: string | null
+          tipo?: Database["public"]["Enums"]["alerta_tipo"]
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alertas_cnd_item_id_fkey"
+            columns: ["cnd_item_id"]
+            isOneToOne: false
+            referencedRelation: "cnd_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alertas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_trail: {
+        Row: {
+          action: string
+          details: string
+          entity_id: string
+          entity_type: string
+          id: string
+          metadata: Json | null
+          timestamp: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          details?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          metadata?: Json | null
+          timestamp?: string
+          user_id?: string
+        }
+        Update: {
+          action?: string
+          details?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          metadata?: Json | null
+          timestamp?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      automation_batches: {
+        Row: {
+          agendado_para: string
+          created_at: string
+          empresa_ids: string[]
+          id: string
+          progresso_atual: number
+          status: Database["public"]["Enums"]["batch_status"]
+          total_items: number
+        }
+        Insert: {
+          agendado_para: string
+          created_at?: string
+          empresa_ids?: string[]
+          id?: string
+          progresso_atual?: number
+          status?: Database["public"]["Enums"]["batch_status"]
+          total_items?: number
+        }
+        Update: {
+          agendado_para?: string
+          created_at?: string
+          empresa_ids?: string[]
+          id?: string
+          progresso_atual?: number
+          status?: Database["public"]["Enums"]["batch_status"]
+          total_items?: number
+        }
+        Relationships: []
+      }
+      automation_config: {
+        Row: {
+          circuit_breaker_limiar: number
+          confianca_minima: Database["public"]["Enums"]["confidence_level"]
+          id: string
+          max_concorrencia_por_conector: number
+          timeout_global_lote: number
+          updated_at: string
+        }
+        Insert: {
+          circuit_breaker_limiar?: number
+          confianca_minima?: Database["public"]["Enums"]["confidence_level"]
+          id?: string
+          max_concorrencia_por_conector?: number
+          timeout_global_lote?: number
+          updated_at?: string
+        }
+        Update: {
+          circuit_breaker_limiar?: number
+          confianca_minima?: Database["public"]["Enums"]["confidence_level"]
+          id?: string
+          max_concorrencia_por_conector?: number
+          timeout_global_lote?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cnd_historico: {
+        Row: {
+          acao: string
+          cnd_item_id: string
+          data: string
+          detalhes: string
+          id: string
+          usuario: string
+        }
+        Insert: {
+          acao: string
+          cnd_item_id: string
+          data?: string
+          detalhes?: string
+          id?: string
+          usuario?: string
+        }
+        Update: {
+          acao?: string
+          cnd_item_id?: string
+          data?: string
+          detalhes?: string
+          id?: string
+          usuario?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cnd_historico_cnd_item_id_fkey"
+            columns: ["cnd_item_id"]
+            isOneToOne: false
+            referencedRelation: "cnd_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cnd_items: {
+        Row: {
+          arquivo_id: string | null
+          created_at: string
+          data_emissao: string | null
+          data_vencimento: string | null
+          empresa_id: string
+          id: string
+          observacao: string
+          origem: string
+          responsavel: string
+          status: Database["public"]["Enums"]["cnd_status"]
+          tipo: Database["public"]["Enums"]["cnd_tipo"]
+          updated_at: string
+        }
+        Insert: {
+          arquivo_id?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          data_vencimento?: string | null
+          empresa_id: string
+          id?: string
+          observacao?: string
+          origem?: string
+          responsavel?: string
+          status?: Database["public"]["Enums"]["cnd_status"]
+          tipo: Database["public"]["Enums"]["cnd_tipo"]
+          updated_at?: string
+        }
+        Update: {
+          arquivo_id?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          data_vencimento?: string | null
+          empresa_id?: string
+          id?: string
+          observacao?: string
+          origem?: string
+          responsavel?: string
+          status?: Database["public"]["Enums"]["cnd_status"]
+          tipo?: Database["public"]["Enums"]["cnd_tipo"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cnd_items_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      connector_run_steps: {
+        Row: {
+          detalhes: string
+          etapa: Database["public"]["Enums"]["run_step_etapa"]
+          fim: string | null
+          id: string
+          inicio: string
+          run_id: string
+          status: Database["public"]["Enums"]["run_step_status"]
+        }
+        Insert: {
+          detalhes?: string
+          etapa: Database["public"]["Enums"]["run_step_etapa"]
+          fim?: string | null
+          id?: string
+          inicio?: string
+          run_id: string
+          status?: Database["public"]["Enums"]["run_step_status"]
+        }
+        Update: {
+          detalhes?: string
+          etapa?: Database["public"]["Enums"]["run_step_etapa"]
+          fim?: string | null
+          id?: string
+          inicio?: string
+          run_id?: string
+          status?: Database["public"]["Enums"]["run_step_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connector_run_steps_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "connector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      connector_runs: {
+        Row: {
+          cnd_item_id: string | null
+          confianca: Database["public"]["Enums"]["confidence_level"]
+          connector_id: string
+          created_at: string
+          duracao: number | null
+          empresa_id: string
+          erro_detalhes: string | null
+          evidencias: string[]
+          fim_execucao: string | null
+          hash_documento: string | null
+          id: string
+          inicio_execucao: string
+          resultado_bruto: string
+          status: Database["public"]["Enums"]["run_status"]
+          status_normalizado: string
+          tentativa: number
+          validacao_avisos: string[] | null
+          validacao_erros: string[] | null
+        }
+        Insert: {
+          cnd_item_id?: string | null
+          confianca?: Database["public"]["Enums"]["confidence_level"]
+          connector_id: string
+          created_at?: string
+          duracao?: number | null
+          empresa_id: string
+          erro_detalhes?: string | null
+          evidencias?: string[]
+          fim_execucao?: string | null
+          hash_documento?: string | null
+          id?: string
+          inicio_execucao?: string
+          resultado_bruto?: string
+          status?: Database["public"]["Enums"]["run_status"]
+          status_normalizado?: string
+          tentativa?: number
+          validacao_avisos?: string[] | null
+          validacao_erros?: string[] | null
+        }
+        Update: {
+          cnd_item_id?: string | null
+          confianca?: Database["public"]["Enums"]["confidence_level"]
+          connector_id?: string
+          created_at?: string
+          duracao?: number | null
+          empresa_id?: string
+          erro_detalhes?: string | null
+          evidencias?: string[]
+          fim_execucao?: string | null
+          hash_documento?: string | null
+          id?: string
+          inicio_execucao?: string
+          resultado_bruto?: string
+          status?: Database["public"]["Enums"]["run_status"]
+          status_normalizado?: string
+          tentativa?: number
+          validacao_avisos?: string[] | null
+          validacao_erros?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connector_runs_cnd_item_id_fkey"
+            columns: ["cnd_item_id"]
+            isOneToOne: false
+            referencedRelation: "cnd_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connector_runs_connector_id_fkey"
+            columns: ["connector_id"]
+            isOneToOne: false
+            referencedRelation: "connectors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "connector_runs_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      connectors: {
+        Row: {
+          config: Json
+          created_at: string
+          descricao: string
+          id: string
+          nome: string
+          orgao: Database["public"]["Enums"]["cnd_tipo"]
+          status: Database["public"]["Enums"]["connector_status"]
+          taxa_sucesso: number
+          tempo_medio: number
+          tipo: Database["public"]["Enums"]["connector_type"]
+          ultimo_teste: string | null
+          updated_at: string
+          versao: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          descricao?: string
+          id?: string
+          nome: string
+          orgao: Database["public"]["Enums"]["cnd_tipo"]
+          status?: Database["public"]["Enums"]["connector_status"]
+          taxa_sucesso?: number
+          tempo_medio?: number
+          tipo: Database["public"]["Enums"]["connector_type"]
+          ultimo_teste?: string | null
+          updated_at?: string
+          versao?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          descricao?: string
+          id?: string
+          nome?: string
+          orgao?: Database["public"]["Enums"]["cnd_tipo"]
+          status?: Database["public"]["Enums"]["connector_status"]
+          taxa_sucesso?: number
+          tempo_medio?: number
+          tipo?: Database["public"]["Enums"]["connector_type"]
+          ultimo_teste?: string | null
+          updated_at?: string
+          versao?: string
+        }
+        Relationships: []
+      }
+      documentos: {
+        Row: {
+          cnd_item_id: string | null
+          created_at: string
+          data_upload: string
+          empresa_id: string
+          id: string
+          nome: string
+          observacao: string
+          responsavel: string
+          storage_path: string
+          tamanho: string
+          tipo: Database["public"]["Enums"]["cnd_tipo"]
+          updated_at: string
+          validade: string | null
+          versao: number
+        }
+        Insert: {
+          cnd_item_id?: string | null
+          created_at?: string
+          data_upload?: string
+          empresa_id: string
+          id?: string
+          nome: string
+          observacao?: string
+          responsavel?: string
+          storage_path?: string
+          tamanho?: string
+          tipo: Database["public"]["Enums"]["cnd_tipo"]
+          updated_at?: string
+          validade?: string | null
+          versao?: number
+        }
+        Update: {
+          cnd_item_id?: string | null
+          created_at?: string
+          data_upload?: string
+          empresa_id?: string
+          id?: string
+          nome?: string
+          observacao?: string
+          responsavel?: string
+          storage_path?: string
+          tamanho?: string
+          tipo?: Database["public"]["Enums"]["cnd_tipo"]
+          updated_at?: string
+          validade?: string | null
+          versao?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documentos_cnd_item_id_fkey"
+            columns: ["cnd_item_id"]
+            isOneToOne: false
+            referencedRelation: "cnd_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      empresas: {
+        Row: {
+          cnpj: string
+          created_at: string
+          email_principal: string
+          estado: string
+          id: string
+          municipio: string
+          nome_fantasia: string
+          observacoes: string
+          razao_social: string
+          regime_tributario: Database["public"]["Enums"]["regime_tributario"]
+          responsavel_cliente: string
+          responsavel_interno: string
+          status: Database["public"]["Enums"]["empresa_status"]
+          updated_at: string
+          whatsapp_principal: string
+        }
+        Insert: {
+          cnpj: string
+          created_at?: string
+          email_principal?: string
+          estado?: string
+          id?: string
+          municipio?: string
+          nome_fantasia?: string
+          observacoes?: string
+          razao_social: string
+          regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
+          responsavel_cliente?: string
+          responsavel_interno?: string
+          status?: Database["public"]["Enums"]["empresa_status"]
+          updated_at?: string
+          whatsapp_principal?: string
+        }
+        Update: {
+          cnpj?: string
+          created_at?: string
+          email_principal?: string
+          estado?: string
+          id?: string
+          municipio?: string
+          nome_fantasia?: string
+          observacoes?: string
+          razao_social?: string
+          regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
+          responsavel_cliente?: string
+          responsavel_interno?: string
+          status?: Database["public"]["Enums"]["empresa_status"]
+          updated_at?: string
+          whatsapp_principal?: string
+        }
+        Relationships: []
+      }
+      envios: {
+        Row: {
+          assunto: string
+          canal: Database["public"]["Enums"]["canal_envio"]
+          created_at: string
+          data_envio: string
+          destinatario: string
+          documento_ids: string[]
+          empresa_id: string
+          id: string
+          mensagem: string
+          status: Database["public"]["Enums"]["envio_status"]
+          usuario: string
+        }
+        Insert: {
+          assunto?: string
+          canal: Database["public"]["Enums"]["canal_envio"]
+          created_at?: string
+          data_envio?: string
+          destinatario: string
+          documento_ids?: string[]
+          empresa_id: string
+          id?: string
+          mensagem?: string
+          status?: Database["public"]["Enums"]["envio_status"]
+          usuario?: string
+        }
+        Update: {
+          assunto?: string
+          canal?: Database["public"]["Enums"]["canal_envio"]
+          created_at?: string
+          data_envio?: string
+          destinatario?: string
+          documento_ids?: string[]
+          empresa_id?: string
+          id?: string
+          mensagem?: string
+          status?: Database["public"]["Enums"]["envio_status"]
+          usuario?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "envios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exceptions: {
+        Row: {
+          acao_sugerida: string
+          cnd_item_id: string | null
+          cnd_tipo: string
+          cnpj: string
+          connector_nome: string
+          created_at: string
+          criticidade: Database["public"]["Enums"]["exception_criticidade"]
+          empresa_id: string
+          id: string
+          motivo: string
+          resolvido_em: string | null
+          resolvido_por: string | null
+          responsavel: string | null
+          run_id: string
+          sla_horas: number
+          status_excecao: Database["public"]["Enums"]["exception_status"]
+          tentativas: number
+          tipologia: Database["public"]["Enums"]["exception_tipologia"]
+        }
+        Insert: {
+          acao_sugerida?: string
+          cnd_item_id?: string | null
+          cnd_tipo?: string
+          cnpj?: string
+          connector_nome?: string
+          created_at?: string
+          criticidade?: Database["public"]["Enums"]["exception_criticidade"]
+          empresa_id: string
+          id?: string
+          motivo: string
+          resolvido_em?: string | null
+          resolvido_por?: string | null
+          responsavel?: string | null
+          run_id: string
+          sla_horas?: number
+          status_excecao?: Database["public"]["Enums"]["exception_status"]
+          tentativas?: number
+          tipologia: Database["public"]["Enums"]["exception_tipologia"]
+        }
+        Update: {
+          acao_sugerida?: string
+          cnd_item_id?: string | null
+          cnd_tipo?: string
+          cnpj?: string
+          connector_nome?: string
+          created_at?: string
+          criticidade?: Database["public"]["Enums"]["exception_criticidade"]
+          empresa_id?: string
+          id?: string
+          motivo?: string
+          resolvido_em?: string | null
+          resolvido_por?: string | null
+          responsavel?: string | null
+          run_id?: string
+          sla_horas?: number
+          status_excecao?: Database["public"]["Enums"]["exception_status"]
+          tentativas?: number
+          tipologia?: Database["public"]["Enums"]["exception_tipologia"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exceptions_cnd_item_id_fkey"
+            columns: ["cnd_item_id"]
+            isOneToOne: false
+            referencedRelation: "cnd_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exceptions_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exceptions_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "connector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      health_logs: {
+        Row: {
+          connector_id: string
+          detalhes: string
+          id: string
+          latencia: number
+          status: Database["public"]["Enums"]["health_status"]
+          timestamp: string
+        }
+        Insert: {
+          connector_id: string
+          detalhes?: string
+          id?: string
+          latencia?: number
+          status?: Database["public"]["Enums"]["health_status"]
+          timestamp?: string
+        }
+        Update: {
+          connector_id?: string
+          detalhes?: string
+          id?: string
+          latencia?: number
+          status?: Database["public"]["Enums"]["health_status"]
+          timestamp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_logs_connector_id_fkey"
+            columns: ["connector_id"]
+            isOneToOne: false
+            referencedRelation: "connectors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      logs_acesso: {
+        Row: {
+          acao: Database["public"]["Enums"]["log_acao"]
+          canal: Database["public"]["Enums"]["canal_envio"] | null
+          data_hora: string
+          destinatario: string | null
+          detalhes: string
+          documento_id: string | null
+          empresa_id: string
+          envio_id: string | null
+          id: string
+          usuario: string
+        }
+        Insert: {
+          acao: Database["public"]["Enums"]["log_acao"]
+          canal?: Database["public"]["Enums"]["canal_envio"] | null
+          data_hora?: string
+          destinatario?: string | null
+          detalhes?: string
+          documento_id?: string | null
+          empresa_id: string
+          envio_id?: string | null
+          id?: string
+          usuario?: string
+        }
+        Update: {
+          acao?: Database["public"]["Enums"]["log_acao"]
+          canal?: Database["public"]["Enums"]["canal_envio"] | null
+          data_hora?: string
+          destinatario?: string | null
+          detalhes?: string
+          documento_id?: string | null
+          empresa_id?: string
+          envio_id?: string | null
+          id?: string
+          usuario?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "logs_acesso_documento_id_fkey"
+            columns: ["documento_id"]
+            isOneToOne: false
+            referencedRelation: "documentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "logs_acesso_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "logs_acesso_envio_id_fkey"
+            columns: ["envio_id"]
+            isOneToOne: false
+            referencedRelation: "envios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      retry_policies: {
+        Row: {
+          backoff_multiplier: number
+          connector_id: string
+          id: string
+          intervalo_base: number
+          max_tentativas: number
+          timeout_segundos: number
+        }
+        Insert: {
+          backoff_multiplier?: number
+          connector_id: string
+          id?: string
+          intervalo_base?: number
+          max_tentativas?: number
+          timeout_segundos?: number
+        }
+        Update: {
+          backoff_multiplier?: number
+          connector_id?: string
+          id?: string
+          intervalo_base?: number
+          max_tentativas?: number
+          timeout_segundos?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "retry_policies_connector_id_fkey"
+            columns: ["connector_id"]
+            isOneToOne: true
+            referencedRelation: "connectors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scheduling_rules: {
+        Row: {
+          cnd_tipo: Database["public"]["Enums"]["cnd_tipo"]
+          connector_id: string
+          dias_antes_vencimento: number
+          id: string
+          intervalo_horas: number
+          prioridade: number
+        }
+        Insert: {
+          cnd_tipo: Database["public"]["Enums"]["cnd_tipo"]
+          connector_id: string
+          dias_antes_vencimento?: number
+          id?: string
+          intervalo_horas?: number
+          prioridade?: number
+        }
+        Update: {
+          cnd_tipo?: Database["public"]["Enums"]["cnd_tipo"]
+          connector_id?: string
+          dias_antes_vencimento?: number
+          id?: string
+          intervalo_horas?: number
+          prioridade?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduling_rules_connector_id_fkey"
+            columns: ["connector_id"]
+            isOneToOne: false
+            referencedRelation: "connectors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +849,83 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      alerta_prioridade: "critica" | "alta" | "media" | "baixa"
+      alerta_tipo:
+        | "vencimento_7d"
+        | "vencimento_3d"
+        | "vencimento_1d"
+        | "vencimento_hoje"
+        | "vencido"
+        | "sem_pdf"
+        | "checklist_incompleto"
+      batch_status:
+        | "agendado"
+        | "executando"
+        | "concluido"
+        | "parcial"
+        | "falha"
+      canal_envio: "email" | "whatsapp"
+      cnd_status:
+        | "valida"
+        | "vencendo"
+        | "vencida"
+        | "pendente"
+        | "erro"
+        | "nao_aplicavel"
+      cnd_tipo:
+        | "receita_federal"
+        | "fgts"
+        | "sefaz"
+        | "municipal"
+        | "trabalhista"
+        | "personalizada"
+      confidence_level: "alta" | "media" | "baixa"
+      connector_status: "ativo" | "inativo" | "manutencao" | "erro"
+      connector_type:
+        | "api_direta"
+        | "browser_headless"
+        | "integracao_assistida"
+        | "upload_manual"
+      empresa_status: "ativa" | "pausada" | "arquivada"
+      envio_status: "enviado" | "entregue" | "lido" | "erro" | "pendente"
+      exception_criticidade: "critica" | "alta" | "media" | "baixa"
+      exception_status: "pendente" | "em_analise" | "resolvida" | "descartada"
+      exception_tipologia:
+        | "cnpj_inconsistente"
+        | "pdf_ausente"
+        | "validade_ambigua"
+        | "portal_indisponivel"
+        | "captcha_bloqueante"
+        | "documento_incompativel"
+        | "baixa_confianca"
+        | "erro_parsing"
+        | "falha_integracao"
+        | "dado_cadastral_insuficiente"
+        | "certidao_positiva"
+        | "retorno_inesperado"
+      health_status: "ok" | "degradado" | "indisponivel"
+      log_acao: "envio" | "abertura" | "visualizacao" | "download"
+      regime_tributario:
+        | "simples_nacional"
+        | "lucro_presumido"
+        | "lucro_real"
+        | "mei"
+      run_status:
+        | "agendado"
+        | "executando"
+        | "sucesso"
+        | "falha"
+        | "revisao"
+        | "timeout"
+        | "cancelado"
+        | "bloqueado"
+      run_step_etapa:
+        | "autenticacao"
+        | "consulta"
+        | "captura"
+        | "parsing"
+        | "persistencia"
+      run_step_status: "sucesso" | "falha" | "pulado" | "executando"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +1052,87 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      alerta_prioridade: ["critica", "alta", "media", "baixa"],
+      alerta_tipo: [
+        "vencimento_7d",
+        "vencimento_3d",
+        "vencimento_1d",
+        "vencimento_hoje",
+        "vencido",
+        "sem_pdf",
+        "checklist_incompleto",
+      ],
+      batch_status: ["agendado", "executando", "concluido", "parcial", "falha"],
+      canal_envio: ["email", "whatsapp"],
+      cnd_status: [
+        "valida",
+        "vencendo",
+        "vencida",
+        "pendente",
+        "erro",
+        "nao_aplicavel",
+      ],
+      cnd_tipo: [
+        "receita_federal",
+        "fgts",
+        "sefaz",
+        "municipal",
+        "trabalhista",
+        "personalizada",
+      ],
+      confidence_level: ["alta", "media", "baixa"],
+      connector_status: ["ativo", "inativo", "manutencao", "erro"],
+      connector_type: [
+        "api_direta",
+        "browser_headless",
+        "integracao_assistida",
+        "upload_manual",
+      ],
+      empresa_status: ["ativa", "pausada", "arquivada"],
+      envio_status: ["enviado", "entregue", "lido", "erro", "pendente"],
+      exception_criticidade: ["critica", "alta", "media", "baixa"],
+      exception_status: ["pendente", "em_analise", "resolvida", "descartada"],
+      exception_tipologia: [
+        "cnpj_inconsistente",
+        "pdf_ausente",
+        "validade_ambigua",
+        "portal_indisponivel",
+        "captcha_bloqueante",
+        "documento_incompativel",
+        "baixa_confianca",
+        "erro_parsing",
+        "falha_integracao",
+        "dado_cadastral_insuficiente",
+        "certidao_positiva",
+        "retorno_inesperado",
+      ],
+      health_status: ["ok", "degradado", "indisponivel"],
+      log_acao: ["envio", "abertura", "visualizacao", "download"],
+      regime_tributario: [
+        "simples_nacional",
+        "lucro_presumido",
+        "lucro_real",
+        "mei",
+      ],
+      run_status: [
+        "agendado",
+        "executando",
+        "sucesso",
+        "falha",
+        "revisao",
+        "timeout",
+        "cancelado",
+        "bloqueado",
+      ],
+      run_step_etapa: [
+        "autenticacao",
+        "consulta",
+        "captura",
+        "parsing",
+        "persistencia",
+      ],
+      run_step_status: ["sucesso", "falha", "pulado", "executando"],
+    },
   },
 } as const
