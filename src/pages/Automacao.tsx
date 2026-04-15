@@ -224,6 +224,38 @@ export default function Automacao() {
         </div>
       </div>
 
+      {/* Saúde dos Conectores — Circuit Breakers */}
+      {circuitBreakers.length > 0 && (
+        <div>
+          <h2 className="section-title mb-3 flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-warning" /> Proteção Ativa
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {circuitBreakers.map(cb => {
+              const conn = state.connectors.find(c => c.id === cb.connectorId);
+              return (
+                <div key={cb.connectorId} className="glass-card p-4 border-l-2 border-l-warning">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-foreground">{conn?.nome || cb.connectorId}</span>
+                    <span className={`status-badge border text-[10px] ${
+                      cb.estado === 'open' ? 'bg-destructive/15 text-destructive border-destructive/30' : 'bg-warning/15 text-warning border-warning/30'
+                    }`}>
+                      {cb.estado === 'open' ? 'Aberto' : 'Testando'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-foreground/50">{cb.falhasConsecutivas} falhas consecutivas</p>
+                  {cb.proximoTeste && (
+                    <p className="text-[10px] text-foreground/40 mt-1">
+                      Próximo teste: {new Date(cb.proximoTeste).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Conectores Ativos */}
       <div>
         <h2 className="section-title mb-3">Conectores Ativos</h2>
