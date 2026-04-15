@@ -1,129 +1,110 @@
 
 
-# Refinamento Premium da Fase 2 — Central de Automação Enterprise
+# Hardening Completo — Fase 2 do Motor de Automação
 
 ## Visão Geral
-Transformar as 5 telas de automação (Central, Execuções, Detalhe, Integrações, Exceções) de "funcional" para "enterprise premium", adicionando blocos operacionais avançados, fila de exceções inteligente com tipologias, revisão assistida, e observabilidade profunda.
+Endurecer toda a camada de automação com resiliência real (circuit breaker, retry com backoff, concurrency limiter), validações críticas no pipeline de captura, prevenção de duplicidades, monitoramento interno de degradação, e performance otimizada para alto volume.
 
-## 1. Dados Mock Enriquecidos (`src/data/automationMockData.ts`)
+## 1. Infraestrutura de Resiliência (`src/lib/automation-resilience.ts`) — NOVO
 
-Expandir exceções de 5 para ~12, cobrindo todas as tipologias:
-- CNPJ inconsistente, PDF ausente, validade ambígua, portal indisponível, CAPTCHA, documento incompatível, baixa confiança, erro de parsing, falha de integração, dado cadastral insuficiente, certidão positiva, retorno inesperado
+Criar módulo com primitivas de resiliência reutilizáveis:
 
-Adicionar campos aos `ExceptionItem` mock: `tipologia`, `tentativas`, `slaHoras`, `responsavel`
+- **CircuitBreaker**: por conector — estados `closed | half_open | open`. Abre após N falhas consecutivas, fecha após teste bem-sucedido. Previne storm de retries contra portal degradado.
+- **RetryWithBackoff**: `retry(fn, policy)` — exponential backoff com jitter. Respeita `maxTentativas`, `intervaloBase`, `backoffMultiplier`, `timeoutSegundos` do `RetryPolicy` já existente.
+- **ConcurrencyLimiter**: limita execuções simultâneas por conector (max 2-3). Previne sobrecarga de portais e race conditions.
+- **DeduplicationGuard**: verifica se já existe run ativa para o mesmo `(empresaId, cndTipo)` antes de iniciar nova execução. Previne duplicidade por duplo-clique ou lotes sobrepostos.
 
-Expandir `mockRuns` para ~20 com mais variedade de resultados.
+## 2. Validações Críticas no Pipeline (`src/lib/capture-validator.ts`) — NOVO
 
-Expandir `mockHealthLogs` para ~15 entradas com histórico multi-dia.
+Módulo de validação pós-captura, chamado antes de qualquer publicação:
 
-## 2. Tipos Expandidos (`src/data/automation-types.ts`)
+- `validarCNPJMatch(captura, empresa)` — CNPJ do documento deve coincidir com empresa alvo
+- `validarTipoCertidao(captura, cndTipo)` — tipo retornado deve corresponder ao solicitado
+- `validarCoerenciaDatas(emissao, validade)` — validade > emissão, ambas no futuro razoável (não >5 anos), emissão não no futuro
+- `validarHashDuplicidade(hash, runsExistentes)` — documento idêntico já processado não gera nova versão
+- `validarConfiancaMinima(confianca, limiar)` — bloqueia autopublicação abaixo do limiar configurável
+- `validarOrgaoEsperado(captura, connector)` — órgão do resultado deve coincidir com órgão do conector
+- Retorna `{ valido: boolean, erros: string[], avisos: string[] }` — erros bloqueiam, avisos geram flag de revisão
 
-Adicionar a `ExceptionItem`:
-- `tipologia`: enum de 12 tipos de exceção (cnpj_inconsistente, pdf_ausente, validade_ambigua, portal_indisponivel, captcha_bloqueante, documento_incompativel, baixa_confianca, erro_parsing, falha_integracao, dado_cadastral_insuficiente, certidao_positiva, retorno_inesperado)
-- `tentativas: number`
-- `slaHoras: number`
-- `responsavel: string | null`
-- `cnpj: string`
-- `cndTipo: string`
-- `connectorNome: string`
+## 3. Orquestrador Endurecido (`src/hooks/useOrchestrator.ts`) — MODIFICAR
 
-## 3. Central de Automação (`src/pages/Automacao.tsx`) — Redesign Completo
+Refatorar `executarColeta` para incluir:
 
-Criar 4 blocos operacionais premium:
+1. **Guard de duplicidade**: verificar se já existe run ativa para `(empresaId, cndTipo)` antes de prosseguir
+2. **Circuit breaker check**: se conector está em estado `open`, rejeitar imediatamente e criar exceção `portal_indisponivel`
+3. **Retry automático**: envolver execução em `retryWithBackoff` usando a `RetryPolicy` do conector
+4. **Validação pós-captura**: chamar `validarCaptura()` antes de `avaliarResultado()`. Se inválido, criar exceção com tipologia correta em vez de publicar
+5. **Concurrency limiter**: respeitar limite por conector
+6. **Fallback para manual**: se conector principal falhar após max retries, verificar se existe conector alternativo ou marcar para upload manual
+7. **Tipologia automática**: derivar tipologia da exceção a partir do tipo de erro (timeout → `portal_indisponivel`, CNPJ mismatch → `cnpj_inconsistente`, etc.)
 
-**Bloco 1 — Visão Operacional do Dia**: métricas top com coletas, sucesso, falha, revisão, exceções, agendados (já existe, refinar layout para 2 rows com cards mais expressivos)
+## 4. Jobs Endurecidos (`src/hooks/useAutomationJobs.ts`) — MODIFICAR
 
-**Bloco 2 — Visão de Risco**: card dedicado mostrando empresas sem atualização recente (>7d), CNDs vencidas sem coleta, conectores instáveis (taxa <80%), exceções críticas pendentes
+- **Batch com controle de concorrência**: processar lote com `Promise.allSettled` + semáforo (max 3 simultâneos)
+- **Progresso incremental**: atualizar `AutomationBatch.progressoAtual` a cada item processado
+- **Detecção de lote travado**: timeout global por lote (ex: 5min para mock)
+- **Retry de falhas transitórias**: novo job `retryFalhasTransitorias()` — reprocessa runs com status `falha` onde `tentativa < maxTentativas` e conector não está em circuit breaker aberto
+- **Health check**: novo job `monitorarConectores()` — compara taxa de sucesso atual vs. média e gera `IntegrationHealthLog` se degradou. Muda status do conector para `manutencao` se taxa cair abaixo de limiar
 
-**Bloco 3 — Visão de Gargalos**: tempo médio por conector (mini bar chart visual), fila de retry pendente, lotes atrasados, exceções por tipologia (top 3)
+## 5. Decision Engine Endurecido (`src/lib/decision-engine.ts`) — MODIFICAR
 
-**Bloco 4 — Produtividade**: taxa de automação (% resolvido sem intervenção), tempo médio de resolução de exceções, coletas/dia trend (últimos 7 dias como mini sparkline CSS)
+- Adicionar `avaliarResultadoSeguro(capture, cndAtual, validacao)` que recebe o resultado da validação
+- Se validação tem erros → sempre `criar_excecao` independente da confiança
+- Se validação tem avisos → rebaixar confiança de `alta` para `media`
+- `deveSubstituirVersao()` agora também verifica: hash diferente, e confiança nova >= confiança atual
 
-Quick actions refinadas: Executar Lote, Forçar Revalidação, Ver Exceções Críticas, Pausar Automação
+## 6. Tipos Expandidos (`src/data/automation-types.ts`) — MODIFICAR
 
-Conectores e execuções recentes mantidos mas com layout mais sofisticado.
+Adicionar:
+- `RunStatus`: adicionar `'cancelado'` e `'bloqueado'` (circuit breaker)
+- `ConnectorRun`: adicionar campos `hashDocumento?: string`, `validacaoErros?: string[]`, `validacaoAvisos?: string[]`
+- `CircuitBreakerState` interface: `{ connectorId, estado, falhasConsecutivas, ultimaFalha, proximoTeste }`
+- `AutomationConfig` interface: `{ confiancaMinima: ConfidenceLevel, maxConcorrenciaPorConector: number, timeoutGlobalLote: number, circuitBreakerLimiar: number }`
 
-## 4. Execuções (`src/pages/Execucoes.tsx`) — Upgrade
+## 7. AutomationProvider Expandido (`src/data/AutomationProvider.tsx`) — MODIFICAR
 
-- Adicionar filtro por empresa (select com lista de empresas)
-- Adicionar filtro por período (hoje, 7d, 30d, todos)
-- Mostrar motivo da falha inline na row (coluna extra colapsável ou tooltip)
-- Mostrar tentativa como "2/3" (tentativa atual / max do retry policy)
-- Expandir row inline com collapsible para ver steps sem navegar
-- Adicionar ação "Reprocessar" e "Enviar para Exceção" inline
+- Adicionar ao state: `circuitBreakers: Record<string, CircuitBreakerState>`, `automationConfig: AutomationConfig`
+- Novas actions: `UPDATE_CIRCUIT_BREAKER`, `UPDATE_AUTOMATION_CONFIG`, `CANCEL_RUN`
+- Computed: `connectorsDegradados` (taxa caindo), `runsDuplicadas` (mesmo empresa+tipo em paralelo)
 
-## 5. Detalhe da Execução (`src/pages/ExecucaoDetalhe.tsx`) — Auditoria Premium
+## 8. Monitoramento e Alertas Técnicos — Integrado nas telas existentes
 
-- Timeline com etapas colapsáveis (usar Collapsible)
-- Adicionar seção "Motor de Decisão" explicando POR QUE o sistema publicou automaticamente ou exigiu revisão (mostrar score de confiança com breakdown visual)
-- Seção de resultado expandida: status bruto, normalizado, confiança com barra visual
-- Seção "Impacto": mostrar que alertas foram gerados, que CND foi atualizada, que exceção foi aberta
-- Botões de ação: Reprocessar, Criar Exceção Manual, Ver Empresa
+**`src/pages/Automacao.tsx`** — Adicionar novo bloco "Saúde dos Conectores":
+- Indicador de circuit breaker por conector (verde/amarelo/vermelho)
+- Alerta visual quando conector entrou em modo proteção
+- Contador de retries pendentes
+- Alerta de lote travado
 
-## 6. Fila de Exceções (`src/pages/Excecoes.tsx`) — Redesign Completo
+**`src/pages/Integracoes.tsx`** — Adicionar:
+- Estado do circuit breaker por conector
+- Botão "Resetar Circuit Breaker" (reabrir manualmente)
+- Histórico de ativações do circuit breaker
 
-**Header com contadores por criticidade**: pills mostrando Críticas (X), Altas (X), Médias (X), Baixas (X)
+## 9. Auditoria de Automação — Integrar com audit trail existente
 
-**Filtros avançados**: status, criticidade, tipologia, empresa, conector
+Toda ação de automação (publicação auto, criação de exceção, retry, circuit breaker ativado, validação falhou) gera entrada no audit trail da Fase 1 via `dataDispatch({ type: 'ADD_LOG' })`.
 
-**Cards de exceção redesenhados** (`ExceptionCard.tsx`):
-- Exibir: empresa, CNPJ, tipo CND, fonte/conector, motivo principal, criticidade badge, data/hora, tentativas, sugestão de ação, responsável, SLA (tempo restante)
-- Ações expandidas: Reenfileirar, Upload Manual, Aprovar Leitura, Corrigir Validade, Marcar N/A, Ignorar com Justificativa, Escalar, Vincular PDF, Reprocessar Parsing
-- Ações em dropdown menu para não poluir
+## 10. Performance
 
-**Revisão Assistida** (novo componente `ReviewPanel.tsx`):
-- Sheet/dialog que abre ao clicar "Revisar" em uma exceção
-- Comparação lado a lado: dados extraídos vs dados esperados
-- Confiança por campo (alta/média/baixa indicator)
-- Permitir aprovar campo a campo
-- Botão "Publicar Resultado Revisado"
-- Registra quem aprovou
+- `useOrchestrator`: memoizar `connectorMapping` e `empresasElegiveis` com `useMemo`
+- `useAutomationJobs`: usar `Promise.allSettled` em vez de loop sequencial para itens independentes
+- Limitar tamanho de `state.runs` mantido em memória (últimas 500 runs, paginação lazy para histórico)
+- `Automacao.tsx`: consolidar métricas em um único `useMemo` em vez de vários
 
-## 7. Integrações (`src/pages/Integracoes.tsx`) — Refinamento
-
-- Cards de conector redesenhados com uptime visual (mini health bar últimas 24h)
-- Seção de "Últimas Falhas" por conector
-- Indicador de modo manutenção
-- Botão "Testar Conector" (simula health check)
-- Botão "Pausar/Ativar" conector
-- Tabela expandida com histórico de configuração
-
-## 8. Componentes Novos e Refinados
-
-**`src/components/ExceptionCard.tsx`** — Redesign completo com tipologia, CNPJ, CND tipo, tentativas, SLA, responsável, dropdown de ações
-
-**`src/components/ReviewPanel.tsx`** — Novo. Sheet lateral com revisão assistida campo a campo
-
-**`src/components/RiskCard.tsx`** — Novo. Card premium para blocos de risco na Central
-
-**`src/components/ConnectorHealthCard.tsx`** — Adicionar mini health bar (últimas 24h), botões de ação
-
-**`src/components/ExecutionTimeline.tsx`** — Etapas colapsáveis, mais detalhes visuais
-
-**`src/components/ConfidenceBreakdown.tsx`** — Novo. Breakdown visual do score de confiança com barras por critério
-
-## 9. AutomationProvider (`src/data/AutomationProvider.tsx`)
-
-- Adicionar actions: `ASSIGN_EXCEPTION`, `ESCALATE_EXCEPTION`, `UPDATE_CONNECTOR_STATUS`
-- Adicionar computed: `exceptionsByTipologia`, `criticalExceptions`, `unstableConnectors`
+---
 
 ## Arquivos
 
-**Novos (3):**
-- `src/components/ReviewPanel.tsx`
-- `src/components/RiskCard.tsx`
-- `src/components/ConfidenceBreakdown.tsx`
+**Novos (2):**
+- `src/lib/automation-resilience.ts` — CircuitBreaker, RetryWithBackoff, ConcurrencyLimiter, DeduplicationGuard
+- `src/lib/capture-validator.ts` — Validações pós-captura
 
-**Modificados (10):**
-- `src/data/automation-types.ts` — tipologia enum, campos extras em ExceptionItem
-- `src/data/automationMockData.ts` — dados expandidos
-- `src/data/AutomationProvider.tsx` — novas actions
-- `src/pages/Automacao.tsx` — redesign com 4 blocos operacionais
-- `src/pages/Execucoes.tsx` — filtros avançados, row expandível, ações inline
-- `src/pages/ExecucaoDetalhe.tsx` — timeline colapsável, motor de decisão, impacto
-- `src/pages/Excecoes.tsx` — redesign com tipologias, contadores, revisão assistida
-- `src/pages/Integracoes.tsx` — health bar, ações, modo manutenção
-- `src/components/ExceptionCard.tsx` — redesign com todos os campos
-- `src/components/ConnectorHealthCard.tsx` — mini health bar, ações
-- `src/components/ExecutionTimeline.tsx` — etapas colapsáveis
+**Modificados (7):**
+- `src/data/automation-types.ts` — novos tipos (CircuitBreakerState, AutomationConfig, RunStatus expandido)
+- `src/data/AutomationProvider.tsx` — circuit breakers no state, novas actions
+- `src/hooks/useOrchestrator.ts` — pipeline com validação, circuit breaker, dedup, retry, fallback
+- `src/hooks/useAutomationJobs.ts` — concorrência controlada, health check, retry de falhas
+- `src/lib/decision-engine.ts` — validação integrada, substituição segura
+- `src/pages/Automacao.tsx` — bloco de saúde com circuit breakers
+- `src/pages/Integracoes.tsx` — circuit breaker visual e controle manual
 
