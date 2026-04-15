@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useReducer, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useCallback, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import type { Empresa, CNDItem, Documento, Envio, Alerta, LogAcesso, AuditEntry, RegimeTributario } from '@/data/types';
-import { mockEmpresas, mockCNDItems, mockDocumentos, mockEnvios, mockAlertas, mockLogs } from '@/data/mockData';
 import { recalcularTodosStatus } from '@/lib/status-utils';
 
 interface DataState {
@@ -13,114 +14,170 @@ interface DataState {
   auditTrail: AuditEntry[];
 }
 
-type DataAction =
-  | { type: 'ADD_EMPRESA'; payload: Empresa }
-  | { type: 'UPDATE_EMPRESA'; payload: Empresa }
-  | { type: 'ADD_CND'; payload: CNDItem }
-  | { type: 'UPDATE_CND'; payload: CNDItem }
-  | { type: 'RECALCULATE_STATUS' }
-  | { type: 'ADD_DOCUMENTO'; payload: Documento }
-  | { type: 'ADD_ENVIO'; payload: Envio }
-  | { type: 'ADD_LOG'; payload: LogAcesso }
-  | { type: 'ADD_ALERTA'; payload: Alerta }
-  | { type: 'RESOLVE_ALERTA'; payload: string }
-  | { type: 'MARK_ALERTA_LIDO'; payload: string }
-  | { type: 'RESOLVE_ALL_ALERTAS' }
-  | { type: 'MARK_ALL_ALERTAS_LIDOS' }
-  | { type: 'SET_ALERTAS'; payload: Alerta[] };
+// ── Mappers: DB row → frontend type ──
 
-function createAuditEntry(action: string, entityType: AuditEntry['entityType'], entityId: string, details: string): AuditEntry {
+function mapEmpresa(row: any): Empresa {
   return {
-    id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    timestamp: new Date().toISOString(),
-    userId: 'admin',
-    action,
-    entityType,
-    entityId,
-    details,
+    id: row.id,
+    razaoSocial: row.razao_social,
+    nomeFantasia: row.nome_fantasia,
+    cnpj: row.cnpj,
+    regimeTributario: row.regime_tributario,
+    municipio: row.municipio,
+    estado: row.estado,
+    responsavelInterno: row.responsavel_interno,
+    responsavelCliente: row.responsavel_cliente,
+    emailPrincipal: row.email_principal,
+    whatsappPrincipal: row.whatsapp_principal,
+    observacoes: row.observacoes,
+    status: row.status,
+    criadoEm: row.created_at,
+    atualizadoEm: row.updated_at,
   };
 }
 
-function dataReducer(state: DataState, action: DataAction): DataState {
-  switch (action.type) {
-    case 'ADD_EMPRESA': {
-      const exists = state.empresas.some(e => e.cnpj.replace(/\D/g, '') === action.payload.cnpj.replace(/\D/g, ''));
-      if (exists) return state;
-      return {
-        ...state,
-        empresas: [...state.empresas, action.payload],
-        auditTrail: [...state.auditTrail, createAuditEntry('create', 'empresa', action.payload.id, `Empresa ${action.payload.nomeFantasia} criada`)],
-      };
-    }
-    case 'UPDATE_EMPRESA':
-      return {
-        ...state,
-        empresas: state.empresas.map(e => e.id === action.payload.id ? action.payload : e),
-        auditTrail: [...state.auditTrail, createAuditEntry('update', 'empresa', action.payload.id, `Empresa ${action.payload.nomeFantasia} atualizada`)],
-      };
-    case 'ADD_CND':
-      return {
-        ...state,
-        cnds: [...state.cnds, action.payload],
-        auditTrail: [...state.auditTrail, createAuditEntry('create', 'cnd', action.payload.id, `CND ${action.payload.tipo} adicionada`)],
-      };
-    case 'UPDATE_CND':
-      return {
-        ...state,
-        cnds: state.cnds.map(c => c.id === action.payload.id ? action.payload : c),
-        auditTrail: [...state.auditTrail, createAuditEntry('update', 'cnd', action.payload.id, `CND ${action.payload.tipo} atualizada`)],
-      };
-    case 'RECALCULATE_STATUS':
-      return { ...state, cnds: recalcularTodosStatus(state.cnds) };
-    case 'ADD_DOCUMENTO': {
-      const dup = state.documentos.some(d => d.id === action.payload.id);
-      if (dup) return state;
-      return {
-        ...state,
-        documentos: [...state.documentos, action.payload],
-        auditTrail: [...state.auditTrail, createAuditEntry('create', 'documento', action.payload.id, `Documento ${action.payload.nome} enviado`)],
-      };
-    }
-    case 'ADD_ENVIO':
-      return {
-        ...state,
-        envios: [...state.envios, action.payload],
-        auditTrail: [...state.auditTrail, createAuditEntry('create', 'envio', action.payload.id, `Envio para ${action.payload.destinatario}`)],
-      };
-    case 'ADD_LOG':
-      return { ...state, logs: [...state.logs, action.payload] };
-    case 'ADD_ALERTA': {
-      const key = `${action.payload.empresaId}-${action.payload.cndItemId}-${action.payload.tipo}`;
-      const dup = state.alertas.some(a => !a.resolvido && `${a.empresaId}-${a.cndItemId}-${a.tipo}` === key);
-      if (dup) return state;
-      return { ...state, alertas: [...state.alertas, action.payload] };
-    }
-    case 'RESOLVE_ALERTA':
-      return {
-        ...state,
-        alertas: state.alertas.map(a => a.id === action.payload ? { ...a, resolvido: true } : a),
-        auditTrail: [...state.auditTrail, createAuditEntry('resolve', 'alerta', action.payload, 'Alerta resolvido')],
-      };
-    case 'MARK_ALERTA_LIDO':
-      return { ...state, alertas: state.alertas.map(a => a.id === action.payload ? { ...a, lido: true } : a) };
-    case 'RESOLVE_ALL_ALERTAS':
-      return {
-        ...state,
-        alertas: state.alertas.map(a => a.resolvido ? a : { ...a, resolvido: true }),
-        auditTrail: [...state.auditTrail, createAuditEntry('resolve_all', 'alerta', '*', 'Todos alertas resolvidos')],
-      };
-    case 'MARK_ALL_ALERTAS_LIDOS':
-      return { ...state, alertas: state.alertas.map(a => ({ ...a, lido: true })) };
-    case 'SET_ALERTAS':
-      return { ...state, alertas: action.payload };
-    default:
-      return state;
-  }
+function mapCND(row: any): CNDItem {
+  return {
+    id: row.id,
+    empresaId: row.empresa_id,
+    tipo: row.tipo,
+    status: row.status,
+    dataEmissao: row.data_emissao,
+    dataVencimento: row.data_vencimento,
+    origem: row.origem,
+    arquivoId: row.arquivo_id,
+    observacao: row.observacao,
+    responsavel: row.responsavel,
+    historico: [],
+  };
 }
+
+function mapDocumento(row: any): Documento {
+  return {
+    id: row.id,
+    empresaId: row.empresa_id,
+    cndItemId: row.cnd_item_id,
+    nome: row.nome,
+    tipo: row.tipo,
+    dataUpload: row.data_upload,
+    responsavel: row.responsavel,
+    validade: row.validade,
+    observacao: row.observacao,
+    versao: row.versao,
+    tamanho: row.tamanho,
+    url: row.storage_path,
+  };
+}
+
+function mapEnvio(row: any): Envio {
+  return {
+    id: row.id,
+    empresaId: row.empresa_id,
+    canal: row.canal,
+    destinatario: row.destinatario,
+    assunto: row.assunto,
+    mensagem: row.mensagem,
+    documentoIds: row.documento_ids || [],
+    status: row.status,
+    dataEnvio: row.data_envio,
+    usuario: row.usuario,
+  };
+}
+
+function mapAlerta(row: any): Alerta {
+  return {
+    id: row.id,
+    empresaId: row.empresa_id,
+    cndItemId: row.cnd_item_id,
+    tipo: row.tipo,
+    prioridade: row.prioridade,
+    titulo: row.titulo,
+    descricao: row.descricao,
+    lido: row.lido,
+    resolvido: row.resolvido,
+    snoozedAte: row.snoozed_ate,
+    criadoEm: row.created_at,
+  };
+}
+
+function mapLog(row: any): LogAcesso {
+  return {
+    id: row.id,
+    empresaId: row.empresa_id,
+    envioId: row.envio_id,
+    documentoId: row.documento_id,
+    acao: row.acao,
+    canal: row.canal,
+    usuario: row.usuario,
+    destinatario: row.destinatario,
+    dataHora: row.data_hora,
+    detalhes: row.detalhes,
+  };
+}
+
+function mapAudit(row: any): AuditEntry {
+  return {
+    id: row.id,
+    timestamp: row.timestamp,
+    userId: row.user_id,
+    action: row.action,
+    entityType: row.entity_type as AuditEntry['entityType'],
+    entityId: row.entity_id,
+    details: row.details,
+    metadata: row.metadata,
+  };
+}
+
+// ── Fetch functions ──
+
+async function fetchEmpresas() {
+  const { data, error } = await supabase.from('empresas').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(mapEmpresa);
+}
+
+async function fetchCNDs() {
+  const { data, error } = await supabase.from('cnd_items').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return recalcularTodosStatus((data || []).map(mapCND));
+}
+
+async function fetchDocumentos() {
+  const { data, error } = await supabase.from('documentos').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(mapDocumento);
+}
+
+async function fetchEnvios() {
+  const { data, error } = await supabase.from('envios').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(mapEnvio);
+}
+
+async function fetchAlertas() {
+  const { data, error } = await supabase.from('alertas').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(mapAlerta);
+}
+
+async function fetchLogs() {
+  const { data, error } = await supabase.from('logs_acesso').select('*').order('data_hora', { ascending: false }).limit(500);
+  if (error) throw error;
+  return (data || []).map(mapLog);
+}
+
+async function fetchAuditTrail() {
+  const { data, error } = await supabase.from('audit_trail').select('*').order('timestamp', { ascending: false }).limit(500);
+  if (error) throw error;
+  return (data || []).map(mapAudit);
+}
+
+// ── Context ──
 
 interface DataContextValue {
   state: DataState;
-  dispatch: React.Dispatch<DataAction>;
+  isLoading: boolean;
+  dispatch: (action: any) => void; // kept for compatibility
   addEmpresa: (empresa: Empresa) => boolean;
   updateEmpresa: (empresa: Empresa) => void;
   addDocumento: (doc: Documento) => void;
@@ -136,61 +193,125 @@ interface DataContextValue {
 
 const DataContext = createContext<DataContextValue | null>(null);
 
-const initialState: DataState = {
-  empresas: mockEmpresas,
-  cnds: recalcularTodosStatus(mockCNDItems),
-  documentos: mockDocumentos,
-  envios: mockEnvios,
-  alertas: mockAlertas,
-  logs: mockLogs,
-  auditTrail: [],
-};
-
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(dataReducer, initialState);
+  const queryClient = useQueryClient();
+
+  const { data: empresas = [], isLoading: loadingE } = useQuery({ queryKey: ['empresas'], queryFn: fetchEmpresas });
+  const { data: cnds = [], isLoading: loadingC } = useQuery({ queryKey: ['cnds'], queryFn: fetchCNDs });
+  const { data: documentos = [], isLoading: loadingD } = useQuery({ queryKey: ['documentos'], queryFn: fetchDocumentos });
+  const { data: envios = [], isLoading: loadingEn } = useQuery({ queryKey: ['envios'], queryFn: fetchEnvios });
+  const { data: alertas = [], isLoading: loadingA } = useQuery({ queryKey: ['alertas'], queryFn: fetchAlertas });
+  const { data: logs = [], isLoading: loadingL } = useQuery({ queryKey: ['logs'], queryFn: fetchLogs });
+  const { data: auditTrail = [] } = useQuery({ queryKey: ['auditTrail'], queryFn: fetchAuditTrail });
+
+  const isLoading = loadingE || loadingC || loadingD || loadingEn || loadingA || loadingL;
+
+  const state = useMemo<DataState>(() => ({
+    empresas, cnds, documentos, envios, alertas, logs, auditTrail,
+  }), [empresas, cnds, documentos, envios, alertas, logs, auditTrail]);
 
   const cnpjExists = useCallback((cnpj: string, excludeId?: string) => {
     const normalized = cnpj.replace(/\D/g, '');
-    return state.empresas.some(e => e.cnpj.replace(/\D/g, '') === normalized && e.id !== excludeId);
-  }, [state.empresas]);
+    return empresas.some(e => e.cnpj.replace(/\D/g, '') === normalized && e.id !== excludeId);
+  }, [empresas]);
 
   const addEmpresa = useCallback((empresa: Empresa): boolean => {
     if (cnpjExists(empresa.cnpj)) return false;
-    dispatch({ type: 'ADD_EMPRESA', payload: empresa });
+    supabase.from('empresas').insert({
+      razao_social: empresa.razaoSocial,
+      nome_fantasia: empresa.nomeFantasia,
+      cnpj: empresa.cnpj,
+      regime_tributario: empresa.regimeTributario,
+      municipio: empresa.municipio,
+      estado: empresa.estado,
+      responsavel_interno: empresa.responsavelInterno,
+      responsavel_cliente: empresa.responsavelCliente,
+      email_principal: empresa.emailPrincipal,
+      whatsapp_principal: empresa.whatsappPrincipal,
+      observacoes: empresa.observacoes,
+      status: empresa.status,
+    }).then(() => queryClient.invalidateQueries({ queryKey: ['empresas'] }));
     return true;
-  }, [cnpjExists]);
+  }, [cnpjExists, queryClient]);
 
   const updateEmpresa = useCallback((empresa: Empresa) => {
-    dispatch({ type: 'UPDATE_EMPRESA', payload: empresa });
-  }, []);
+    supabase.from('empresas').update({
+      razao_social: empresa.razaoSocial,
+      nome_fantasia: empresa.nomeFantasia,
+      cnpj: empresa.cnpj,
+      regime_tributario: empresa.regimeTributario,
+      municipio: empresa.municipio,
+      estado: empresa.estado,
+      responsavel_interno: empresa.responsavelInterno,
+      responsavel_cliente: empresa.responsavelCliente,
+      email_principal: empresa.emailPrincipal,
+      whatsapp_principal: empresa.whatsappPrincipal,
+      observacoes: empresa.observacoes,
+      status: empresa.status,
+    }).eq('id', empresa.id).then(() => queryClient.invalidateQueries({ queryKey: ['empresas'] }));
+  }, [queryClient]);
 
   const addDocumento = useCallback((doc: Documento) => {
-    dispatch({ type: 'ADD_DOCUMENTO', payload: doc });
-  }, []);
+    supabase.from('documentos').insert({
+      empresa_id: doc.empresaId,
+      cnd_item_id: doc.cndItemId,
+      nome: doc.nome,
+      tipo: doc.tipo,
+      responsavel: doc.responsavel,
+      validade: doc.validade,
+      observacao: doc.observacao,
+      versao: doc.versao,
+      tamanho: doc.tamanho,
+      storage_path: doc.url,
+    }).then(() => queryClient.invalidateQueries({ queryKey: ['documentos'] }));
+  }, [queryClient]);
 
   const addEnvio = useCallback((envio: Envio) => {
-    dispatch({ type: 'ADD_ENVIO', payload: envio });
-  }, []);
+    supabase.from('envios').insert({
+      empresa_id: envio.empresaId,
+      canal: envio.canal,
+      destinatario: envio.destinatario,
+      assunto: envio.assunto,
+      mensagem: envio.mensagem,
+      documento_ids: envio.documentoIds,
+      status: envio.status,
+      data_envio: envio.dataEnvio,
+      usuario: envio.usuario,
+    }).then(() => queryClient.invalidateQueries({ queryKey: ['envios'] }));
+  }, [queryClient]);
 
   const addLog = useCallback((log: LogAcesso) => {
-    dispatch({ type: 'ADD_LOG', payload: log });
-  }, []);
+    supabase.from('logs_acesso').insert({
+      empresa_id: log.empresaId,
+      envio_id: log.envioId,
+      documento_id: log.documentoId,
+      acao: log.acao,
+      canal: log.canal,
+      usuario: log.usuario,
+      destinatario: log.destinatario,
+      detalhes: log.detalhes,
+    }).then(() => queryClient.invalidateQueries({ queryKey: ['logs'] }));
+  }, [queryClient]);
 
   const resolveAlerta = useCallback((id: string) => {
-    dispatch({ type: 'RESOLVE_ALERTA', payload: id });
-  }, []);
+    supabase.from('alertas').update({ resolvido: true }).eq('id', id)
+      .then(() => queryClient.invalidateQueries({ queryKey: ['alertas'] }));
+  }, [queryClient]);
 
   const markAlertaLido = useCallback((id: string) => {
-    dispatch({ type: 'MARK_ALERTA_LIDO', payload: id });
-  }, []);
+    supabase.from('alertas').update({ lido: true }).eq('id', id)
+      .then(() => queryClient.invalidateQueries({ queryKey: ['alertas'] }));
+  }, [queryClient]);
 
   const resolveAllAlertas = useCallback(() => {
-    dispatch({ type: 'RESOLVE_ALL_ALERTAS' });
-  }, []);
+    supabase.from('alertas').update({ resolvido: true }).eq('resolvido', false)
+      .then(() => queryClient.invalidateQueries({ queryKey: ['alertas'] }));
+  }, [queryClient]);
 
   const markAllAlertasLidos = useCallback(() => {
-    dispatch({ type: 'MARK_ALL_ALERTAS_LIDOS' });
-  }, []);
+    supabase.from('alertas').update({ lido: true }).eq('lido', false)
+      .then(() => queryClient.invalidateQueries({ queryKey: ['alertas'] }));
+  }, [queryClient]);
 
   const generateChecklistForRegime = useCallback((empresaId: string, regime: RegimeTributario, responsavel: string) => {
     const baseTypes: Array<{ tipo: CNDItem['tipo'] }> = [
@@ -202,41 +323,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       baseTypes.push({ tipo: 'sefaz' });
       baseTypes.push({ tipo: 'municipal' });
     }
-    baseTypes.forEach((bt, i) => {
-      dispatch({
-        type: 'ADD_CND',
-        payload: {
-          id: `cnd-${Date.now()}-${i}`,
-          empresaId,
-          tipo: bt.tipo,
-          status: 'pendente',
-          dataEmissao: null,
-          dataVencimento: null,
-          origem: '',
-          arquivoId: null,
-          observacao: '',
-          responsavel,
-          historico: [],
-        },
-      });
-    });
-  }, []);
+    const inserts = baseTypes.map(bt => ({
+      empresa_id: empresaId,
+      tipo: bt.tipo,
+      status: 'pendente' as const,
+      responsavel,
+    }));
+    supabase.from('cnd_items').insert(inserts)
+      .then(() => queryClient.invalidateQueries({ queryKey: ['cnds'] }));
+  }, [queryClient]);
+
+  const dispatch = useCallback(() => {}, []);
 
   const value = useMemo(() => ({
-    state,
-    dispatch,
-    addEmpresa,
-    updateEmpresa,
-    addDocumento,
-    addEnvio,
-    addLog,
-    resolveAlerta,
-    markAlertaLido,
-    resolveAllAlertas,
-    markAllAlertasLidos,
-    cnpjExists,
-    generateChecklistForRegime,
-  }), [state, addEmpresa, updateEmpresa, addDocumento, addEnvio, addLog, resolveAlerta, markAlertaLido, resolveAllAlertas, markAllAlertasLidos, cnpjExists, generateChecklistForRegime]);
+    state, isLoading, dispatch, addEmpresa, updateEmpresa, addDocumento, addEnvio, addLog,
+    resolveAlerta, markAlertaLido, resolveAllAlertas, markAllAlertasLidos, cnpjExists, generateChecklistForRegime,
+  }), [state, isLoading, addEmpresa, updateEmpresa, addDocumento, addEnvio, addLog,
+    resolveAlerta, markAlertaLido, resolveAllAlertas, markAllAlertasLidos, cnpjExists, generateChecklistForRegime]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
