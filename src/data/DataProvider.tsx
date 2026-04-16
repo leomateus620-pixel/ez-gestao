@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import type { Empresa, CNDItem, Documento, Envio, Alerta, LogAcesso, AuditEntry, RegimeTributario } from '@/data/types';
 import { recalcularTodosStatus } from '@/lib/status-utils';
 
@@ -177,7 +178,7 @@ async function fetchAuditTrail() {
 interface DataContextValue {
   state: DataState;
   isLoading: boolean;
-  dispatch: (action: any) => void; // kept for compatibility
+  dispatch: (action: any) => void;
   addEmpresa: (empresa: Empresa) => boolean;
   updateEmpresa: (empresa: Empresa) => void;
   addDocumento: (doc: Documento) => void;
@@ -192,6 +193,10 @@ interface DataContextValue {
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
+
+function errMsg(e: any) {
+  return e?.message || e?.error_description || 'Erro desconhecido';
+}
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
@@ -215,123 +220,207 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return empresas.some(e => e.cnpj.replace(/\D/g, '') === normalized && e.id !== excludeId);
   }, [empresas]);
 
+  // ── Mutations ──
+
+  const addEmpresaMutation = useMutation({
+    mutationFn: async (empresa: Empresa) => {
+      const { error } = await supabase.from('empresas').insert({
+        razao_social: empresa.razaoSocial,
+        nome_fantasia: empresa.nomeFantasia,
+        cnpj: empresa.cnpj,
+        regime_tributario: empresa.regimeTributario,
+        municipio: empresa.municipio,
+        estado: empresa.estado,
+        responsavel_interno: empresa.responsavelInterno,
+        responsavel_cliente: empresa.responsavelCliente,
+        email_principal: empresa.emailPrincipal,
+        whatsapp_principal: empresa.whatsappPrincipal,
+        observacoes: empresa.observacoes,
+        status: empresa.status,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['empresas'] });
+      toast.success('Empresa criada com sucesso');
+    },
+    onError: (e) => toast.error('Erro ao salvar empresa', { description: errMsg(e) }),
+  });
+
+  const updateEmpresaMutation = useMutation({
+    mutationFn: async (empresa: Empresa) => {
+      const { error } = await supabase.from('empresas').update({
+        razao_social: empresa.razaoSocial,
+        nome_fantasia: empresa.nomeFantasia,
+        cnpj: empresa.cnpj,
+        regime_tributario: empresa.regimeTributario,
+        municipio: empresa.municipio,
+        estado: empresa.estado,
+        responsavel_interno: empresa.responsavelInterno,
+        responsavel_cliente: empresa.responsavelCliente,
+        email_principal: empresa.emailPrincipal,
+        whatsapp_principal: empresa.whatsappPrincipal,
+        observacoes: empresa.observacoes,
+        status: empresa.status,
+      }).eq('id', empresa.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['empresas'] });
+      toast.success('Empresa atualizada');
+    },
+    onError: (e) => toast.error('Erro ao atualizar empresa', { description: errMsg(e) }),
+  });
+
+  const addDocumentoMutation = useMutation({
+    mutationFn: async (doc: Documento) => {
+      const { error } = await supabase.from('documentos').insert({
+        empresa_id: doc.empresaId,
+        cnd_item_id: doc.cndItemId,
+        nome: doc.nome,
+        tipo: doc.tipo,
+        responsavel: doc.responsavel,
+        validade: doc.validade,
+        observacao: doc.observacao,
+        versao: doc.versao,
+        tamanho: doc.tamanho,
+        storage_path: doc.url,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documentos'] });
+      toast.success('Documento salvo');
+    },
+    onError: (e) => toast.error('Erro ao salvar documento', { description: errMsg(e) }),
+  });
+
+  const addEnvioMutation = useMutation({
+    mutationFn: async (envio: Envio) => {
+      const { error } = await supabase.from('envios').insert({
+        empresa_id: envio.empresaId,
+        canal: envio.canal,
+        destinatario: envio.destinatario,
+        assunto: envio.assunto,
+        mensagem: envio.mensagem,
+        documento_ids: envio.documentoIds,
+        status: envio.status,
+        data_envio: envio.dataEnvio,
+        usuario: envio.usuario,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['envios'] });
+    },
+    onError: (e) => toast.error('Erro ao registrar envio', { description: errMsg(e) }),
+  });
+
+  const addLogMutation = useMutation({
+    mutationFn: async (log: LogAcesso) => {
+      const { error } = await supabase.from('logs_acesso').insert({
+        empresa_id: log.empresaId,
+        envio_id: log.envioId,
+        documento_id: log.documentoId,
+        acao: log.acao,
+        canal: log.canal,
+        usuario: log.usuario,
+        destinatario: log.destinatario,
+        detalhes: log.detalhes,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['logs'] }),
+    onError: (e) => toast.error('Erro ao registrar log', { description: errMsg(e) }),
+  });
+
+  const resolveAlertaMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('alertas').update({ resolvido: true }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alertas'] }),
+    onError: (e) => toast.error('Erro ao resolver alerta', { description: errMsg(e) }),
+  });
+
+  const markAlertaLidoMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('alertas').update({ lido: true }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alertas'] }),
+    onError: (e) => toast.error('Erro ao marcar alerta', { description: errMsg(e) }),
+  });
+
+  const resolveAllAlertasMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('alertas').update({ resolvido: true }).eq('resolvido', false);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['alertas'] });
+      toast.success('Alertas resolvidos');
+    },
+    onError: (e) => toast.error('Erro ao resolver alertas', { description: errMsg(e) }),
+  });
+
+  const markAllAlertasLidosMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('alertas').update({ lido: true }).eq('lido', false);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['alertas'] }),
+    onError: (e) => toast.error('Erro ao marcar alertas', { description: errMsg(e) }),
+  });
+
+  const generateChecklistMutation = useMutation({
+    mutationFn: async (params: { empresaId: string; regime: RegimeTributario; responsavel: string }) => {
+      const baseTypes: Array<{ tipo: CNDItem['tipo'] }> = [
+        { tipo: 'receita_federal' },
+        { tipo: 'fgts' },
+        { tipo: 'trabalhista' },
+      ];
+      if (params.regime !== 'mei') {
+        baseTypes.push({ tipo: 'sefaz' });
+        baseTypes.push({ tipo: 'municipal' });
+      }
+      const inserts = baseTypes.map(bt => ({
+        empresa_id: params.empresaId,
+        tipo: bt.tipo,
+        status: 'pendente' as const,
+        responsavel: params.responsavel,
+      }));
+      const { error } = await supabase.from('cnd_items').insert(inserts);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cnds'] }),
+    onError: (e) => toast.error('Erro ao gerar checklist', { description: errMsg(e) }),
+  });
+
+  // ── Wrappers ──
+
   const addEmpresa = useCallback((empresa: Empresa): boolean => {
-    if (cnpjExists(empresa.cnpj)) return false;
-    supabase.from('empresas').insert({
-      razao_social: empresa.razaoSocial,
-      nome_fantasia: empresa.nomeFantasia,
-      cnpj: empresa.cnpj,
-      regime_tributario: empresa.regimeTributario,
-      municipio: empresa.municipio,
-      estado: empresa.estado,
-      responsavel_interno: empresa.responsavelInterno,
-      responsavel_cliente: empresa.responsavelCliente,
-      email_principal: empresa.emailPrincipal,
-      whatsapp_principal: empresa.whatsappPrincipal,
-      observacoes: empresa.observacoes,
-      status: empresa.status,
-    }).then(() => queryClient.invalidateQueries({ queryKey: ['empresas'] }));
-    return true;
-  }, [cnpjExists, queryClient]);
-
-  const updateEmpresa = useCallback((empresa: Empresa) => {
-    supabase.from('empresas').update({
-      razao_social: empresa.razaoSocial,
-      nome_fantasia: empresa.nomeFantasia,
-      cnpj: empresa.cnpj,
-      regime_tributario: empresa.regimeTributario,
-      municipio: empresa.municipio,
-      estado: empresa.estado,
-      responsavel_interno: empresa.responsavelInterno,
-      responsavel_cliente: empresa.responsavelCliente,
-      email_principal: empresa.emailPrincipal,
-      whatsapp_principal: empresa.whatsappPrincipal,
-      observacoes: empresa.observacoes,
-      status: empresa.status,
-    }).eq('id', empresa.id).then(() => queryClient.invalidateQueries({ queryKey: ['empresas'] }));
-  }, [queryClient]);
-
-  const addDocumento = useCallback((doc: Documento) => {
-    supabase.from('documentos').insert({
-      empresa_id: doc.empresaId,
-      cnd_item_id: doc.cndItemId,
-      nome: doc.nome,
-      tipo: doc.tipo,
-      responsavel: doc.responsavel,
-      validade: doc.validade,
-      observacao: doc.observacao,
-      versao: doc.versao,
-      tamanho: doc.tamanho,
-      storage_path: doc.url,
-    }).then(() => queryClient.invalidateQueries({ queryKey: ['documentos'] }));
-  }, [queryClient]);
-
-  const addEnvio = useCallback((envio: Envio) => {
-    supabase.from('envios').insert({
-      empresa_id: envio.empresaId,
-      canal: envio.canal,
-      destinatario: envio.destinatario,
-      assunto: envio.assunto,
-      mensagem: envio.mensagem,
-      documento_ids: envio.documentoIds,
-      status: envio.status,
-      data_envio: envio.dataEnvio,
-      usuario: envio.usuario,
-    }).then(() => queryClient.invalidateQueries({ queryKey: ['envios'] }));
-  }, [queryClient]);
-
-  const addLog = useCallback((log: LogAcesso) => {
-    supabase.from('logs_acesso').insert({
-      empresa_id: log.empresaId,
-      envio_id: log.envioId,
-      documento_id: log.documentoId,
-      acao: log.acao,
-      canal: log.canal,
-      usuario: log.usuario,
-      destinatario: log.destinatario,
-      detalhes: log.detalhes,
-    }).then(() => queryClient.invalidateQueries({ queryKey: ['logs'] }));
-  }, [queryClient]);
-
-  const resolveAlerta = useCallback((id: string) => {
-    supabase.from('alertas').update({ resolvido: true }).eq('id', id)
-      .then(() => queryClient.invalidateQueries({ queryKey: ['alertas'] }));
-  }, [queryClient]);
-
-  const markAlertaLido = useCallback((id: string) => {
-    supabase.from('alertas').update({ lido: true }).eq('id', id)
-      .then(() => queryClient.invalidateQueries({ queryKey: ['alertas'] }));
-  }, [queryClient]);
-
-  const resolveAllAlertas = useCallback(() => {
-    supabase.from('alertas').update({ resolvido: true }).eq('resolvido', false)
-      .then(() => queryClient.invalidateQueries({ queryKey: ['alertas'] }));
-  }, [queryClient]);
-
-  const markAllAlertasLidos = useCallback(() => {
-    supabase.from('alertas').update({ lido: true }).eq('lido', false)
-      .then(() => queryClient.invalidateQueries({ queryKey: ['alertas'] }));
-  }, [queryClient]);
-
-  const generateChecklistForRegime = useCallback((empresaId: string, regime: RegimeTributario, responsavel: string) => {
-    const baseTypes: Array<{ tipo: CNDItem['tipo'] }> = [
-      { tipo: 'receita_federal' },
-      { tipo: 'fgts' },
-      { tipo: 'trabalhista' },
-    ];
-    if (regime !== 'mei') {
-      baseTypes.push({ tipo: 'sefaz' });
-      baseTypes.push({ tipo: 'municipal' });
+    if (cnpjExists(empresa.cnpj)) {
+      toast.error('CNPJ já cadastrado');
+      return false;
     }
-    const inserts = baseTypes.map(bt => ({
-      empresa_id: empresaId,
-      tipo: bt.tipo,
-      status: 'pendente' as const,
-      responsavel,
-    }));
-    supabase.from('cnd_items').insert(inserts)
-      .then(() => queryClient.invalidateQueries({ queryKey: ['cnds'] }));
-  }, [queryClient]);
+    addEmpresaMutation.mutate(empresa);
+    return true;
+  }, [cnpjExists, addEmpresaMutation]);
+
+  const updateEmpresa = useCallback((empresa: Empresa) => updateEmpresaMutation.mutate(empresa), [updateEmpresaMutation]);
+  const addDocumento = useCallback((doc: Documento) => addDocumentoMutation.mutate(doc), [addDocumentoMutation]);
+  const addEnvio = useCallback((envio: Envio) => addEnvioMutation.mutate(envio), [addEnvioMutation]);
+  const addLog = useCallback((log: LogAcesso) => addLogMutation.mutate(log), [addLogMutation]);
+  const resolveAlerta = useCallback((id: string) => resolveAlertaMutation.mutate(id), [resolveAlertaMutation]);
+  const markAlertaLido = useCallback((id: string) => markAlertaLidoMutation.mutate(id), [markAlertaLidoMutation]);
+  const resolveAllAlertas = useCallback(() => resolveAllAlertasMutation.mutate(), [resolveAllAlertasMutation]);
+  const markAllAlertasLidos = useCallback(() => markAllAlertasLidosMutation.mutate(), [markAllAlertasLidosMutation]);
+  const generateChecklistForRegime = useCallback(
+    (empresaId: string, regime: RegimeTributario, responsavel: string) =>
+      generateChecklistMutation.mutate({ empresaId, regime, responsavel }),
+    [generateChecklistMutation]
+  );
 
   const dispatch = useCallback(() => {}, []);
 
