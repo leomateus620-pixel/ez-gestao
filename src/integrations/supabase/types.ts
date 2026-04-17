@@ -104,6 +104,50 @@ export type Database = {
         }
         Relationships: []
       }
+      automation_artifacts: {
+        Row: {
+          artifact_type: Database["public"]["Enums"]["artifact_type"]
+          created_at: string
+          file_path: string
+          file_size: number
+          id: string
+          job_id: string
+          metadata_json: Json
+          mime_type: string
+          sha256: string | null
+        }
+        Insert: {
+          artifact_type: Database["public"]["Enums"]["artifact_type"]
+          created_at?: string
+          file_path: string
+          file_size?: number
+          id?: string
+          job_id: string
+          metadata_json?: Json
+          mime_type?: string
+          sha256?: string | null
+        }
+        Update: {
+          artifact_type?: Database["public"]["Enums"]["artifact_type"]
+          created_at?: string
+          file_path?: string
+          file_size?: number
+          id?: string
+          job_id?: string
+          metadata_json?: Json
+          mime_type?: string
+          sha256?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_artifacts_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "automation_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automation_batches: {
         Row: {
           agendado_para: string
@@ -157,6 +201,190 @@ export type Database = {
           id?: string
           max_concorrencia_por_conector?: number
           timeout_global_lote?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      automation_config_kv: {
+        Row: {
+          description: string
+          key: string
+          updated_at: string
+          value_json: Json
+        }
+        Insert: {
+          description?: string
+          key: string
+          updated_at?: string
+          value_json?: Json
+        }
+        Update: {
+          description?: string
+          key?: string
+          updated_at?: string
+          value_json?: Json
+        }
+        Relationships: []
+      }
+      automation_exceptions: {
+        Row: {
+          created_at: string
+          description: string
+          exception_type: string
+          id: string
+          job_id: string | null
+          last_seen_at: string
+          resolution_notes: string
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: Database["public"]["Enums"]["exception_severity"]
+          status: Database["public"]["Enums"]["exception_lifecycle"]
+          technical_details_json: Json
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          exception_type: string
+          id?: string
+          job_id?: string | null
+          last_seen_at?: string
+          resolution_notes?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: Database["public"]["Enums"]["exception_severity"]
+          status?: Database["public"]["Enums"]["exception_lifecycle"]
+          technical_details_json?: Json
+          title: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          exception_type?: string
+          id?: string
+          job_id?: string | null
+          last_seen_at?: string
+          resolution_notes?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: Database["public"]["Enums"]["exception_severity"]
+          status?: Database["public"]["Enums"]["exception_lifecycle"]
+          technical_details_json?: Json
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_exceptions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "automation_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_job_logs: {
+        Row: {
+          created_at: string
+          details_json: Json
+          id: string
+          job_id: string
+          level: Database["public"]["Enums"]["log_level"]
+          message: string
+          step: string
+        }
+        Insert: {
+          created_at?: string
+          details_json?: Json
+          id?: string
+          job_id: string
+          level?: Database["public"]["Enums"]["log_level"]
+          message?: string
+          step?: string
+        }
+        Update: {
+          created_at?: string
+          details_json?: Json
+          id?: string
+          job_id?: string
+          level?: Database["public"]["Enums"]["log_level"]
+          message?: string
+          step?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automation_job_logs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "automation_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      automation_jobs: {
+        Row: {
+          attempts: number
+          correlation_id: string
+          created_at: string
+          dispatched_at: string | null
+          error_message: string | null
+          error_type: string | null
+          finished_at: string | null
+          id: string
+          job_type: Database["public"]["Enums"]["job_type"]
+          locked_by: string | null
+          max_attempts: number
+          metadata_json: Json
+          next_run_at: string
+          priority: number
+          provider: string
+          started_at: string | null
+          status: Database["public"]["Enums"]["job_status"]
+          target_request_id: string | null
+          timeout_ms: number
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          correlation_id: string
+          created_at?: string
+          dispatched_at?: string | null
+          error_message?: string | null
+          error_type?: string | null
+          finished_at?: string | null
+          id?: string
+          job_type: Database["public"]["Enums"]["job_type"]
+          locked_by?: string | null
+          max_attempts?: number
+          metadata_json?: Json
+          next_run_at?: string
+          priority?: number
+          provider: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["job_status"]
+          target_request_id?: string | null
+          timeout_ms?: number
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          correlation_id?: string
+          created_at?: string
+          dispatched_at?: string | null
+          error_message?: string | null
+          error_type?: string | null
+          finished_at?: string | null
+          id?: string
+          job_type?: Database["public"]["Enums"]["job_type"]
+          locked_by?: string | null
+          max_attempts?: number
+          metadata_json?: Json
+          next_run_at?: string
+          priority?: number
+          provider?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["job_status"]
+          target_request_id?: string | null
+          timeout_ms?: number
           updated_at?: string
         }
         Relationships: []
@@ -245,6 +473,240 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cnd_lookup_requests: {
+        Row: {
+          cnpj_normalized: string
+          correlation_id: string | null
+          created_at: string
+          finished_at: string | null
+          force_refresh: boolean
+          from_cache: boolean
+          id: string
+          latest_job_id: string | null
+          linked_company_request_id: string | null
+          notes: string
+          requested_by: string
+          source_provider: string
+          started_at: string | null
+          status: Database["public"]["Enums"]["lookup_status"]
+        }
+        Insert: {
+          cnpj_normalized: string
+          correlation_id?: string | null
+          created_at?: string
+          finished_at?: string | null
+          force_refresh?: boolean
+          from_cache?: boolean
+          id?: string
+          latest_job_id?: string | null
+          linked_company_request_id?: string | null
+          notes?: string
+          requested_by?: string
+          source_provider?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["lookup_status"]
+        }
+        Update: {
+          cnpj_normalized?: string
+          correlation_id?: string | null
+          created_at?: string
+          finished_at?: string | null
+          force_refresh?: boolean
+          from_cache?: boolean
+          id?: string
+          latest_job_id?: string | null
+          linked_company_request_id?: string | null
+          notes?: string
+          requested_by?: string
+          source_provider?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["lookup_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cnd_lookup_requests_linked_company_request_id_fkey"
+            columns: ["linked_company_request_id"]
+            isOneToOne: false
+            referencedRelation: "company_lookup_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cnd_lookup_results: {
+        Row: {
+          cache_valid_until: string | null
+          certificate_number: string | null
+          cnd_status: Database["public"]["Enums"]["cnd_lookup_status"]
+          consulted_at: string
+          id: string
+          issued_at: string | null
+          parsed_payload_json: Json
+          pdf_path: string | null
+          pdf_sha256: string | null
+          raw_payload_json: Json
+          request_id: string
+          source_url: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          cache_valid_until?: string | null
+          certificate_number?: string | null
+          cnd_status: Database["public"]["Enums"]["cnd_lookup_status"]
+          consulted_at?: string
+          id?: string
+          issued_at?: string | null
+          parsed_payload_json?: Json
+          pdf_path?: string | null
+          pdf_sha256?: string | null
+          raw_payload_json?: Json
+          request_id: string
+          source_url?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          cache_valid_until?: string | null
+          certificate_number?: string | null
+          cnd_status?: Database["public"]["Enums"]["cnd_lookup_status"]
+          consulted_at?: string
+          id?: string
+          issued_at?: string | null
+          parsed_payload_json?: Json
+          pdf_path?: string | null
+          pdf_sha256?: string | null
+          raw_payload_json?: Json
+          request_id?: string
+          source_url?: string | null
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cnd_lookup_results_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "cnd_lookup_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      company_lookup_requests: {
+        Row: {
+          cnpj_input: string
+          cnpj_normalized: string
+          correlation_id: string | null
+          created_at: string
+          finished_at: string | null
+          force_refresh: boolean
+          from_cache: boolean
+          id: string
+          latest_job_id: string | null
+          notes: string
+          requested_by: string
+          source_provider: string
+          started_at: string | null
+          status: Database["public"]["Enums"]["lookup_status"]
+        }
+        Insert: {
+          cnpj_input: string
+          cnpj_normalized: string
+          correlation_id?: string | null
+          created_at?: string
+          finished_at?: string | null
+          force_refresh?: boolean
+          from_cache?: boolean
+          id?: string
+          latest_job_id?: string | null
+          notes?: string
+          requested_by?: string
+          source_provider?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["lookup_status"]
+        }
+        Update: {
+          cnpj_input?: string
+          cnpj_normalized?: string
+          correlation_id?: string | null
+          created_at?: string
+          finished_at?: string | null
+          force_refresh?: boolean
+          from_cache?: boolean
+          id?: string
+          latest_job_id?: string | null
+          notes?: string
+          requested_by?: string
+          source_provider?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["lookup_status"]
+        }
+        Relationships: []
+      }
+      company_lookup_results: {
+        Row: {
+          address_json: Json
+          cache_valid_until: string
+          consulted_at: string
+          id: string
+          legal_nature: string | null
+          main_cnae: string | null
+          official_name: string | null
+          opening_date: string | null
+          parsed_confidence: number
+          parsed_payload_json: Json
+          qsa_json: Json
+          raw_payload_json: Json
+          registration_status: string | null
+          request_id: string
+          secondary_cnaes_json: Json
+          source_url: string | null
+          trade_name: string | null
+        }
+        Insert: {
+          address_json?: Json
+          cache_valid_until?: string
+          consulted_at?: string
+          id?: string
+          legal_nature?: string | null
+          main_cnae?: string | null
+          official_name?: string | null
+          opening_date?: string | null
+          parsed_confidence?: number
+          parsed_payload_json?: Json
+          qsa_json?: Json
+          raw_payload_json?: Json
+          registration_status?: string | null
+          request_id: string
+          secondary_cnaes_json?: Json
+          source_url?: string | null
+          trade_name?: string | null
+        }
+        Update: {
+          address_json?: Json
+          cache_valid_until?: string
+          consulted_at?: string
+          id?: string
+          legal_nature?: string | null
+          main_cnae?: string | null
+          official_name?: string | null
+          opening_date?: string | null
+          parsed_confidence?: number
+          parsed_payload_json?: Json
+          qsa_json?: Json
+          raw_payload_json?: Json
+          registration_status?: string | null
+          request_id?: string
+          secondary_cnaes_json?: Json
+          source_url?: string | null
+          trade_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_lookup_results_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "company_lookup_requests"
             referencedColumns: ["id"]
           },
         ]
@@ -675,6 +1137,30 @@ export type Database = {
           },
         ]
       }
+      feature_flags: {
+        Row: {
+          description: string
+          enabled: boolean
+          key: string
+          updated_at: string
+          value_json: Json
+        }
+        Insert: {
+          description?: string
+          enabled?: boolean
+          key: string
+          updated_at?: string
+          value_json?: Json
+        }
+        Update: {
+          description?: string
+          enabled?: boolean
+          key?: string
+          updated_at?: string
+          value_json?: Json
+        }
+        Relationships: []
+      }
       health_logs: {
         Row: {
           connector_id: string
@@ -709,6 +1195,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      hmac_nonces: {
+        Row: {
+          direction: string
+          expires_at: string
+          nonce: string
+        }
+        Insert: {
+          direction: string
+          expires_at: string
+          nonce: string
+        }
+        Update: {
+          direction?: string
+          expires_at?: string
+          nonce?: string
+        }
+        Relationships: []
       }
       logs_acesso: {
         Row: {
@@ -770,6 +1274,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      provider_health: {
+        Row: {
+          avg_latency_ms_24h: number
+          current_concurrency: number
+          id: string
+          last_error_at: string | null
+          last_error_message: string | null
+          last_heartbeat_at: string | null
+          metadata_json: Json
+          open_circuit: boolean
+          provider_name: string
+          provider_runtime: Database["public"]["Enums"]["provider_runtime"]
+          status: Database["public"]["Enums"]["provider_health_status"]
+          success_rate_24h: number
+          updated_at: string
+        }
+        Insert: {
+          avg_latency_ms_24h?: number
+          current_concurrency?: number
+          id?: string
+          last_error_at?: string | null
+          last_error_message?: string | null
+          last_heartbeat_at?: string | null
+          metadata_json?: Json
+          open_circuit?: boolean
+          provider_name: string
+          provider_runtime: Database["public"]["Enums"]["provider_runtime"]
+          status?: Database["public"]["Enums"]["provider_health_status"]
+          success_rate_24h?: number
+          updated_at?: string
+        }
+        Update: {
+          avg_latency_ms_24h?: number
+          current_concurrency?: number
+          id?: string
+          last_error_at?: string | null
+          last_error_message?: string | null
+          last_heartbeat_at?: string | null
+          metadata_json?: Json
+          open_circuit?: boolean
+          provider_name?: string
+          provider_runtime?: Database["public"]["Enums"]["provider_runtime"]
+          status?: Database["public"]["Enums"]["provider_health_status"]
+          success_rate_24h?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       retry_policies: {
         Row: {
@@ -858,6 +1410,7 @@ export type Database = {
         | "vencido"
         | "sem_pdf"
         | "checklist_incompleto"
+      artifact_type: "screenshot" | "html" | "pdf" | "trace" | "text"
       batch_status:
         | "agendado"
         | "executando"
@@ -865,6 +1418,16 @@ export type Database = {
         | "parcial"
         | "falha"
       canal_envio: "email" | "whatsapp"
+      cnd_lookup_status:
+        | "negativa"
+        | "positiva_com_efeitos"
+        | "positiva"
+        | "nao_emitida"
+        | "indisponivel"
+        | "captcha"
+        | "erro_layout"
+        | "manual_required"
+        | "erro_transitorio"
       cnd_status:
         | "valida"
         | "vencendo"
@@ -889,6 +1452,8 @@ export type Database = {
       empresa_status: "ativa" | "pausada" | "arquivada"
       envio_status: "enviado" | "entregue" | "lido" | "erro" | "pendente"
       exception_criticidade: "critica" | "alta" | "media" | "baixa"
+      exception_lifecycle: "open" | "investigating" | "resolved" | "ignored"
+      exception_severity: "info" | "warning" | "error" | "critical"
       exception_status: "pendente" | "em_analise" | "resolvida" | "descartada"
       exception_tipologia:
         | "cnpj_inconsistente"
@@ -904,7 +1469,30 @@ export type Database = {
         | "certidao_positiva"
         | "retorno_inesperado"
       health_status: "ok" | "degradado" | "indisponivel"
+      job_status:
+        | "queued"
+        | "dispatched"
+        | "running"
+        | "waiting_callback"
+        | "success"
+        | "partial"
+        | "failed"
+        | "manual_required"
+        | "retry_scheduled"
+        | "cancelled"
+      job_type: "cnpj_lookup" | "cnd_lookup" | "dry_run"
       log_acao: "envio" | "abertura" | "visualizacao" | "download"
+      log_level: "info" | "warning" | "error"
+      lookup_status:
+        | "queued"
+        | "running"
+        | "success"
+        | "partial"
+        | "failed"
+        | "manual_required"
+        | "cancelled"
+      provider_health_status: "online" | "degraded" | "offline" | "paused"
+      provider_runtime: "cloudflare_worker_browser_run"
       regime_tributario:
         | "simples_nacional"
         | "lucro_presumido"
@@ -1063,8 +1651,20 @@ export const Constants = {
         "sem_pdf",
         "checklist_incompleto",
       ],
+      artifact_type: ["screenshot", "html", "pdf", "trace", "text"],
       batch_status: ["agendado", "executando", "concluido", "parcial", "falha"],
       canal_envio: ["email", "whatsapp"],
+      cnd_lookup_status: [
+        "negativa",
+        "positiva_com_efeitos",
+        "positiva",
+        "nao_emitida",
+        "indisponivel",
+        "captcha",
+        "erro_layout",
+        "manual_required",
+        "erro_transitorio",
+      ],
       cnd_status: [
         "valida",
         "vencendo",
@@ -1092,6 +1692,8 @@ export const Constants = {
       empresa_status: ["ativa", "pausada", "arquivada"],
       envio_status: ["enviado", "entregue", "lido", "erro", "pendente"],
       exception_criticidade: ["critica", "alta", "media", "baixa"],
+      exception_lifecycle: ["open", "investigating", "resolved", "ignored"],
+      exception_severity: ["info", "warning", "error", "critical"],
       exception_status: ["pendente", "em_analise", "resolvida", "descartada"],
       exception_tipologia: [
         "cnpj_inconsistente",
@@ -1108,7 +1710,32 @@ export const Constants = {
         "retorno_inesperado",
       ],
       health_status: ["ok", "degradado", "indisponivel"],
+      job_status: [
+        "queued",
+        "dispatched",
+        "running",
+        "waiting_callback",
+        "success",
+        "partial",
+        "failed",
+        "manual_required",
+        "retry_scheduled",
+        "cancelled",
+      ],
+      job_type: ["cnpj_lookup", "cnd_lookup", "dry_run"],
       log_acao: ["envio", "abertura", "visualizacao", "download"],
+      log_level: ["info", "warning", "error"],
+      lookup_status: [
+        "queued",
+        "running",
+        "success",
+        "partial",
+        "failed",
+        "manual_required",
+        "cancelled",
+      ],
+      provider_health_status: ["online", "degraded", "offline", "paused"],
+      provider_runtime: ["cloudflare_worker_browser_run"],
       regime_tributario: [
         "simples_nacional",
         "lucro_presumido",
