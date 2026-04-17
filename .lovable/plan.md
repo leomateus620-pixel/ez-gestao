@@ -1,87 +1,128 @@
 
 
-Vou investigar o bug ao criar empresa no menu /empresas.
+# Módulo Consulta CNPJ + CND — Cloudflare Worker + Lovable Cloud
 
-## Análise
+## Escopo e Premissas
 
-Olhando o código de `DataProvider.tsx`:
+Feature 100% isolada: rotas novas `/consulta/*`, tabelas novas (prefixo lógico `lookup_*` / `automation_*` novas, sem reutilizar as existentes), hooks novos, toda visibilidade protegida por feature flag. Nenhum arquivo atual de negócio é modificado, exceto `AppSidebar.tsx` (adicionar 1 item) e `App.tsx` (registrar rotas).
 
-```ts
-const addEmpresa = useCallback((empresa: Empresa): boolean => {
-  if (cnpjExists(empresa.cnpj)) return false;
-  supabase.from('empresas').insert({...}).then(() => queryClient.invalidateQueries(...));
-  return true;
-}, ...);
+**Segredos necessários** (vou pedir via add_secret na implementação):
+- `CLOUDFLARE_WORKER_URL` — endpoint do Worker
+- `CLOUDFLARE_WORKER_HMAC_SECRET` — HMAC Lovable→Worker
+- `CF_CALLBACK_HMAC_SECRET` — HMAC Worker→Callback
+
+O código do Cloudflare Worker (Playwright/Browser Rendering) **não roda dentro do Lovable** — vou entregar o código-fonte do Worker em `/cloudflare-worker/` (pasta dentro do repo, fora do build do Vite) com `wrangler.toml`, providers, HMAC e instruções de deploy. Você faz o `wrangler deploy`.
+
+## Entregáveis
+
+### 1. Schema (migration única)
+
+Tabelas novas:
+- `company_lookup_requests`, `company_lookup_results`
+- `cnd_lookup_requests`, `cnd_lookup_results`
+- `automation_jobs`, `automation_job_logs`, `automation_artifacts`
+- `automation_exceptions`, `provider_health`
+- `feature_flags` (key/value/enabled), `automation_config_kv` (key/value_json)
+
+Enums novos (isolados, sem colidir com os atuais): `lookup_status`, `cnd_lookup_status`, `job_status`, `job_type`, `artifact_type`, `provider_runtime`, `exception_severity`, `exception_lifecycle`.
+
+RLS: `anon + authenticated` com `USING true` (mantém padrão atual do projeto). Realtime habilitado em `automation_jobs`, `automation_job_logs`, `company_lookup_requests`, `cnd_lookup_requests`.
+
+Storage: bucket **privado** `automation-artifacts`.
+
+Seed: linhas iniciais em `feature_flags` (todas `false`, exceto `consulta_publica_dry_run_required=true`) e `provider_health` (`cloudflare_worker_browser_run`, status `paused`).
+
+### 2. Edge Functions (8)
+
+`lookup-dispatcher` · `lookup-status` · `cf-progress-callback` · `cf-final-callback` · `artifacts-sign` · `lookup-retry` · `provider-health-summary` · `dry-run-zimmermann`
+
+Todas com: Zod validation, CORS, HMAC verify nos callbacks (timestamp ±5min + nonce anti-replay em tabela `hmac_nonces`), `correlation_id`, logging estruturado.
+
+### 3. Cloudflare Worker (código-fonte entregue, deploy do seu lado)
+
+Pasta `/cloudflare-worker/` com:
+```
+src/index.ts              # Hono router: /execute-job /health /version
+src/lib/security.ts       # HMAC verify + sign
+src/lib/browser.ts        # @cloudflare/playwright launch wrapper
+src/lib/progress.ts       # POST para cf-progress-callback
+src/lib/upload.ts         # signed URL upload
+src/lib/classification.ts # captcha/layout/timeout → failure type
+src/providers/cnpj-public-portal.ts   # solucoes.receita.fazenda.gov.br
+src/providers/cnd-public-portal.ts    # solucoes.receita.fazenda.gov.br/Servicos/certidaointernet
+wrangler.toml             # com browser binding
+README.md                 # deploy + env vars
 ```
 
-Problemas identificados:
+### 4. Frontend
 
-1. **Sem autenticação**: As políticas RLS exigem `authenticated`, mas o projeto **não tem sistema de login**. Qualquer INSERT vai falhar com `new row violates row-level security policy` porque o usuário é anônimo.
+**Providers/Registry** (`src/features/consulta/providers/registry.ts`): `provider_public_portal_cnpj_cloudflare`, `provider_public_portal_cnd_cloudflare`, `provider_serpro_*_placeholder`. Factory plugável.
 
-2. **Erros silenciosos**: O `.then()` ignora erros completamente — não há `.catch()`, não há toast, não há feedback ao usuário. Por isso "nada acontece" ao salvar.
+**Services** (`src/features/consulta/services/`): `cnpj-utils.ts` (normalize/validate/mask com DV), `cache.ts`, `dispatcher.ts`, `classification.ts`, `timeline.ts`, `dry-run-report.ts`, `parsers/`.
 
-3. **Fire-and-forget**: `addEmpresa` retorna `true` antes do INSERT terminar, então o formulário fecha mesmo quando o INSERT falha no servidor.
+**Hooks** (`src/features/consulta/hooks/`): `useCnpjLookup`, `useCndLookup`, `useLookupStatus` (polling adaptativo + realtime), `useLookupHistory`, `useLookupArtifacts`, `useExecutionTimeline`, `useProviderHealth`, `useExceptionsCenter`, `useDryRunReport`.
 
-4. **Mesmo padrão em todas as mutations** (updateEmpresa, addDocumento, addEnvio, etc.) — todas falham silenciosamente.
+**Páginas** (`src/pages/consulta/`):
+- `ConsultaIndex.tsx` — hero, input CNPJ com máscara, botões Consultar CNPJ / Consultar CND / Forçar refresh, cards de resultado, timeline, badges.
+- `ConsultaHistorico.tsx` — lista paginada, filtros (CNPJ, tipo, status, período), drill-down.
+- `ConsultaExcecoes.tsx` — filtros por tipologia, comparar última vs anterior, reprocessar, marcar resolvido, anexar nota.
+- `ConsultaSaude.tsx` — provider status, taxa sucesso 24h, latência, circuit breaker, jobs em fila, heartbeat.
+- `ConsultaRelatorio.tsx` (`/consulta/relatorios/:id`) — relatório de dry-run com evidências.
 
-## Causa raiz
+**Componentes** (`src/features/consulta/components/`): `CnpjInput`, `CacheBadge`, `StatusBadge`, `CompanyResultCard`, `CndResultCard`, `ExecutionTimeline` (novo, não reusa o atual para ficar isolado), `ArtifactViewer`, `ExceptionDetail`, `ProviderHealthCard`.
 
-RLS authenticated + ausência de auth = todo INSERT é bloqueado, e o erro nunca aparece na UI.
+**Design**: glassmorphism existente (`GlassCard`), Tailwind tokens do projeto, responsivo mobile-first. Sem alterar `index.css` nem `tailwind.config.ts` além de eventuais utilitários novos.
 
-## Correção
+### 5. Integração Sidebar + Router
 
-### Opção escolhida: ajustar RLS para permitir acesso público temporário + adicionar tratamento de erro
+- `AppSidebar.tsx`: adicionar grupo "Consulta" com item único "Consulta CNPJ/CND" (ícone `Search`), **renderizado condicionalmente** via `feature_flags.consulta_publica_enabled`.
+- `App.tsx`: registrar 5 rotas novas dentro de `<Routes>`.
 
-Como o sistema ainda não tem tela de login implementada (o plano original previa isso para uma fase futura) e o usuário precisa usar o sistema agora, a correção mais pragmática é:
+### 6. Fluxo End-to-End
 
-**1. Migração SQL** — alterar políticas RLS de `empresas` (e demais tabelas operacionais) para aceitar `anon` além de `authenticated`, mantendo a estrutura preparada para auth futura:
-
-```sql
--- empresas
-DROP POLICY "Authenticated users can insert empresas" ON public.empresas;
-DROP POLICY "Authenticated users can read empresas" ON public.empresas;
-DROP POLICY "Authenticated users can update empresas" ON public.empresas;
-DROP POLICY "Authenticated users can delete empresas" ON public.empresas;
-
-CREATE POLICY "Public can manage empresas" ON public.empresas
-  FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+```text
+UI → lookup-dispatcher (cache check → cria request+job → HMAC sign → POST Worker)
+                                                                      ↓
+                                                       Cloudflare Worker + Playwright
+                                                                      ↓
+                                         cf-progress-callback (logs, heartbeat, artifacts)
+                                                                      ↓
+                                         cf-final-callback (result, classify, cache, exception?)
+                                                                      ↓
+                                         UI polling lookup-status + Realtime → atualiza timeline
 ```
 
-Aplicar o mesmo padrão a: `cnd_items`, `documentos`, `envios`, `alertas`, `logs_acesso`, `audit_trail`, `cnd_historico`, `connectors`, `connector_runs`, `connector_run_steps`, `exceptions`, `automation_batches`, `automation_config`, `health_logs`, `retry_policies`, `scheduling_rules`.
+### 7. Dry-Run Zimmermann
 
-**2. Refatorar `addEmpresa` (e todas as outras mutations) em `DataProvider.tsx`** para usar `useMutation` com `await`, capturando erros e mostrando `toast`:
+Edge function `dry-run-zimmermann` dispara CNPJ+CND para `88736335000113`, aguarda conclusão, consolida evidências, gera relatório (JSON + PDF em `automation-artifacts/reports/`), e só então admin pode setar `consulta_publica_enabled=true` via UI de Saúde.
 
-```ts
-const addEmpresaMutation = useMutation({
-  mutationFn: async (empresa: Empresa) => {
-    const { error } = await supabase.from('empresas').insert({...});
-    if (error) throw error;
-  },
-  onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ['empresas'] });
-    toast({ title: 'Empresa criada com sucesso' });
-  },
-  onError: (err) => {
-    toast({ title: 'Erro ao salvar empresa', description: err.message, variant: 'destructive' });
-  },
-});
+### 8. Segurança
 
-const addEmpresa = (empresa: Empresa): boolean => {
-  if (cnpjExists(empresa.cnpj)) {
-    toast({ title: 'CNPJ já cadastrado', variant: 'destructive' });
-    return false;
-  }
-  addEmpresaMutation.mutate(empresa);
-  return true;
-};
-```
+- HMAC-SHA256 bidirecional com `timestamp + nonce` (tabela `hmac_nonces` TTL 10min)
+- Bucket privado + signed URLs (5min)
+- Service role **somente em edge functions**
+- Sanitização de payloads em logs visíveis ao usuário
+- Feature flags como gate único
 
-Aplicar o mesmo padrão (await + try/catch + toast) a `updateEmpresa`, `addDocumento`, `addEnvio`, `addLog`, `resolveAlerta`, `markAlertaLido`, `resolveAllAlertas`, `markAllAlertasLidos` e `generateChecklistForRegime`.
+## Ordem de Implementação
 
-⚠️ **Nota de segurança**: Abrir RLS para `anon` é um workaround temporário para o sistema funcionar sem auth. Quando você adicionar login (recomendado em seguida), as políticas devem voltar a `authenticated` e idealmente filtrar por `user_id`.
+1. Migration (tabelas + enums + bucket + seed)
+2. Pedir 3 secrets (CF URL + 2 HMAC)
+3. Edge functions (8) + `supabase/config.toml` com `verify_jwt=false` nos callbacks
+4. Código-fonte do Cloudflare Worker em `/cloudflare-worker/`
+5. Frontend: providers, services, hooks
+6. Páginas + componentes
+7. Sidebar + rotas (atrás da flag)
+8. README operacional em `/cloudflare-worker/README.md` e `docs/consulta-module.md`
 
-## Arquivos afetados
+## Garantia de Não-Regressão
 
-- **Nova migração SQL** — abertura das políticas RLS para anon
-- **`src/data/DataProvider.tsx`** — todas as mutations com error handling + toast
+- Zero alteração em: `DataProvider`, `AutomationProvider`, todas as páginas atuais, tabelas atuais, enums atuais, `index.css`, `tailwind.config.ts`.
+- Único arquivo atual tocado: `AppSidebar.tsx` (append condicional) e `App.tsx` (append de rotas).
+- Flag global desligada por padrão — feature invisível até dry-run aprovado.
+
+## Limitações Transparentes
+
+- Enquanto você não fizer `wrangler deploy` do Worker e cadastrar os 3 secrets, toda consulta real cai em `manual_required` com mensagem clara ("Worker Cloudflare não configurado"). UI, fila, cache, histórico, exceções e saúde funcionam normalmente.
+- Portais Receita/PGFN podem introduzir captcha a qualquer momento; classificação `captcha_detected` + `manual_required` é o comportamento correto, não um bug.
 
