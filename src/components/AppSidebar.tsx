@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Building2, CalendarDays, ShieldCheck,
-  FileText, Send, Bell, ScrollText, Settings, Bot, ListChecks, Plug, AlertTriangle
+  FileText, Send, Bell, ScrollText, Settings, Bot, ListChecks, Plug, AlertTriangle, Search
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
@@ -12,6 +12,7 @@ import {
 import { useDataStore } from '@/data/DataProvider';
 import { useAutomation } from '@/data/AutomationProvider';
 import { Separator } from '@/components/ui/separator';
+import { useFeatureFlag } from '@/features/consulta/hooks/useLookup';
 
 const mainMenuItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
@@ -42,6 +43,8 @@ export function AppSidebar() {
   const { state: dataState } = useDataStore();
   const { pendingExceptions } = useAutomation();
   const alertasNaoLidos = dataState.alertas.filter(a => !a.lido && !a.resolvido).length;
+  const { data: consultaFlag } = useFeatureFlag('consulta_publica_enabled');
+  const consultaVisible = !!consultaFlag?.enabled;
 
   const renderMenuItem = (item: { title: string; url: string; icon: React.ElementType }, badgeCount?: number) => {
     const isActive = item.url === '/'
@@ -128,6 +131,22 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {consultaVisible && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-sidebar-foreground/40 text-[10px] uppercase tracking-[0.15em] font-semibold">
+              {!collapsed ? 'Consulta Pública' : ''}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu className="space-y-0.5">
+                {renderMenuItem({ title: 'Consulta CNPJ/CND', url: '/consulta', icon: Search })}
+                {renderMenuItem({ title: 'Histórico', url: '/consulta/historico', icon: ListChecks })}
+                {renderMenuItem({ title: 'Exceções', url: '/consulta/excecoes', icon: AlertTriangle })}
+                {renderMenuItem({ title: 'Saúde', url: '/consulta/saude', icon: Plug })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="p-4">
