@@ -221,17 +221,24 @@ serve(async (req) => {
       });
       if (!resp.ok && resp.status !== 202) {
         const txt = await resp.text();
-        throw new Error(`worker_${resp.status}: ${txt.slice(0, 200)}`);
+        const err: any = new Error(`worker_${resp.status}: ${txt.slice(0, 200)}`);
+        err.statusCode = resp.status;
+        throw err;
       }
       await supabase.from("automation_jobs").update({
         status: "dispatched",
         dispatched_at: new Date().toISOString(),
       }).eq("id", jobRow.id);
     } catch (err: any) {
+      const isAuth = err?.statusCode === 401 || /invalid_signature|stale_timestamp|worker_401/.test(String(err?.message || ""));
+      const errorType = isAuth ? "worker_auth_failed" : "worker_unreachable";
+      const friendly = isAuth
+        ? "Worker rejeitou a assinatura HMAC. O segredo CLOUDFLARE_WORKER_HMAC_SECRET (Lovable) e LOVABLE_HMAC_SECRET (Worker) precisam ser idênticos. Use /consulta/saude → 'Diagnosticar HMAC' para confirmar."
+        : String(err?.message || err).slice(0, 500);
       await supabase.from("automation_jobs").update({
         status: "failed",
-        error_type: "worker_unreachable",
-        error_message: String(err?.message || err).slice(0, 500),
+        error_type: errorType,
+        error_message: friendly,
         finished_at: new Date().toISOString(),
       }).eq("id", jobRow.id);
       await supabase.from(requestTable).update({
@@ -239,9 +246,9 @@ serve(async (req) => {
         finished_at: new Date().toISOString(),
       }).eq("id", requestRow.id);
       await supabase.from("automation_exceptions").insert({
-        title: "Worker Cloudflare inalcançável",
-        description: String(err?.message || err).slice(0, 500),
-        exception_type: "worker_unreachable",
+        title: isAuth ? "Worker rejeitou assinatura HMAC" : "Worker Cloudflare inalcançável",
+        description: friendly,
+        exception_type: errorType,
         severity: "error",
         job_id: jobRow.id,
         technical_details_json: { cnpj, type, correlation_id },
@@ -252,7 +259,8 @@ serve(async (req) => {
         from_cache: false,
         correlation_id,
         status: "failed",
-        error: "worker_unreachable",
+        error: errorType,
+        message: friendly,
       }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
