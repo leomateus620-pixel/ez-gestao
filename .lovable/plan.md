@@ -1,65 +1,74 @@
 
 
-# Republicar frontend + habilitar acesso ao módulo Consulta
+# Diagnóstico final + correção
 
-## Causa raiz do 404
+## O que descobri
 
-`https://ez-gestao.lovable.app/consulta/saude` retorna 404 porque o **build publicado está desatualizado**. As rotas `/consulta/*` existem no código (`src/App.tsx` linhas 60-64) e o `AppSidebar.tsx` já tem o grupo "Consulta Pública", mas o último deploy publicado em `ez-gestao.lovable.app` é anterior à adição dessas rotas.
+Chamei o Worker direto:
 
-Em Lovable, alterações de **frontend** (rotas, componentes, UI) só vão pra produção quando você clica em **Publish → Update**. Edge functions e migrations já foram pra produção automaticamente — o frontend, não.
-
-## O que VOCÊ precisa fazer (ações manuais — 30 segundos)
-
-### Passo 1 — Republicar o frontend
-- **Desktop**: clicar no botão **Publish** (canto superior direito) → **Update**
-- **Mobile**: tocar nos três pontinhos (`...`) no canto inferior direito → **Publish** → **Update**
-
-Aguardar 20-40s o deploy concluir. Após isso, as 5 rotas vão funcionar:
-- `/consulta`
-- `/consulta/historico`
-- `/consulta/excecoes`
-- `/consulta/saude`
-- `/consulta/relatorios/:id`
-
-### Passo 2 — Habilitar o item no sidebar (opcional)
-A flag `consulta_publica_enabled` está `false` no banco, então o grupo "Consulta Pública" não aparece no menu lateral. Isso é por design (gate do dry-run). Duas opções:
-
-- **Opção A — Acessar via URL direta**: depois do Passo 1, basta digitar `https://ez-gestao.lovable.app/consulta` no navegador. Funciona mesmo com a flag desligada.
-- **Opção B — Forçar a flag para teste imediato**: posso (em modo default) rodar uma migration que seta `consulta_publica_enabled = true`, fazendo o item aparecer no sidebar antes do dry-run. Recomendado só pra teste interno.
-
-## O que EU vou fazer (após você aprovar este plano)
-
-Mudo para o modo default e executo:
-
-1. **Verificar o estado da flag** com uma `read_query` para confirmar o valor atual de `consulta_publica_enabled` em `feature_flags`.
-2. **Se você escolher Opção B**: criar migration `UPDATE public.feature_flags SET enabled = true WHERE key = 'consulta_publica_enabled'` para liberar o item no sidebar.
-3. **Verificação pós-publish (após você clicar em Update)**: usar o browser tool em `https://ez-gestao.lovable.app/consulta/saude` para confirmar que a rota carrega 200 e a página renderiza.
-4. **Se ainda houver problema** após o republish (improvável): inspecionar console/network logs do deploy publicado para identificar erro de build runtime e corrigir.
-
-## Não-regressão garantida
-
-- Nenhum código de UI/rotas precisa ser alterado — está tudo correto no repositório.
-- Migration da flag (se Opção B) toca **somente** uma linha de `feature_flags`, sem afetar nenhuma outra tabela.
-- Nenhuma alteração em módulos atuais.
-
-## Resposta direta às suas perguntas
-
-| # | Item | Status |
+| Endpoint | Resultado | Conclusão |
 |---|---|---|
-| 1 | Rotas registradas em `App.tsx` | ✅ Sim, todas as 5 (linhas 60-64) |
-| 2 | `App.tsx` atualizado no código | ✅ Sim (no preview/repo) — falta publicar |
-| 3 | `AppSidebar.tsx` atualizado no código | ✅ Sim (linhas 135-149) — falta publicar |
-| 4 | Flag bloqueia rota? | ❌ Não. Flag só esconde item do sidebar. Rota é acessível por URL |
-| 5 | Erro de build/deploy? | ❌ Não há erro — simplesmente o deploy publicado é antigo |
-| 6 | Republicar frontend | ⚠️ Ação manual sua (botão Publish) |
-| 7 | Forçar rebuild | ⚠️ O botão Publish já faz rebuild + deploy completo |
-| 8 | Caminho correto da rota | `https://ez-gestao.lovable.app/consulta/saude` (após republish) |
+| `GET /health` | `has_lovable_secret: true`, `has_callback_secret: true` | **Os secrets ESTÃO configurados no Worker** ✅ |
+| `POST /debug-sign` | `404 not_found` | **Rota não existe no deploy atual** ❌ |
+| `callback_base` | `"\u0016"` (caractere de controle) | **`CALLBACK_BASE_URL` foi colado com lixo** ❌ |
 
-## Pergunta para você decidir
+A UI mostra "Worker não tem `LOVABLE_HMAC_SECRET` configurado" porque a edge function `consulta-hmac-diagnose` chama `/debug-sign`, que retorna 404 → o JSON parse falha → o frontend interpreta como `has_secret: false`. **É falso negativo.**
 
-Qual opção prefere para o sidebar?
-- **A** — Manter flag desligada (acessar via URL direta enquanto não roda dry-run)
-- **B** — Eu ligo a flag agora via migration para o item aparecer no menu imediatamente
+A real causa do dry-run reprovado anteriormente provavelmente foi o `CALLBACK_BASE_URL` corrompido (`\u0016`), que faz callbacks falharem.
 
-Independente da escolha, **clique em Publish → Update primeiro** — é o que destrava o 404.
+## Causa raiz (duas coisas)
+
+1. **Você não fez `wrangler deploy` depois que eu adicionei o endpoint `/debug-sign`** ao código do Worker. O endpoint existe no repositório (`cloudflare-worker/src/index.ts` linha 32), mas o Worker em produção é uma versão anterior.
+2. **`CALLBACK_BASE_URL` foi setado com um caractere inválido** (`\u0016` = SYN control char). Foi um paste/copy bugado no terminal.
+
+## O que você precisa fazer (manual — 2 comandos)
+
+### 1. Reconfigurar `CALLBACK_BASE_URL` (corrigir o lixo)
+
+```bash
+cd cloudflare-worker
+wrangler secret put CALLBACK_BASE_URL
+# Cole EXATAMENTE: https://wsgphutkybxhajyicxif.supabase.co/functions/v1
+```
+
+### 2. Redeploy o Worker para publicar `/debug-sign`
+
+```bash
+cd cloudflare-worker
+wrangler deploy
+```
+
+Isso publica a versão atual do código (com `/debug-sign` incluído).
+
+## Validação após esses 2 comandos
+
+Eu rodo automaticamente em modo default:
+
+1. `curl /health` → confirmar `callback_base` é a URL correta (sem `\u0016`)
+2. `curl /debug-sign` → confirmar que retorna 200 e não mais 404
+3. Chamar `consulta-hmac-diagnose` via Supabase → confirmar `signatures_match: true` e `fingerprints_match: true`
+4. Se tudo verde, mensagem clara: "Pode rodar dry-run".
+
+## Melhorias de robustez que vou aplicar (em modo default, depois da sua aprovação)
+
+Para esse problema **nunca mais acontecer silenciosamente**:
+
+1. **`consulta-hmac-diagnose` detectar `/debug-sign` 404 explicitamente**: mostrar mensagem "O Worker está rodando mas não tem o endpoint de diagnóstico — faça `wrangler deploy` para atualizar."
+2. **Adicionar checagem de `callback_base` ao diagnóstico**: validar que é uma URL HTTPS válida; se contiver caracteres de controle ou não for URL, alertar imediatamente.
+3. **Expor `version` no `/health` com timestamp do deploy**: trocar `VERSION = "1.0.0"` estático por um valor que muda a cada deploy, para a UI conseguir mostrar "Worker desatualizado — faça redeploy".
+4. **Card "Saúde do Worker"** no `/consulta/saude` mostrando o JSON do `/health` formatado, para ver os 4 sinais (binding, secrets, callback URL, version) sem precisar de terminal.
+
+## Arquivos que serão alterados (modo default)
+
+- `cloudflare-worker/src/index.ts` — adicionar validação de `CALLBACK_BASE_URL` em `/health` (detectar caracteres de controle) e versão dinâmica
+- `supabase/functions/consulta-hmac-diagnose/index.ts` — tratar 404 do `/debug-sign` como "worker desatualizado, redeploy necessário"
+- `src/pages/consulta/ConsultaSaude.tsx` — adicionar card "Status do Worker" mostrando `/health` JSON
+
+## Resumo curto
+
+- ✅ Secrets no Worker estão OK (não precisa rodar `wrangler secret put LOVABLE_HMAC_SECRET` de novo)
+- ❌ `CALLBACK_BASE_URL` está corrompido — refaça
+- ❌ `/debug-sign` não existe no deploy atual — rode `wrangler deploy`
+
+Aprovando este plano, eu faço as melhorias acima e valido o fluxo ponta a ponta assim que você rodar os 2 comandos.
 
