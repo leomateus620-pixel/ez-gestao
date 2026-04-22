@@ -20,8 +20,8 @@ export function ProviderHealthCard({ health }: Props) {
       </CardHeader>
       <CardContent className="space-y-3">
         {!health.worker_configured && (
-          <div className="flex items-center gap-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs">
-            <AlertCircle className="h-4 w-4 text-yellow-500" />
+          <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-warning-foreground">
+            <AlertCircle className="h-4 w-4 text-warning" />
             Worker Cloudflare não configurado (faltam secrets).
           </div>
         )}
