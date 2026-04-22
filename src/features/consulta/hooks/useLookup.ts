@@ -106,6 +106,24 @@ export function useDryRun() {
   return useMutation({ mutationFn: () => runDryRunZimmermann() });
 }
 
+export function useHmacDiagnose() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("consulta-hmac-diagnose", { body: {} });
+      if (error) throw error;
+      return data as {
+        ok: boolean;
+        signatures_match?: boolean;
+        fingerprints_match?: boolean;
+        local?: { signature: string; fingerprint: string; secret_length: number };
+        worker?: { signature: string; fingerprint: string; secret_length: number; has_secret: boolean };
+        message: string;
+        reason?: string;
+      };
+    },
+  });
+}
+
 export function useFeatureFlag(key: string) {
   return useQuery({
     queryKey: ["feature-flag", key],
