@@ -1,1 +1,25 @@
 project_id = "wsgphutkybxhajyicxif"
+
+[functions.cf-progress-callback]
+verify_jwt = false
+
+[functions.cf-final-callback]
+verify_jwt = false
+
+[functions.artifacts-sign]
+verify_jwt = false
+
+[functions.lookup-dispatcher]
+verify_jwt = false
+
+[functions.lookup-status]
+verify_jwt = false
+
+[functions.lookup-retry]
+verify_jwt = false
+
+[functions.provider-health-summary]
+verify_jwt = false
+
+[functions.dry-run-zimmermann]
+verify_jwt = false
