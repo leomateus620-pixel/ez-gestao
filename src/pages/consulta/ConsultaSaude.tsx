@@ -6,7 +6,7 @@ import { useProviderHealth, useDryRun, useDryRunStatus, useFeatureFlag, useHmacD
 import { ProviderHealthCard } from "@/features/consulta/components/ProviderHealthCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
-import { Play, FileText, Lock, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Play, FileText, Lock, ShieldCheck, ShieldAlert, Server } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 
@@ -19,6 +19,8 @@ export default function ConsultaSaude() {
   const qc = useQueryClient();
 
   const passed = (dryRun?.value_json as any)?.passed === true;
+  const workerHealth: any = (health as any)?.worker_health?.body ?? null;
+  const workerHealthOk = !!(health as any)?.worker_health?.ok;
 
   const toggleFlag = async (enabled: boolean) => {
     if (enabled && !passed) { toast.error("Execute o dry-run com sucesso antes de habilitar."); return; }
@@ -70,6 +72,67 @@ export default function ConsultaSaude() {
       <header><h1 className="text-2xl font-bold tracking-tight">Saúde do módulo</h1></header>
 
       <ProviderHealthCard health={health} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Server className="h-4 w-4" /> Status do Worker Cloudflare
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!workerHealth ? (
+            <p className="text-sm text-muted-foreground">Worker inacessível ou ainda não respondeu.</p>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+              <div className="rounded-md border p-2">
+                <div className="text-xs text-muted-foreground">Online</div>
+                <div className={workerHealthOk ? "text-primary font-medium" : "text-destructive font-medium"}>
+                  {workerHealthOk ? "Sim" : "Não"}
+                </div>
+              </div>
+              <div className="rounded-md border p-2">
+                <div className="text-xs text-muted-foreground">Build</div>
+                <div className="font-mono text-xs">{workerHealth.build_id || workerHealth.version || "—"}</div>
+              </div>
+              <div className="rounded-md border p-2">
+                <div className="text-xs text-muted-foreground">Browser binding</div>
+                <div className="font-mono text-xs">{workerHealth.browser_binding || "—"}</div>
+              </div>
+              <div className="rounded-md border p-2">
+                <div className="text-xs text-muted-foreground">LOVABLE_HMAC_SECRET</div>
+                <div className={workerHealth.has_lovable_secret ? "text-primary" : "text-destructive"}>
+                  {workerHealth.has_lovable_secret ? "Configurado" : "Faltando"}
+                </div>
+              </div>
+              <div className="rounded-md border p-2">
+                <div className="text-xs text-muted-foreground">CALLBACK_HMAC_SECRET</div>
+                <div className={workerHealth.has_callback_secret ? "text-primary" : "text-destructive"}>
+                  {workerHealth.has_callback_secret ? "Configurado" : "Faltando"}
+                </div>
+              </div>
+              <div className="rounded-md border p-2 col-span-2 md:col-span-3">
+                <div className="text-xs text-muted-foreground">CALLBACK_BASE_URL</div>
+                <div className={`font-mono text-xs break-all ${workerHealth.callback_base_valid === false ? "text-destructive" : ""}`}>
+                  {workerHealth.callback_base ? JSON.stringify(workerHealth.callback_base) : "—"}
+                </div>
+                {workerHealth.callback_base_valid === false && (
+                  <div className="text-xs text-destructive mt-1">
+                    Inválido ({workerHealth.callback_base_issue}). Rode: <code>wrangler secret put CALLBACK_BASE_URL</code>
+                  </div>
+                )}
+              </div>
+              <div className="rounded-md border p-2 col-span-2 md:col-span-3">
+                <div className="text-xs text-muted-foreground">Endpoint /debug-sign</div>
+                <div className={workerHealth.has_debug_sign ? "text-primary" : "text-destructive"}>
+                  {workerHealth.has_debug_sign
+                    ? "Disponível (deploy atualizado)"
+                    : "Ausente — rode: wrangler deploy"}
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
