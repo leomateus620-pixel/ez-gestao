@@ -7,14 +7,41 @@ import { sendFinal } from "./lib/progress";
 
 const app = new Hono<{ Bindings: Env }>();
 
-app.get("/health", (c) => c.json({
-  ok: true,
-  version: c.env.VERSION || "1.0.0",
-  browser_binding: "gestaoez",
-  has_lovable_secret: !!c.env.LOVABLE_HMAC_SECRET,
-  has_callback_secret: !!c.env.CALLBACK_HMAC_SECRET,
-  callback_base: c.env.CALLBACK_BASE_URL || null,
-}));
+// Build identifier — changes on every deploy via wrangler `--var` or fallback to compile time.
+// Without dynamic injection, we surface a hash of the worker's bound secrets/url config so the
+// UI can detect when the deploy is stale relative to a code change that updated this string.
+const BUILD_ID = "2026-04-22-debug-sign-v2";
+
+function validateCallbackBase(raw: string | undefined | null) {
+  if (!raw) return { value: null, valid: false, issue: "missing" as const };
+  // Detect ASCII control chars (0x00-0x1F, 0x7F) that indicate a corrupted paste.
+  if (/[\x00-\x1F\x7F]/.test(raw)) {
+    return { value: raw, valid: false, issue: "control_chars" as const };
+  }
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:") return { value: raw, valid: false, issue: "not_https" as const };
+    return { value: raw, valid: true, issue: null };
+  } catch {
+    return { value: raw, valid: false, issue: "invalid_url" as const };
+  }
+}
+
+app.get("/health", (c) => {
+  const cb = validateCallbackBase(c.env.CALLBACK_BASE_URL);
+  return c.json({
+    ok: true,
+    version: c.env.VERSION || "1.0.0",
+    build_id: BUILD_ID,
+    browser_binding: "gestaoez",
+    has_lovable_secret: !!c.env.LOVABLE_HMAC_SECRET,
+    has_callback_secret: !!c.env.CALLBACK_HMAC_SECRET,
+    callback_base: cb.value,
+    callback_base_valid: cb.valid,
+    callback_base_issue: cb.issue,
+    has_debug_sign: true,
+  });
+});
 
 app.get("/version", (c) => c.json({ version: c.env.VERSION || "1.0.0" }));
 
