@@ -1,128 +1,166 @@
 
 
-# Módulo Consulta CNPJ + CND — Cloudflare Worker + Lovable Cloud
+# Implementação Real — Edge Functions + Worker Cloudflare + UI
 
-## Escopo e Premissas
+## Status Atual
 
-Feature 100% isolada: rotas novas `/consulta/*`, tabelas novas (prefixo lógico `lookup_*` / `automation_*` novas, sem reutilizar as existentes), hooks novos, toda visibilidade protegida por feature flag. Nenhum arquivo atual de negócio é modificado, exceto `AppSidebar.tsx` (adicionar 1 item) e `App.tsx` (registrar rotas).
+✅ Worker publicado em `https://gestaoez.leomateus620.workers.dev`
+✅ Browser binding `env.gestaoez` ativo
+✅ Secrets configurados: `CLOUDFLARE_WORKER_URL`, `CLOUDFLARE_WORKER_HMAC_SECRET`, `CF_CALLBACK_HMAC_SECRET`
+✅ Schema Supabase migrado (tabelas, enums, bucket privado, feature flags)
 
-**Segredos necessários** (vou pedir via add_secret na implementação):
-- `CLOUDFLARE_WORKER_URL` — endpoint do Worker
-- `CLOUDFLARE_WORKER_HMAC_SECRET` — HMAC Lovable→Worker
-- `CF_CALLBACK_HMAC_SECRET` — HMAC Worker→Callback
+Falta agora: edge functions reais, código-fonte do Worker (`/cloudflare-worker/`) com `env.gestaoez`, e toda a UI do módulo `/consulta/*`.
 
-O código do Cloudflare Worker (Playwright/Browser Rendering) **não roda dentro do Lovable** — vou entregar o código-fonte do Worker em `/cloudflare-worker/` (pasta dentro do repo, fora do build do Vite) com `wrangler.toml`, providers, HMAC e instruções de deploy. Você faz o `wrangler deploy`.
+## 1. Edge Functions (8) — Lovable Cloud
 
-## Entregáveis
+Todas em `supabase/functions/<name>/index.ts`, com CORS, Zod, logging estruturado, `verify_jwt=false` apenas nos callbacks (já é default Lovable).
 
-### 1. Schema (migration única)
+| Função | Responsabilidade |
+|---|---|
+| `lookup-dispatcher` | Valida CNPJ → checa cache (CNPJ 7d / CND até `valid_until`) → cria `*_request` + `automation_jobs` row → assina HMAC → `POST {WORKER_URL}/execute-job` → retorna `{request_id, job_id, from_cache, correlation_id}` |
+| `lookup-status` | GET `?request_id=&type=` → consolida request + último job + logs + artifacts (signed URLs 5min) + timeline derivada |
+| `cf-progress-callback` | Verifica HMAC (timestamp ±5min + nonce em `hmac_nonces`) → grava `automation_job_logs` → atualiza `automation_jobs.status` + heartbeat em `provider_health` |
+| `cf-final-callback` | Verifica HMAC → persiste `*_results` (raw + parsed + cache_valid_until) → fecha job → cria `automation_exceptions` se falha → atualiza `provider_health` (success_rate_24h, latência) |
+| `artifacts-sign` | POST `{job_id, artifact_type, filename}` → retorna signed **upload** URL para o Worker (5min) e registra row em `automation_artifacts` |
+| `lookup-retry` | POST `{request_id}` → respeita `max_attempts` + backoff exponencial → reenfileira |
+| `provider-health-summary` | GET → agrega 24h: jobs em fila, success rate, latência média, último heartbeat, circuit breaker |
+| `dry-run-zimmermann` | Dispara CNPJ + CND para `88736335000113`, aguarda conclusão (long-poll interno até 90s), gera relatório JSON+PDF em `automation-artifacts/reports/{id}.pdf`, retorna `report_id` |
 
-Tabelas novas:
-- `company_lookup_requests`, `company_lookup_results`
-- `cnd_lookup_requests`, `cnd_lookup_results`
-- `automation_jobs`, `automation_job_logs`, `automation_artifacts`
-- `automation_exceptions`, `provider_health`
-- `feature_flags` (key/value/enabled), `automation_config_kv` (key/value_json)
+Helpers compartilhados inline em cada função: `signHmac()`, `verifyHmac()`, `consumeNonce()`, `mapErrorToType()`, `corsHeaders`.
 
-Enums novos (isolados, sem colidir com os atuais): `lookup_status`, `cnd_lookup_status`, `job_status`, `job_type`, `artifact_type`, `provider_runtime`, `exception_severity`, `exception_lifecycle`.
+`supabase/config.toml` recebe blocos `[functions.cf-progress-callback]` e `[functions.cf-final-callback]` com `verify_jwt = false` (callbacks do Worker não têm JWT do usuário).
 
-RLS: `anon + authenticated` com `USING true` (mantém padrão atual do projeto). Realtime habilitado em `automation_jobs`, `automation_job_logs`, `company_lookup_requests`, `cnd_lookup_requests`.
+## 2. Cloudflare Worker (entregue em `/cloudflare-worker/`)
 
-Storage: bucket **privado** `automation-artifacts`.
+Pasta nova fora do build do Vite (adicionar `cloudflare-worker` em `tsconfig.app.json` exclude se necessário, mas como já está fora de `src/` o Vite ignora).
 
-Seed: linhas iniciais em `feature_flags` (todas `false`, exceto `consulta_publica_dry_run_required=true`) e `provider_health` (`cloudflare_worker_browser_run`, status `paused`).
-
-### 2. Edge Functions (8)
-
-`lookup-dispatcher` · `lookup-status` · `cf-progress-callback` · `cf-final-callback` · `artifacts-sign` · `lookup-retry` · `provider-health-summary` · `dry-run-zimmermann`
-
-Todas com: Zod validation, CORS, HMAC verify nos callbacks (timestamp ±5min + nonce anti-replay em tabela `hmac_nonces`), `correlation_id`, logging estruturado.
-
-### 3. Cloudflare Worker (código-fonte entregue, deploy do seu lado)
-
-Pasta `/cloudflare-worker/` com:
 ```
-src/index.ts              # Hono router: /execute-job /health /version
-src/lib/security.ts       # HMAC verify + sign
-src/lib/browser.ts        # @cloudflare/playwright launch wrapper
-src/lib/progress.ts       # POST para cf-progress-callback
-src/lib/upload.ts         # signed URL upload
-src/lib/classification.ts # captcha/layout/timeout → failure type
-src/providers/cnpj-public-portal.ts   # solucoes.receita.fazenda.gov.br
-src/providers/cnd-public-portal.ts    # solucoes.receita.fazenda.gov.br/Servicos/certidaointernet
-wrangler.toml             # com browser binding
-README.md                 # deploy + env vars
+cloudflare-worker/
+  src/index.ts              # Hono: POST /execute-job, GET /health, GET /version
+  src/lib/security.ts       # HMAC SHA-256 verify (Lovable→Worker) + sign (Worker→callback)
+  src/lib/browser.ts        # launch via env.gestaoez (Browser Rendering binding)
+  src/lib/progress.ts       # POST cf-progress-callback assinado
+  src/lib/upload.ts         # pede signed URL via artifacts-sign + PUT
+  src/lib/classification.ts # heurísticas → captcha_detected | layout_changed | timeout | cnpj_not_found | etc.
+  src/providers/cnpj-public-portal.ts   # solucoes.receita.fazenda.gov.br/Servicos/cnpjreva
+  src/providers/cnd-public-portal.ts    # solucoes.receita.fazenda.gov.br/Servicos/certidaointernet
+  src/types.ts
+  wrangler.toml             # browser binding nome = "gestaoez", vars: SUPABASE_URL, CALLBACK_BASE
+  package.json
+  README.md                 # deploy + secrets (wrangler secret put)
 ```
 
-### 4. Frontend
+**Comportamento `/execute-job`**:
+1. Verifica HMAC do header `X-Lovable-Signature` + `X-Lovable-Timestamp` + `X-Lovable-Nonce`
+2. Lê `{job_id, job_type, cnpj, correlation_id}`
+3. Responde **202 imediatamente** e processa em `ctx.waitUntil(...)` (não bloqueia)
+4. Worker abre browser via `env.gestaoez`, executa provider, envia 4-6 progress callbacks (`navigate`, `submit`, `parse`, `artifact_uploaded`, `done`)
+5. Faz upload de screenshots/HTML/PDF via `artifacts-sign` → PUT signed URL
+6. Envia final callback com resultado classificado
+7. Em qualquer erro: classifica + final callback com `status=failed` ou `manual_required`
 
-**Providers/Registry** (`src/features/consulta/providers/registry.ts`): `provider_public_portal_cnpj_cloudflare`, `provider_public_portal_cnd_cloudflare`, `provider_serpro_*_placeholder`. Factory plugável.
+**Substitui `/test-browser`**: removido. Mantém `/health` (retorna `{ok, version, browser_binding: "gestaoez"}`) e `/version`.
 
-**Services** (`src/features/consulta/services/`): `cnpj-utils.ts` (normalize/validate/mask com DV), `cache.ts`, `dispatcher.ts`, `classification.ts`, `timeline.ts`, `dry-run-report.ts`, `parsers/`.
+## 3. Frontend (módulo `/consulta`)
 
-**Hooks** (`src/features/consulta/hooks/`): `useCnpjLookup`, `useCndLookup`, `useLookupStatus` (polling adaptativo + realtime), `useLookupHistory`, `useLookupArtifacts`, `useExecutionTimeline`, `useProviderHealth`, `useExceptionsCenter`, `useDryRunReport`.
+### Estrutura
+```
+src/features/consulta/
+  providers/registry.ts          # factory: cnpj_cloudflare | cnd_cloudflare | serpro_*_placeholder
+  services/
+    cnpj-utils.ts                # normalize, validate (DV), mask
+    dispatcher.ts                # invoke('lookup-dispatcher')
+    cache.ts                     # leitura de cache_valid_until
+    classification.ts            # error_type → label PT-BR + sugestão
+    timeline.ts                  # logs → steps visuais
+    parsers/                     # parseCnpjResult, parseCndResult
+  hooks/
+    useCnpjLookup.ts             # mutation
+    useCndLookup.ts              # mutation
+    useLookupStatus.ts           # query + Realtime + polling adaptativo (1s→3s→10s)
+    useLookupHistory.ts
+    useLookupArtifacts.ts        # signed URLs on-demand
+    useExecutionTimeline.ts
+    useProviderHealth.ts
+    useExceptionsCenter.ts
+    useDryRunReport.ts
+  components/
+    CnpjInput.tsx                # máscara 00.000.000/0000-00
+    CacheBadge.tsx               # "Consultado agora" | "Cache" | "Expirada"
+    StatusBadge.tsx
+    CompanyResultCard.tsx
+    CndResultCard.tsx
+    ExecutionTimeline.tsx        # próprio, isolado do existente
+    ArtifactViewer.tsx           # screenshot lightbox + html/pdf download
+    ExceptionDetail.tsx
+    ProviderHealthCard.tsx
+```
 
-**Páginas** (`src/pages/consulta/`):
-- `ConsultaIndex.tsx` — hero, input CNPJ com máscara, botões Consultar CNPJ / Consultar CND / Forçar refresh, cards de resultado, timeline, badges.
-- `ConsultaHistorico.tsx` — lista paginada, filtros (CNPJ, tipo, status, período), drill-down.
-- `ConsultaExcecoes.tsx` — filtros por tipologia, comparar última vs anterior, reprocessar, marcar resolvido, anexar nota.
-- `ConsultaSaude.tsx` — provider status, taxa sucesso 24h, latência, circuit breaker, jobs em fila, heartbeat.
-- `ConsultaRelatorio.tsx` (`/consulta/relatorios/:id`) — relatório de dry-run com evidências.
+### Páginas (`src/pages/consulta/`)
+- `ConsultaIndex.tsx` — `/consulta`: hero, CnpjInput, 3 botões (CNPJ, CND, Forçar refresh), resultado em cards, timeline ao vivo
+- `ConsultaHistorico.tsx` — `/consulta/historico`: tabela paginada + filtros
+- `ConsultaExcecoes.tsx` — `/consulta/excecoes`: central com tipologia, reprocessar, comparar última vs anterior, anotação
+- `ConsultaSaude.tsx` — `/consulta/saude`: provider health + botão "Rodar Dry-Run Zimmermann" + toggle `consulta_publica_enabled` (só habilitável após dry-run aprovado)
+- `ConsultaRelatorio.tsx` — `/consulta/relatorios/:id`: relatório dry-run com download PDF
 
-**Componentes** (`src/features/consulta/components/`): `CnpjInput`, `CacheBadge`, `StatusBadge`, `CompanyResultCard`, `CndResultCard`, `ExecutionTimeline` (novo, não reusa o atual para ficar isolado), `ArtifactViewer`, `ExceptionDetail`, `ProviderHealthCard`.
+### Integração mínima
+- `App.tsx`: 5 rotas novas dentro de `<Routes>`
+- `AppSidebar.tsx`: 1 item "Consulta CNPJ/CND" (ícone `Search`), **renderizado condicionalmente** lendo `feature_flags.consulta_publica_enabled` via React Query (cache 30s)
 
-**Design**: glassmorphism existente (`GlassCard`), Tailwind tokens do projeto, responsivo mobile-first. Sem alterar `index.css` nem `tailwind.config.ts` além de eventuais utilitários novos.
+## 4. Segurança
 
-### 5. Integração Sidebar + Router
+- HMAC-SHA256 bidirecional com `timestamp` (±5min) e `nonce` (tabela `hmac_nonces`, TTL 10min, cleanup via job na própria função)
+- Service role **apenas** dentro de edge functions
+- Bucket `automation-artifacts` privado, acesso só por signed URL (5min)
+- Worker valida assinatura antes de qualquer trabalho; callbacks validam assinatura antes de gravar
+- Logs do usuário sanitizados (sem segredos, sem HTML cru); detalhes técnicos só em `details_json`
 
-- `AppSidebar.tsx`: adicionar grupo "Consulta" com item único "Consulta CNPJ/CND" (ícone `Search`), **renderizado condicionalmente** via `feature_flags.consulta_publica_enabled`.
-- `App.tsx`: registrar 5 rotas novas dentro de `<Routes>`.
-
-### 6. Fluxo End-to-End
+## 5. Fluxo Real End-to-End
 
 ```text
-UI → lookup-dispatcher (cache check → cria request+job → HMAC sign → POST Worker)
-                                                                      ↓
-                                                       Cloudflare Worker + Playwright
-                                                                      ↓
-                                         cf-progress-callback (logs, heartbeat, artifacts)
-                                                                      ↓
-                                         cf-final-callback (result, classify, cache, exception?)
-                                                                      ↓
-                                         UI polling lookup-status + Realtime → atualiza timeline
+UI ConsultaIndex
+  → useCnpjLookup → invoke('lookup-dispatcher', {cnpj, type:'cnpj', force_refresh})
+       ↓
+  cache hit? → retorna result + from_cache=true
+       ↓ (miss)
+  cria company_lookup_requests + automation_jobs
+  HMAC sign + POST https://gestaoez.leomateus620.workers.dev/execute-job
+       ↓ 202 Accepted
+  UI inicia useLookupStatus (Realtime + polling)
+       ↓
+  Worker (ctx.waitUntil):
+    env.gestaoez.launch() → providers/cnpj-public-portal.ts
+    POST cf-progress-callback (×N) → logs + heartbeat
+    POST artifacts-sign → PUT screenshots/html
+    POST cf-final-callback → result + cache_valid_until
+       ↓
+  UI atualiza timeline + cards via Realtime
 ```
 
-### 7. Dry-Run Zimmermann
+CND: idêntico, com `cnd-public-portal.ts` e parsing de status (`negativa | positiva_com_efeitos | positiva | nao_emitida | indisponivel | captcha | manual_required`).
 
-Edge function `dry-run-zimmermann` dispara CNPJ+CND para `88736335000113`, aguarda conclusão, consolida evidências, gera relatório (JSON + PDF em `automation-artifacts/reports/`), e só então admin pode setar `consulta_publica_enabled=true` via UI de Saúde.
+## 6. Dry-Run Obrigatório
 
-### 8. Segurança
+`ConsultaSaude.tsx` tem botão "Executar Dry-Run Zimmermann" que chama `dry-run-zimmermann`. Função dispara CNPJ+CND, aguarda, gera PDF de evidências, marca `automation_config_kv.dry_run_passed = true|false`. Toggle `consulta_publica_enabled` só habilita se `dry_run_passed=true`.
 
-- HMAC-SHA256 bidirecional com `timestamp + nonce` (tabela `hmac_nonces` TTL 10min)
-- Bucket privado + signed URLs (5min)
-- Service role **somente em edge functions**
-- Sanitização de payloads em logs visíveis ao usuário
-- Feature flags como gate único
+## 7. Não-Regressão
 
-## Ordem de Implementação
+- Único arquivo atual editado: `App.tsx` (append rotas) e `AppSidebar.tsx` (1 item condicional)
+- Zero alteração em `DataProvider`, `AutomationProvider`, páginas atuais, tabelas/enums atuais, `index.css`, `tailwind.config.ts`
+- Flag global desligada por default — sidebar só mostra item após dry-run
 
-1. Migration (tabelas + enums + bucket + seed)
-2. Pedir 3 secrets (CF URL + 2 HMAC)
-3. Edge functions (8) + `supabase/config.toml` com `verify_jwt=false` nos callbacks
-4. Código-fonte do Cloudflare Worker em `/cloudflare-worker/`
-5. Frontend: providers, services, hooks
-6. Páginas + componentes
-7. Sidebar + rotas (atrás da flag)
-8. README operacional em `/cloudflare-worker/README.md` e `docs/consulta-module.md`
+## 8. Limitações Transparentes
 
-## Garantia de Não-Regressão
+- Portais Receita/PGFN podem exigir captcha a qualquer momento → classificação correta = `captcha_detected` + `manual_required`, **não é bug**
+- Worker responde 202 e processa async; UI nunca bloqueia
+- Se Worker estiver offline, dispatcher marca job como `failed` com `error_type=worker_unreachable` e cria exceção
 
-- Zero alteração em: `DataProvider`, `AutomationProvider`, todas as páginas atuais, tabelas atuais, enums atuais, `index.css`, `tailwind.config.ts`.
-- Único arquivo atual tocado: `AppSidebar.tsx` (append condicional) e `App.tsx` (append de rotas).
-- Flag global desligada por padrão — feature invisível até dry-run aprovado.
+## Ordem de Execução (após aprovação)
 
-## Limitações Transparentes
-
-- Enquanto você não fizer `wrangler deploy` do Worker e cadastrar os 3 secrets, toda consulta real cai em `manual_required` com mensagem clara ("Worker Cloudflare não configurado"). UI, fila, cache, histórico, exceções e saúde funcionam normalmente.
-- Portais Receita/PGFN podem introduzir captcha a qualquer momento; classificação `captcha_detected` + `manual_required` é o comportamento correto, não um bug.
+1. Criar 8 edge functions + atualizar `supabase/config.toml` (callbacks sem JWT)
+2. Criar `/cloudflare-worker/` com código completo + `wrangler.toml` usando `env.gestaoez` + README
+3. Criar `src/features/consulta/` (providers, services, hooks, components)
+4. Criar 5 páginas em `src/pages/consulta/`
+5. Editar `App.tsx` (rotas) + `AppSidebar.tsx` (item condicional)
+6. Documentação em `docs/consulta-module.md` e `cloudflare-worker/README.md` com passos de `wrangler secret put` para `LOVABLE_HMAC_SECRET`, `CALLBACK_HMAC_SECRET`, `CALLBACK_BASE_URL`
 
