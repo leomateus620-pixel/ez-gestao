@@ -22,6 +22,11 @@ import Execucoes from "./pages/Execucoes";
 import ExecucaoDetalhe from "./pages/ExecucaoDetalhe";
 import Integracoes from "./pages/Integracoes";
 import Excecoes from "./pages/Excecoes";
+import ConsultaIndex from "./pages/consulta/ConsultaIndex";
+import ConsultaHistorico from "./pages/consulta/ConsultaHistorico";
+import ConsultaExcecoes from "./pages/consulta/ConsultaExcecoes";
+import ConsultaSaude from "./pages/consulta/ConsultaSaude";
+import ConsultaRelatorio from "./pages/consulta/ConsultaRelatorio";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -52,6 +57,11 @@ const App = () => (
                   <Route path="/execucoes/:id" element={<ExecucaoDetalhe />} />
                   <Route path="/integracoes" element={<Integracoes />} />
                   <Route path="/excecoes" element={<Excecoes />} />
+                  <Route path="/consulta" element={<ConsultaIndex />} />
+                  <Route path="/consulta/historico" element={<ConsultaHistorico />} />
+                  <Route path="/consulta/excecoes" element={<ConsultaExcecoes />} />
+                  <Route path="/consulta/saude" element={<ConsultaSaude />} />
+                  <Route path="/consulta/relatorios/:id" element={<ConsultaRelatorio />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </ErrorBoundary>
