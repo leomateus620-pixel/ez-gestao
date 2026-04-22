@@ -18,6 +18,40 @@ app.get("/health", (c) => c.json({
 
 app.get("/version", (c) => c.json({ version: c.env.VERSION || "1.0.0" }));
 
+/**
+ * Diagnostic endpoint to verify the LOVABLE_HMAC_SECRET matches the dispatcher.
+ * Caller posts {ts, nonce, body}. Worker recomputes signature with its local
+ * secret and returns both the canonical payload and the resulting signature,
+ * along with the SHA-256 of the secret (truncated) so we can compare without
+ * leaking the secret itself.
+ *
+ * NOT authenticated — only echoes deterministic values from caller-provided
+ * inputs. Cannot be used to forge a real /execute-job signature unless the
+ * caller already knows the secret.
+ */
+app.post("/debug-sign", async (c) => {
+  const { ts, nonce, body } = await c.req.json().catch(() => ({} as any));
+  if (!ts || !nonce || typeof body !== "string") {
+    return c.json({ error: "missing_fields", required: ["ts", "nonce", "body"] }, 400);
+  }
+  const { signHmac } = await import("./lib/security");
+  const canonical = `${ts}.${nonce}.${body}`;
+  const sig = await signHmac(c.env.LOVABLE_HMAC_SECRET || "", canonical);
+  // SHA-256 of secret (first 12 hex chars) — lets caller compare fingerprints
+  // without revealing the secret. If fingerprints differ, the secrets differ.
+  const secretBytes = new TextEncoder().encode(c.env.LOVABLE_HMAC_SECRET || "");
+  const secretHash = await crypto.subtle.digest("SHA-256", secretBytes);
+  const fingerprint = Array.from(new Uint8Array(secretHash))
+    .slice(0, 6).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return c.json({
+    signature: sig,
+    canonical_payload: canonical,
+    secret_fingerprint: fingerprint,
+    secret_length: (c.env.LOVABLE_HMAC_SECRET || "").length,
+    has_secret: !!c.env.LOVABLE_HMAC_SECRET,
+  });
+});
+
 app.post("/execute-job", async (c) => {
   const raw = await c.req.text();
   const sig = c.req.header("x-lovable-signature") || "";
