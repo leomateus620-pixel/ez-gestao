@@ -1,0 +1,1 @@
+UPDATE public.feature_flags SET enabled = true, updated_at = now() WHERE key = 'consulta_publica_enabled';
