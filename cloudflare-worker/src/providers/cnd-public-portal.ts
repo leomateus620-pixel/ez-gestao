@@ -22,6 +22,20 @@ async function captureScreenshot(env: Env, payload: ExecuteJobPayload, page: Pag
   }
 }
 
+async function trySelectors(page: Page, selectors: string[]): Promise<unknown | null> {
+  for (const sel of selectors) {
+    try {
+      const handle = await page.$(sel);
+      if (handle) return handle;
+    } catch { /* ignore */ }
+  }
+  return null;
+}
+
+function detectCaptcha(text: string): boolean {
+  return /captcha|recaptcha|hcaptcha|n[ãa]o sou um rob[oô]/i.test(text);
+}
+
 export async function runCndLookup(env: Env, payload: ExecuteJobPayload): Promise<void> {
   const start = Date.now();
   let html = "";
@@ -33,34 +47,112 @@ export async function runCndLookup(env: Env, payload: ExecuteJobPayload): Promis
       try {
         await page.setExtraHTTPHeaders({ "User-Agent": "Mozilla/5.0 (compatible; GestaoEZ-CND/1.0)" });
       } catch { /* ignore: optional */ }
+      // Step 1: landing page
       await page.goto(PORTAL_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
-      await captureScreenshot(env, payload, page, "cnd_step1");
-
-      html = (await page.content()).toLowerCase();
-      if (/captcha|hcaptcha|recaptcha/i.test(html)) {
+      await captureScreenshot(env, payload, page, "cnd_step1_landing");
+      let landingContent = await page.content();
+      html = landingContent.toLowerCase();
+      if (detectCaptcha(html)) {
         throw new Error("captcha detected on landing page");
       }
 
-      await sendProgress(env, { job_id: payload.job_id, step: "submit", message: "Enviando CNPJ", provider: PROVIDER });
-      const input = await page.$('input[name="NI"], input[name="cnpj"]');
-      if (!input) throw new Error("selector input[name=NI|cnpj] not found");
-      await input.fill(payload.cnpj);
-      const submit = await page.$('input[type="submit"], button[type="submit"]');
-      if (submit) await submit.click();
-      await page.waitForLoadState("domcontentloaded", { timeout: 30_000 });
-      await captureScreenshot(env, payload, page, "cnd_step2");
+      // Step 2: enter form (click "Emitir Certidão" if there is an intermediate landing)
+      await sendProgress(env, { job_id: payload.job_id, step: "enter_form", message: "Acessando formulário CND", provider: PROVIDER });
+      const enterFormSelectors = [
+        'a:has-text("Emitir Certidão")',
+        'button:has-text("Emitir Certidão")',
+        'a:has-text("Emitir")',
+        'button:has-text("Emitir")',
+        'a[href*="emitir" i]',
+        'a[href*="Emitir"]',
+      ];
+      const enterFormEl = await trySelectors(page, enterFormSelectors);
+      if (enterFormEl) {
+        try {
+          await Promise.all([
+            page.waitForLoadState("domcontentloaded", { timeout: 30_000 }).catch(() => null),
+            (enterFormEl as { click: () => Promise<void> }).click(),
+          ]);
+        } catch { /* ignore — may already be on form */ }
+      }
+
+      // Step 3: fill CNPJ
+      await sendProgress(env, { job_id: payload.job_id, step: "fill_cnpj", message: "Preenchendo CNPJ", provider: PROVIDER });
+      const cnpjDigits = payload.cnpj.replace(/\D/g, "");
+      const inputSelectors = [
+        '#NI',
+        'input[name="NI"]',
+        'input[name="cnpj"]',
+        'input[id*="cnpj" i]',
+        'input[type="text"]',
+      ];
+      const input = await trySelectors(page, inputSelectors);
+      if (!input) {
+        await captureScreenshot(env, payload, page, "cnd_step2_form_missing");
+        throw new Error("layout_changed: input CNPJ not found on form (#NI / input[name=NI])");
+      }
+      await (input as { fill: (v: string) => Promise<void> }).fill(cnpjDigits);
+      await captureScreenshot(env, payload, page, "cnd_step2_form");
+
+      // Step 4: submit
+      await sendProgress(env, { job_id: payload.job_id, step: "submit", message: "Enviando consulta", provider: PROVIDER });
+      const submitSelectors = [
+        'button:has-text("Consultar")',
+        'input[type="submit"][value*="Consultar" i]',
+        '#btnConsultar',
+        'button[type="submit"]',
+        'input[type="submit"]',
+      ];
+      const submit = await trySelectors(page, submitSelectors);
+      if (!submit) {
+        throw new Error("layout_changed: submit button not found on form");
+      }
+      await (submit as { click: () => Promise<void> }).click();
+
+      // Step 5: wait for result page
+      await sendProgress(env, { job_id: payload.job_id, step: "wait_result", message: "Aguardando resposta do portal", provider: PROVIDER });
+      try {
+        await page.waitForLoadState("networkidle", { timeout: 30_000 });
+      } catch {
+        await page.waitForLoadState("domcontentloaded", { timeout: 15_000 }).catch(() => null);
+      }
+      // Wait for any known marker in result
+      try {
+        await page.waitForFunction(
+          () => {
+            const t = (document.body?.innerText || "").toLowerCase();
+            return /certid[ãa]o|c[oó]digo de controle|n[ãa]o consta|captcha|positiva|negativa/i.test(t);
+          },
+          { timeout: 30_000 }
+        );
+      } catch { /* timeout — fall through to parse */ }
+
+      await captureScreenshot(env, payload, page, "cnd_step3_result");
 
       const content = await page.content();
-      const text = content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").toLowerCase();
+      const text = content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+      const lower = text.toLowerCase();
 
-      let cnd_status: string = "indisponivel";
-      if (/positiva com efeitos de negativa/.test(text)) cnd_status = "positiva_com_efeitos";
-      else if (/negativa de d[ée]bitos/.test(text)) cnd_status = "negativa";
-      else if (/positiva/.test(text)) cnd_status = "positiva";
-      else if (/n[ãa]o.*(emitir|consta)/.test(text)) cnd_status = "nao_emitida";
+      // Step 6: detect captcha on result
+      if (detectCaptcha(lower)) {
+        throw new Error("captcha detected on result page");
+      }
 
-      const certMatch = content.match(/c[oó]digo de controle[^A-Z0-9]*([A-Z0-9.\-]+)/i);
+      // Step 7: parse
+      let cnd_status: string | null = null;
+      if (/positiva com efeitos de negativa/i.test(lower)) cnd_status = "positiva_com_efeitos";
+      else if (/negativa de d[ée]bitos|certid[ãa]o negativa/i.test(lower)) cnd_status = "negativa";
+      else if (/positiva/i.test(lower)) cnd_status = "positiva";
+      else if (/n[ãa]o (consta|foi poss[íi]vel|emitir)/i.test(lower)) cnd_status = "nao_emitida";
+
+      const certMatch = content.match(/c[óo]digo de controle[^A-Z0-9]*([A-Z0-9.\-]{6,})/i);
       const validityMatch = content.match(/v[áa]lida at[ée]\s*(\d{2}\/\d{2}\/\d{4})/i);
+      const issuedMatch = content.match(/emitida em\s*(\d{2}\/\d{2}\/\d{4})/i);
+
+      // Step 8: layout_changed if no known markers at all
+      if (!cnd_status && !certMatch && !validityMatch) {
+        throw new Error("layout_changed: no known markers in result page");
+      }
 
       await sendProgress(env, { job_id: payload.job_id, step: "done", message: "Consulta CND concluída", provider: PROVIDER });
 
@@ -69,13 +161,18 @@ export async function runCndLookup(env: Env, payload: ExecuteJobPayload): Promis
         request_id: payload.request_id,
         type: "cnd",
         status: "success",
-        cnd_status,
+        cnd_status: cnd_status || "indisponivel",
         certificate_number: certMatch?.[1] || null,
-        issued_at: new Date().toISOString(),
+        issued_at: issuedMatch ? toIsoDate(issuedMatch[1]) : new Date().toISOString(),
         valid_until: validityMatch ? toIsoDate(validityMatch[1]) : null,
         source_url: PORTAL_URL,
         raw_payload: { html_excerpt: content.slice(0, 5000) },
-        parsed_payload: { cnd_status, certificate_number: certMatch?.[1] || null },
+        parsed_payload: {
+          cnd_status: cnd_status || "indisponivel",
+          certificate_number: certMatch?.[1] || null,
+          valid_until: validityMatch ? toIsoDate(validityMatch[1]) : null,
+          issued_at: issuedMatch ? toIsoDate(issuedMatch[1]) : null,
+        },
         provider: PROVIDER,
         latency_ms: Date.now() - start,
       };
