@@ -73,6 +73,9 @@ serve(async (req) => {
     } = body;
     let { request_id } = body;
 
+    // CNDT (Certidão Negativa de Débitos Trabalhistas) reutiliza as tabelas
+    // CND, distinguindo via source_provider nas requests.
+    const isCndLike = type === "cnd" || type === "cndt";
     const reqTable = type === "cnpj" ? "company_lookup_requests" : "cnd_lookup_requests";
     const resTable = type === "cnpj" ? "company_lookup_results" : "cnd_lookup_results";
 
@@ -126,7 +129,7 @@ serve(async (req) => {
           parsed_confidence: parsed_confidence ?? 0,
           cache_valid_until: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         });
-      } else {
+      } else if (isCndLike) {
         const cacheUntil = valid_until || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
         // Prefer explicit pdf_path; fall back to parsed_payload.certificate_pdf_path
         const finalPdfPath = pdf_path
