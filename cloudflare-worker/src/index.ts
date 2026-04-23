@@ -10,7 +10,7 @@ const app = new Hono<{ Bindings: Env }>();
 // Build identifier — changes on every deploy via wrangler `--var` or fallback to compile time.
 // Without dynamic injection, we surface a hash of the worker's bound secrets/url config so the
 // UI can detect when the deploy is stale relative to a code change that updated this string.
-const BUILD_ID = "2026-04-23-rate-limit-mitigation-v1";
+const BUILD_ID = "2026-04-23-spa-hardening-v1";
 
 function validateCallbackBase(raw: string | undefined | null) {
   if (!raw) return { value: null, valid: false, issue: "missing" as const };
