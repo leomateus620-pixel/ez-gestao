@@ -87,8 +87,6 @@ serve(async (req) => {
     const provider = type === "cnpj"
       ? PROVIDER_CNPJ
       : type === "cnd" ? PROVIDER_CND : PROVIDER_CNDT;
-    // CNDT reuses CND tables; provider differentiates rows.
-    const isCndLike = type === "cnd" || type === "cndt";
 
     // ---- Cache check ----
     if (!force_refresh) {
