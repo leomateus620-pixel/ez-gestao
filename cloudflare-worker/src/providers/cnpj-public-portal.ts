@@ -1,4 +1,4 @@
-import type { Browser, Page } from "@cloudflare/playwright";
+import type { Page } from "@cloudflare/playwright";
 import type { Env, ExecuteJobPayload } from "../types";
 import { withBrowser } from "../lib/browser";
 import { sendProgress, sendFinal, requestArtifactUpload, uploadArtifactBytes } from "../lib/progress";
@@ -32,8 +32,10 @@ export async function runCnpjLookup(env: Env, payload: ExecuteJobPayload): Promi
     await sendProgress(env, { job_id: payload.job_id, step: "navigate", message: "Abrindo portal CNPJ", status: "running", provider: PROVIDER });
 
     await withBrowser(env, async (browser) => {
-      const ctx = await browser.newContext({ userAgent: "Mozilla/5.0 (compatible; GestaoEZ-CNPJ/1.0)" });
-      const page = await ctx.newPage();
+      const page = await browser.newPage();
+      try {
+        await page.setExtraHTTPHeaders({ "User-Agent": "Mozilla/5.0 (compatible; GestaoEZ-CNPJ/1.0)" });
+      } catch { /* ignore: optional */ }
       await page.goto(PORTAL_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
       await captureScreenshot(env, payload, page, "step1_portal");
 
