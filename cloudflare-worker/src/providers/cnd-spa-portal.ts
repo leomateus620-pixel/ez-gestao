@@ -2,7 +2,7 @@ import type { Page } from "@cloudflare/playwright";
 import type { Env, ExecuteJobPayload } from "../types";
 import { withBrowser } from "../lib/browser";
 import { sendProgress, sendFinal, requestArtifactUpload, uploadArtifactBytes } from "../lib/progress";
-import { findCaptchaImage, solveCaptcha } from "../lib/captcha";
+import { findCaptchaImageSmart, solveCaptcha } from "../lib/captcha";
 
 const SPA_URL = "https://servicos.receitafederal.gov.br/servico/certidoes/";
 const PROVIDER = "provider_public_portal_cnd_spa_cloudflare";
@@ -41,7 +41,7 @@ export async function runCndSpaLookup(
 
     // Step: select Pessoa Jurídica
     await sendProgress(env, { job_id: payload.job_id, step: "select_pj", message: "Selecionando Pessoa Jurídica", provider: PROVIDER });
-    const clickedPj = await tryClickByText(page, [/Pessoa\s*Jur[íi]dica/i, /CNPJ/i]);
+    const clickedPj = await tryClickClickable(page, [/Pessoa\s*Jur[íi]dica/i, /CNPJ/i]);
     if (!clickedPj) {
       await captureScreenshot(env, payload, page, "cnd_spa_no_pj");
       throw new Error("layout_changed: spa_select_pj — botão 'Pessoa Jurídica' não encontrado");
@@ -59,7 +59,8 @@ export async function runCndSpaLookup(
       'input[placeholder*="00.000.000" i]',
       'input[name*="cnpj" i]',
       'input[id*="cnpj" i]',
-      'input[type="text"]',
+      'input[formcontrolname*="cnpj" i]',
+      'input[aria-label*="CNPJ" i]',
     ]);
     if (!cnpjInput) {
       await captureScreenshot(env, payload, page, "cnd_spa_no_input");
@@ -69,40 +70,59 @@ export async function runCndSpaLookup(
     await captureScreenshot(env, payload, page, "cnd_spa_step2_form");
 
     // Step: detect + solve captcha (mandatory in SPA)
-    const captchaImg = await findCaptchaImage(page);
-    if (captchaImg) {
-      await sendProgress(env, { job_id: payload.job_id, step: "solve_captcha_spa", message: "Resolvendo captcha via OCR (SPA)", provider: PROVIDER });
-      await captureScreenshot(env, payload, page, "cnd_spa_step2b_captcha");
-      const solved = await solveCaptcha(env, page);
-      if (!solved.ok || !solved.text) {
-        // Não cai em fallback — captcha falhou, manual_required.
-        throw new Error(`captcha_unsolvable: ${solved.reason || "unknown"}`);
-      }
-      const captchaInput = await trySelectors(page, [
-        'input[placeholder*="código" i]',
-        'input[placeholder*="codigo" i]',
-        'input[id*="captcha" i]',
-        'input[name*="captcha" i]',
-      ]);
-      if (!captchaInput) {
-        throw new Error("layout_changed: spa_captcha_input — campo do código do captcha não encontrado");
-      }
-      await (captchaInput as { fill: (v: string) => Promise<void> }).fill(solved.text);
-      await captureScreenshot(env, payload, page, "cnd_spa_step2c_captcha_filled");
+    const { result: captchaFound, report: captchaScan } = await findCaptchaImageSmart(page);
+    if (!captchaFound) {
+      await captureScreenshot(env, payload, page, "cnd_spa_no_captcha");
+      await sendProgress(env, {
+        job_id: payload.job_id, step: "solve_captcha_spa",
+        message: "Captcha esperado mas não encontrado na SPA",
+        provider: PROVIDER, status: "failed",
+        details: { total_imgs: captchaScan.total_imgs, candidates: captchaScan.candidates.slice(0, 10) },
+      });
+      throw new Error("layout_changed: spa_no_captcha — captcha esperado mas não encontrado");
     }
+    await sendProgress(env, {
+      job_id: payload.job_id, step: "solve_captcha_spa",
+      message: "Resolvendo captcha via OCR (SPA)", provider: PROVIDER,
+      details: {
+        selector_used: captchaFound.selector_used,
+        width: captchaFound.width, height: captchaFound.height,
+        src_prefix: captchaFound.src_prefix, alt: captchaFound.alt,
+      },
+    });
+    await captureScreenshot(env, payload, page, "cnd_spa_step2b_captcha");
+    const solved = await solveCaptcha(env, page);
+    if (!solved.ok || !solved.text) {
+      throw new Error(`captcha_unsolvable: ${solved.reason || "unknown"}`);
+    }
+    const captchaInput = await trySelectors(page, [
+      'input[placeholder*="código" i]',
+      'input[placeholder*="codigo" i]',
+      'input[id*="captcha" i]',
+      'input[name*="captcha" i]',
+      'input[placeholder*="verifica" i]',
+      'input[placeholder*="seguran" i]',
+      'input[aria-label*="c\u00f3digo" i]',
+    ]);
+    if (!captchaInput) {
+      throw new Error("layout_changed: spa_captcha_input — campo do código do captcha não encontrado");
+    }
+    await (captchaInput as { fill: (v: string) => Promise<void> }).fill(solved.text);
+    await captureScreenshot(env, payload, page, "cnd_spa_step2c_captcha_filled");
 
     // Step: submit
     await sendProgress(env, { job_id: payload.job_id, step: "submit_spa", message: "Enviando consulta (SPA)", provider: PROVIDER });
-    const clickedSubmit = await tryClickByText(page, [/Emitir/i, /Gerar/i, /Consultar/i, /Confirmar/i]);
-    if (!clickedSubmit) {
-      const fallbackSubmit = await trySelectors(page, [
-        'button[type="submit"]',
-        'input[type="submit"]',
-      ]);
-      if (!fallbackSubmit) {
+    const submitBtn = await trySelectors(page, [
+      'button[type="submit"]:not([disabled])',
+      'input[type="submit"]:not([disabled])',
+    ]);
+    if (submitBtn) {
+      await (submitBtn as { click: () => Promise<void> }).click();
+    } else {
+      const clickedSubmit = await tryClickClickable(page, [/Emitir/i, /Gerar/i, /Consultar/i, /Confirmar/i]);
+      if (!clickedSubmit) {
         throw new Error("layout_changed: spa_submit — botão Emitir/Consultar não encontrado");
       }
-      await (fallbackSubmit as { click: () => Promise<void> }).click();
     }
 
     // Wait for result
@@ -185,21 +205,34 @@ async function trySelectors(page: Page, selectors: string[]): Promise<unknown | 
   return null;
 }
 
-async function tryClickByText(page: Page, patterns: RegExp[]): Promise<boolean> {
+/**
+ * Click a clickable element (button/role/link/card) matching one of the given
+ * text patterns. Avoids clicking generic spans inside institutional layout.
+ */
+async function tryClickClickable(page: Page, patterns: RegExp[]): Promise<boolean> {
+  const roleStrategies = [
+    (re: RegExp) => page.getByRole("button").filter({ hasText: re }).first(),
+    (re: RegExp) => page.getByRole("link").filter({ hasText: re }).first(),
+  ];
   for (const re of patterns) {
+    for (const make of roleStrategies) {
+      try {
+        const loc = make(re);
+        const count = await loc.count().catch(() => 0);
+        if (count > 0) {
+          await loc.click({ timeout: 8_000 });
+          return true;
+        }
+      } catch { /* try next */ }
+    }
+    // Fallback: clickable containers (mat-card, [role=button], .card) with text
     try {
-      const loc = page.getByText(re, { exact: false }).first();
+      const loc = page.locator(
+        'button, [role="button"], a, mat-card, .card, .clickable',
+      ).filter({ hasText: re }).first();
       const count = await loc.count().catch(() => 0);
       if (count > 0) {
         await loc.click({ timeout: 8_000 });
-        return true;
-      }
-    } catch { /* try next */ }
-    try {
-      const btn = page.getByRole("button").filter({ hasText: re }).first();
-      const count = await btn.count().catch(() => 0);
-      if (count > 0) {
-        await btn.click({ timeout: 8_000 });
         return true;
       }
     } catch { /* try next */ }
