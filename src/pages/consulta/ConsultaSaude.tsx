@@ -2,11 +2,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { useProviderHealth, useDryRun, useDryRunStatus, useFeatureFlag, useHmacDiagnose, useDryRunLive } from "@/features/consulta/hooks/useLookup";
+import { useProviderHealth, useDryRun, useDryRunStatus, useFeatureFlag, useHmacDiagnose, useDryRunLive, useCancelDryRun } from "@/features/consulta/hooks/useLookup";
 import { ProviderHealthCard } from "@/features/consulta/components/ProviderHealthCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
-import { Play, FileText, Lock, ShieldCheck, ShieldAlert, Server } from "lucide-react";
+import { Play, FileText, Lock, ShieldCheck, ShieldAlert, Server, X } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { useState } from "react";
@@ -17,6 +17,7 @@ export default function ConsultaSaude() {
   const { data: dryRun, refetch: refetchDryRun } = useDryRunStatus();
   const { data: flag, refetch: refetchFlag } = useFeatureFlag("consulta_publica_enabled");
   const dryRunMut = useDryRun();
+  const cancelMut = useCancelDryRun();
   const diagMut = useHmacDiagnose();
   const qc = useQueryClient();
   const [polling, setPolling] = useState(false);
@@ -72,6 +73,17 @@ export default function ConsultaSaude() {
       refetchDryRun();
     } catch (e: any) {
       toast.error("Falha no dry-run", { description: e?.message });
+    }
+  };
+
+  const cancelDry = async () => {
+    try {
+      const r = await cancelMut.mutateAsync();
+      toast.success("Dry-run cancelado", { description: `${r.cancelled_jobs} job(s) marcado(s) como cancelados.` });
+      setPolling(false);
+      refetchDryRun();
+    } catch (e: any) {
+      toast.error("Falha ao cancelar", { description: e?.message });
     }
   };
 
@@ -213,6 +225,11 @@ wrangler secret put LOVABLE_HMAC_SECRET
             <Button onClick={runDry} disabled={dryRunMut.isPending || inProgress}>
               <Play className="h-4 w-4 mr-1" /> {inProgress ? "Executando…" : dryRunMut.isPending ? "Disparando…" : "Executar dry-run"}
             </Button>
+            {inProgress && (
+              <Button onClick={cancelDry} disabled={cancelMut.isPending} variant="destructive">
+                <X className="h-4 w-4 mr-1" /> {cancelMut.isPending ? "Cancelando…" : "Cancelar dry-run"}
+              </Button>
+            )}
             {(dryRun || live) && (
               <span className={`text-sm ${inProgress ? "text-muted-foreground" : passed ? "text-primary" : "text-destructive"}`}>
                 {inProgress ? "EM ANDAMENTO" : `Último: ${passed ? "APROVADO" : "REPROVADO"}`}
