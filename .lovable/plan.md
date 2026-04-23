@@ -1,90 +1,65 @@
 
 
-# Provider CND/CNPJ: SPA nova + fallback portal antigo + corrigir falso-positivo de captcha
+# Robustecer detecção de captcha e seletores na SPA da Receita
 
-## Diagnóstico real
+## Diagnóstico (confirmado pelos logs)
 
-Lendo `cnd-public-portal.ts` linha 56-58 confirmei: o erro `layout_changed` **não veio do formulário** — veio porque a landing institucional contém a palavra "captcha" no HTML (link, FAQ ou texto explicativo), e o regex `detectCaptcha(html)` dispara antes de tentar qualquer OCR. Mesmo padrão no CNPJ (linha 45-47).
+Job `2e57a74c` mostra: `navigate_spa → select_pj → fill_cnpj_spa → submit_spa → wait_result_spa` — **não passou por `solve_captcha_spa`**. Isso significa que `findCaptchaImage(page)` retornou `null` na SPA Angular da Receita, então o submit foi enviado **sem captcha**, o portal travou, e o job vai cair em `layout_changed: spa_result` (timeout de 30s).
 
-Sua sugestão de migrar para a SPA nova faz sentido, mas mantemos o portal antigo como fallback (mais estável, sem hidratação Angular).
+Causa raiz: os seletores de captcha em `cloudflare-worker/src/lib/captcha.ts` só procuram `img` cujo `src/alt/id/name` contenha literalmente "captcha". A SPA da Receita usa atributos em português ("imagem", "verificação", "código de segurança") e provavelmente um `data:image/png;base64,...` no `src` que não casa com `*="captcha"`.
 
-## O que será feito
+## Correções
 
-### 1. Corrigir falso-positivo de captcha (root cause)
+### 1. Ampliar seletores de captcha (`cloudflare-worker/src/lib/captcha.ts`)
 
-`cloudflare-worker/src/providers/cnd-public-portal.ts` e `cnpj-public-portal.ts`:
+Adicionar à `CAPTCHA_IMG_SELECTORS`:
+- `'img[src^="data:image"]'` — pega base64 inline (padrão Angular/SPAs)
+- `'img[alt*="imagem" i]'`, `'img[alt*="verifica" i]'`, `'img[alt*="seguran" i]'`, `'img[alt*="c\u00f3digo" i]'`
+- `'img[title*="captcha" i]'`, `'img[title*="imagem" i]'`
+- `'canvas'` como último recurso (algumas SPAs renderizam captcha em canvas)
 
-- **Remover** o bloco `if (detectCaptcha(html)) throw` da landing page. Captcha textual no HTML institucional não é captcha real.
-- **Manter** a detecção de `<img>` real via `findCaptchaImage(page)` (já existe).
-- **Manter** a detecção em página de **resultado** (faz sentido lá).
+Adicionar à `CAPTCHA_INPUT_SELECTORS`:
+- `'input[placeholder*="verifica" i]'`
+- `'input[placeholder*="seguran" i]'`
+- `'input[aria-label*="c\u00f3digo" i]'`
+- `'input[aria-label*="captcha" i]'`
 
-### 2. Implementar estratégia "SPA nova → fallback portal antigo"
+Nova função `findCaptchaImageSmart(page)`: se nenhum seletor casar, varrer **todas** as `<img>` da página, filtrar por:
+- dimensão (entre 60-300px largura, 20-100px altura — captchas têm aspect ratio típico)
+- presença de `src` começando com `data:image` OU `src` contendo `/captcha`, `/image`, `/imagem`, `.aspx`
+- excluir logos conhecidos (alt contém "logo", "Receita Federal", "Ministério")
 
-Novo arquivo `cloudflare-worker/src/providers/cnd-spa-portal.ts`:
+Retorna o primeiro match. Loga (via `console.log` do worker) qual seletor/heurística casou para diagnóstico futuro.
 
-- URL: `https://servicos.receitafederal.gov.br/servico/certidoes/`
-- Aguarda hidratação: `waitForLoadState("networkidle")` + `waitForSelector('text=/Pessoa Jur[íi]dica/i', timeout: 20s)`
-- Clica "Pessoa Jurídica" via `page.getByText(/Pessoa Jur[íi]dica/i).first().click()`
-- Preenche CNPJ via `page.getByPlaceholder(/CNPJ|00\.000/i).first().fill(digits)`
-- OCR via helper existente `solveCaptcha(env, page)` (já genérico)
-- Preenche código via `page.locator('input[placeholder*="código" i], input[id*="captcha" i]').first()`
-- Clica "Emitir/Consultar/Gerar" via `page.getByRole('button').filter({ hasText: /Emitir|Gerar|Consultar/i }).first().click()`
-- Aguarda download OU resultado em DOM
-- Se em qualquer ponto faltar seletor → throw `layout_changed: spa_<step>` → trigger fallback
+### 2. Robustecer `cnd-spa-portal.ts`
 
-Refatorar `cnd-public-portal.ts` para virar **dispatcher**:
+- **Detecção de captcha**: usar `findCaptchaImageSmart` (não a versão estrita). Se ainda assim retornar `null`, **abortar para fallback** com `throw new Error("layout_changed: spa_no_captcha — captcha esperado mas não encontrado")` em vez de prosseguir sem captcha.
+- **Seletor "Pessoa Jurídica"**: priorizar elementos clicáveis (`button`, `[role="button"]`, `a`, `mat-card`, `.card`) com texto exato. Evitar `getByText` que pega qualquer span institucional.
+- **Input CNPJ**: remover `'input[type="text"]'` genérico (pega qualquer text input). Manter só seletores específicos. Se nenhum casar → `layout_changed: spa_fill_cnpj`.
+- **Botão submit**: priorizar `button[type="submit"]` antes de buscar por texto, e validar que o botão está **enabled** antes de clicar.
 
-```ts
-export async function runCndLookup(env, payload) {
-  try {
-    return await runCndSpaLookup(env, payload);  // tenta SPA nova
-  } catch (errSpa) {
-    if (isLayoutOrTimeout(errSpa)) {
-      // log fallback decision
-      await sendProgress(env, {step: "fallback", message: "SPA falhou, tentando portal legado"});
-      return await runCndLegacyLookup(env, payload);  // portal antigo (lógica atual)
-    }
-    throw errSpa;  // captcha_unsolvable etc. não tenta fallback
-  }
-}
-```
+### 3. Diagnóstico (sem mexer em HMAC/secrets)
 
-A lógica atual do portal antigo vira `runCndLegacyLookup` (mesmo arquivo ou novo `cnd-legacy-portal.ts`).
+Adicionar `details_json` aos `sendProgress` críticos:
+- `solve_captcha_spa`: incluir `selector_used`, `image_dims`, `src_prefix` (primeiros 50 chars).
+- Quando `findCaptchaImageSmart` falhar: log com lista de **todas** as `<img>` da página (src/alt/dims), para debug pós-mortem visível em `automation_job_logs.details_json`.
 
-### 3. Mesmo padrão para CNPJ
+### 4. Bump BUILD_ID
 
-Novo `cloudflare-worker/src/providers/cnpj-spa-portal.ts` apontando para a mesma SPA nova (que cobre PJ — emite CND e dados cadastrais no mesmo fluxo). Se SPA não cobrir consulta cadastral pura, usar API REST que a SPA chama internamente (descoberta via DevTools — fora do escopo deste plano sem exploração real). **Decisão simplificada**: para CNPJ, manter portal antigo + apenas remover o falso-positivo. Migrar para SPA só CND, que é o caso crítico.
-
-### 4. Telemetria do fallback
-
-`sendProgress` com `step: "fallback_to_legacy"` para o timeline da UI mostrar quando a SPA falhou. Isso aparece em `ConsultaSaude.tsx` automaticamente (já renderiza eventos do timeline).
-
-### 5. Bump BUILD_ID
-
-`cloudflare-worker/src/index.ts` → `"2026-04-23-spa-fallback-v1"`
-
-### 6. UI: nova classificação
-
-`src/features/consulta/services/classification.ts`:
-- `spa_layout_changed`: "Portal novo da Receita mudou — fluxo legado em uso. Reporte para revisão."
-- Mantém demais.
+`cloudflare-worker/src/index.ts` → `"2026-04-23-spa-captcha-smart-v1"`
 
 ## Arquivos alterados
 
 **Cloudflare Worker (precisa `wrangler deploy`):**
-- `cloudflare-worker/src/providers/cnd-spa-portal.ts` (novo)
-- `cloudflare-worker/src/providers/cnd-public-portal.ts` (vira dispatcher SPA→legado; remove falso-positivo)
-- `cloudflare-worker/src/providers/cnpj-public-portal.ts` (apenas remove falso-positivo; sem SPA)
-- `cloudflare-worker/src/index.ts` (BUILD_ID)
+- `cloudflare-worker/src/lib/captcha.ts` — seletores ampliados + `findCaptchaImageSmart`
+- `cloudflare-worker/src/providers/cnd-spa-portal.ts` — usa smart finder, exige captcha, seletores mais estritos para PJ/CNPJ/submit, logs de diagnóstico
+- `cloudflare-worker/src/index.ts` — BUILD_ID
 
-**App:**
-- `src/features/consulta/services/classification.ts` (nova entrada `spa_layout_changed`)
-
-## Por que NÃO seguir o script Node literal
-
-- `sharp` é binário nativo — não roda em Worker nem em edge function Deno (já resolvido com Canvas API + Tesseract WASM)
-- Seletores genéricos `canvas, img` pegam qualquer imagem da página (logo, ícone) — usar seletores específicos do helper `findCaptchaImage` que já filtra por `src/alt/id` contendo `captcha`
-- `headless: false` não é opção no Worker (sempre headless)
+**Sem mudanças em:**
+- App / UI / classificação (já cobre `layout_changed` e `captcha_unsolvable`)
+- Edge function `solve-captcha` (continua igual)
+- HMAC, secrets, bindings, callback_base
+- Provider CNPJ (que está aprovado pelo usuário)
 
 ## Deploy necessário
 
@@ -95,20 +70,18 @@ cd cloudflare-worker
 npm install
 npx wrangler deploy
 curl -s https://gestaoez.leomateus620.workers.dev/health | jq .build_id
-# esperado: "2026-04-23-spa-fallback-v1"
+# esperado: "2026-04-23-spa-captcha-smart-v1"
 ```
-
-Edge function `solve-captcha` já está deployada (sem mudança).
 
 ## Resultado esperado pós-deploy
 
-- **CND**: SPA nova tenta primeiro. Se OCR resolver → `success`. Se SPA falhar com seletor → fallback automático para portal antigo. Se ambos falharem → `manual_required` com motivo claro.
-- **CNPJ**: portal antigo, sem mais falso-positivo de captcha. OCR é tentado quando há `<img>` real.
-- Timeline da UI mostra `fallback_to_legacy` quando SPA falha — visibilidade total.
+- **CND**: SPA detecta o `<img>` real do captcha (mesmo sem o termo "captcha" no atributo), passa para OCR, preenche código, submete. Se OCR errar → `manual_required`. Se SPA realmente quebrou → fallback automático para portal legado (já funciona).
+- Logs de `automation_job_logs` agora terão `details_json` rico para diagnóstico visual no `/consulta/saude`.
+- CNPJ mantém comportamento atual (já aprovado).
 
-## Restrições mantidas
+## Por que não outras alternativas
 
-- Sem mexer em HMAC, secrets, bindings, callback_base
-- Sem APIs pagas
-- Edge function `solve-captcha` permanece igual
+- **Não migrar para nova URL**: já estamos na URL nova (`servicos.receitafederal.gov.br`) — o problema é seletor.
+- **Não trocar OCR por API paga**: OCR já está integrado e gratuito. Quando captcha for encontrado, a chain funciona.
+- **Não remover SPA e voltar só pro legado**: legado também tem captcha; a melhoria de seletores ajuda os dois.
 
