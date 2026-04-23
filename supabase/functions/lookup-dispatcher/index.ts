@@ -200,6 +200,7 @@ serve(async (req) => {
       job_type: type === "cnpj" ? "cnpj_lookup" : "cnd_lookup",
       cnpj,
       correlation_id,
+      request_id: requestRow.id,
       callback_base: Deno.env.get("SUPABASE_URL"),
     };
     const body_str = JSON.stringify(payload);
