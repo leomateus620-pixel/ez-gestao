@@ -264,6 +264,9 @@ export async function runCndSpaLookup(
       provider: PROVIDER,
       latency_ms: Date.now() - start,
     };
+    } finally {
+      await page.close().catch(() => {});
+    }
   }));
 
   if (!result) {
