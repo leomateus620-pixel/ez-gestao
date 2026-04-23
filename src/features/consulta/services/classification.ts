@@ -1,6 +1,12 @@
 export const ERROR_LABELS: Record<string, { label: string; suggestion: string }> = {
-  captcha_detected: { label: "Captcha detectado", suggestion: "Tente novamente em alguns minutos ou faça consulta manual." },
-  layout_changed: { label: "Layout do portal mudou", suggestion: "Equipe técnica precisa atualizar o conector." },
+  captcha_detected: {
+    label: "Captcha detectado",
+    suggestion: "Receita exigiu captcha. Tente novamente em 5–10 min ou faça consulta manual em solucoes.receita.fazenda.gov.br.",
+  },
+  layout_changed: {
+    label: "Layout do portal mudou",
+    suggestion: "O layout do portal CND mudou. O conector precisa ser atualizado. Reporte ao time técnico com o screenshot da etapa final.",
+  },
   timeout: { label: "Tempo esgotado", suggestion: "Portal lento. Tente reprocessar." },
   cnpj_not_found: { label: "CNPJ não encontrado", suggestion: "Confirme se o CNPJ existe na Receita." },
   portal_unavailable: { label: "Portal indisponível", suggestion: "Aguarde restabelecimento do serviço." },
