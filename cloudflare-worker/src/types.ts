@@ -17,6 +17,8 @@ export interface ExecuteJobPayload {
 
 export type ErrorType =
   | "captcha_detected"
+  | "captcha_unsolvable"
+  | "captcha_failed"
   | "layout_changed"
   | "timeout"
   | "cnpj_not_found"
