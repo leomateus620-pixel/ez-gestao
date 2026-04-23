@@ -155,6 +155,10 @@ export async function runCndLookup(env: Env, payload: ExecuteJobPayload): Promis
       if (detectCaptcha(lower)) {
         throw new Error("captcha detected on result page");
       }
+      // Detect "código incorreto" -> OCR was wrong
+      if (/c[oó]digo (incorreto|inv[áa]lido)|captcha (inv[áa]lido|incorreto)/i.test(lower)) {
+        throw new Error("captcha_failed: portal rejected OCR text");
+      }
 
       // Step 7: parse
       let cnd_status: string | null = null;
