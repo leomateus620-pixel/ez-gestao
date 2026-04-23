@@ -217,7 +217,7 @@ wrangler secret put LOVABLE_HMAC_SECRET
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><Play className="h-4 w-4" /> Dry-run Zimmermann (88.736.335/0001-13)</CardTitle>
+          <CardTitle className="text-base flex items-center gap-2"><Play className="h-4 w-4" /> Dry-run Weinert (47.737.345/0001-96)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">Executa CNPJ + CND reais contra o portal Receita pelo Worker Cloudflare. Obrigatório antes de habilitar o módulo no menu.</p>
