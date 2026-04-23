@@ -26,17 +26,6 @@ async function dispatch(supabase: any, type: "cnpj" | "cnd"): Promise<string> {
   return j.request_id;
 }
 
-async function waitFor(supabase: any, request_id: string, type: "cnpj" | "cnd", maxMs = 90000) {
-  const reqTable = type === "cnpj" ? "company_lookup_requests" : "cnd_lookup_requests";
-  const start = Date.now();
-  while (Date.now() - start < maxMs) {
-    const { data } = await supabase.from(reqTable).select("status").eq("id", request_id).maybeSingle();
-    if (data && ["success", "failed", "manual_required", "partial"].includes(data.status)) return data.status;
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-  return "timeout";
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -46,53 +35,36 @@ serve(async (req) => {
     );
 
     const startedAt = new Date().toISOString();
+    // Serialize CNPJ then CND to avoid Browser Rendering 429 rate limit
     const cnpjReq = await dispatch(supabase, "cnpj");
+    // small gap before CND to spread browser launches
+    await new Promise((r) => setTimeout(r, 1500));
     const cndReq = await dispatch(supabase, "cnd");
-    const [cnpjStatus, cndStatus] = await Promise.all([
-      waitFor(supabase, cnpjReq, "cnpj"),
-      waitFor(supabase, cndReq, "cnd"),
-    ]);
 
-    const { data: cnpjResult } = await supabase.from("company_lookup_results")
-      .select("*").eq("request_id", cnpjReq).maybeSingle();
-    const { data: cndResult } = await supabase.from("cnd_lookup_results")
-      .select("*").eq("request_id", cndReq).maybeSingle();
-
-    const passed = cnpjStatus === "success" && (cndStatus === "success" || cndStatus === "manual_required");
-
-    const report = {
-      generated_at: new Date().toISOString(),
-      started_at: startedAt,
-      cnpj: ZIMMERMANN_CNPJ,
-      cnpj_request_id: cnpjReq,
-      cnd_request_id: cndReq,
-      cnpj_status: cnpjStatus,
-      cnd_status: cndStatus,
-      cnpj_result: cnpjResult,
-      cnd_result: cndResult,
-      passed,
-    };
-
-    const reportPath = `reports/dry-run-${Date.now()}.json`;
-    await supabase.storage.from("automation-artifacts")
-      .upload(reportPath, new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }), {
-        contentType: "application/json", upsert: false,
-      });
-
+    const dry_run_id = crypto.randomUUID();
     await supabase.from("automation_config_kv").upsert({
       key: "dry_run_zimmermann",
-      value_json: { passed, last_run_at: new Date().toISOString(), report_path: reportPath, cnpj_status: cnpjStatus, cnd_status: cndStatus },
-      description: "Resultado do dry-run obrigatório (Zimmermann)",
+      value_json: {
+        passed: false,
+        in_progress: true,
+        dry_run_id,
+        started_at: startedAt,
+        cnpj_request_id: cnpjReq,
+        cnd_request_id: cndReq,
+        cnpj_status: "running",
+        cnd_status: "running",
+      },
+      description: "Resultado do dry-run obrigatório (Zimmermann) — assíncrono",
     }, { onConflict: "key" });
 
-    const { data: signed } = await supabase.storage
-      .from("automation-artifacts").createSignedUrl(reportPath, 3600);
-
     return new Response(JSON.stringify({
-      passed, report_path: reportPath, signed_url: signed?.signedUrl || null,
-      cnpj_status: cnpjStatus, cnd_status: cndStatus,
-      cnpj_request_id: cnpjReq, cnd_request_id: cndReq,
-    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      accepted: true,
+      dry_run_id,
+      cnpj_request_id: cnpjReq,
+      cnd_request_id: cndReq,
+      status: "pending",
+      message: "Dry-run iniciado. Faça polling em dry-run-zimmermann-status.",
+    }), { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: String(err?.message || err) }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
