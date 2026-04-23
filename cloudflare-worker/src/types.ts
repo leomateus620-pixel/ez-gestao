@@ -8,7 +8,7 @@ export interface Env {
 
 export interface ExecuteJobPayload {
   job_id: string;
-  job_type: "cnpj_lookup" | "cnd_lookup";
+  job_type: "cnpj_lookup" | "cnd_lookup" | "cndt_lookup";
   cnpj: string;
   correlation_id: string;
   callback_base?: string;

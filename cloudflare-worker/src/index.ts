@@ -3,6 +3,7 @@ import type { Env, ExecuteJobPayload } from "./types";
 import { verifyHmac } from "./lib/security";
 import { runCnpjLookup } from "./providers/cnpj-public-portal";
 import { runCndLookup } from "./providers/cnd-public-portal";
+import { runCndtLookup } from "./providers/tst-cndt-portal";
 import { sendFinal } from "./lib/progress";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -10,7 +11,7 @@ const app = new Hono<{ Bindings: Env }>();
 // Build identifier — changes on every deploy via wrangler `--var` or fallback to compile time.
 // Without dynamic injection, we surface a hash of the worker's bound secrets/url config so the
 // UI can detect when the deploy is stale relative to a code change that updated this string.
-const BUILD_ID = "2026-04-23-spa-hardening-v1";
+const BUILD_ID = "2026-04-23-cndt-parallel-v1";
 
 function validateCallbackBase(raw: string | undefined | null) {
   if (!raw) return { value: null, valid: false, issue: "missing" as const };
@@ -103,6 +104,7 @@ app.post("/execute-job", async (c) => {
     try {
       if (payload.job_type === "cnpj_lookup") await runCnpjLookup(c.env, payload);
       else if (payload.job_type === "cnd_lookup") await runCndLookup(c.env, payload);
+      else if (payload.job_type === "cndt_lookup") await runCndtLookup(c.env, payload);
       else {
         await sendFinal(c.env, {
           job_id: payload.job_id, type: "cnpj", status: "failed",
@@ -112,7 +114,9 @@ app.post("/execute-job", async (c) => {
     } catch (err) {
       await sendFinal(c.env, {
         job_id: payload.job_id,
-        type: payload.job_type === "cnd_lookup" ? "cnd" : "cnpj",
+        type: payload.job_type === "cnd_lookup"
+          ? "cnd"
+          : payload.job_type === "cndt_lookup" ? "cndt" : "cnpj",
         status: "failed", error_type: "unknown",
         error_message: err instanceof Error ? err.message : String(err),
       });
