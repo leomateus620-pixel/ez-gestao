@@ -3,6 +3,7 @@ import type { Env, ExecuteJobPayload } from "../types";
 import { withBrowser } from "../lib/browser";
 import { sendProgress, sendFinal, requestArtifactUpload, uploadArtifactBytes } from "../lib/progress";
 import { findCaptchaImageSmart, solveCaptcha } from "../lib/captcha";
+import { withRateLimitRetry, jitterDelay } from "../lib/rate-limit";
 
 const SPA_URL = "https://servicos.receitafederal.gov.br/servico/certidoes/";
 const PROVIDER = "provider_public_portal_cnd_spa_cloudflare";
@@ -25,7 +26,10 @@ export async function runCndSpaLookup(
     message: "Abrindo SPA nova da Receita (CND)", status: "running", provider: PROVIDER,
   });
 
-  await withBrowser(env, async (browser) => {
+  // Anti-thundering-herd: small random delay before opening browser session.
+  await jitterDelay(2_000, 8_000);
+
+  await withRateLimitRetry(() => withBrowser(env, async (browser) => {
     const page = await browser.newPage();
     try {
       await page.setExtraHTTPHeaders({
@@ -238,7 +242,7 @@ export async function runCndSpaLookup(
       provider: PROVIDER,
       latency_ms: Date.now() - start,
     };
-  });
+  }));
 
   if (!result) {
     throw new Error("layout_changed: spa_no_result — execução SPA não produziu resultado");

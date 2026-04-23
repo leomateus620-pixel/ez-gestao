@@ -4,6 +4,7 @@ import { withBrowser } from "../lib/browser";
 import { sendProgress, sendFinal, requestArtifactUpload, uploadArtifactBytes } from "../lib/progress";
 import { classifyError } from "../lib/classification";
 import { findCaptchaImage, findCaptchaInput, solveCaptcha } from "../lib/captcha";
+import { withRateLimitRetry, jitterDelay } from "../lib/rate-limit";
 
 const PORTAL_URL = "https://solucoes.receita.fazenda.gov.br/Servicos/cnpjreva/Cnpjreva_Solicitacao.asp";
 const PROVIDER = "provider_public_portal_cnpj_cloudflare";
@@ -32,7 +33,9 @@ export async function runCnpjLookup(env: Env, payload: ExecuteJobPayload): Promi
   try {
     await sendProgress(env, { job_id: payload.job_id, step: "navigate", message: "Abrindo portal CNPJ", status: "running", provider: PROVIDER });
 
-    await withBrowser(env, async (browser) => {
+    await jitterDelay(2_000, 8_000);
+
+    await withRateLimitRetry(() => withBrowser(env, async (browser) => {
       const page = await browser.newPage();
       try {
         await page.setExtraHTTPHeaders({ "User-Agent": "Mozilla/5.0 (compatible; GestaoEZ-CNPJ/1.0)" });
@@ -123,7 +126,7 @@ export async function runCnpjLookup(env: Env, payload: ExecuteJobPayload): Promi
         provider: PROVIDER,
         latency_ms: Date.now() - start,
       };
-    });
+    }));
 
     if (successPayload) {
       await sendFinal(env, successPayload);
