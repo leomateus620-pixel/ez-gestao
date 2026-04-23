@@ -77,14 +77,14 @@ export async function runCndSpaLookup(
         job_id: payload.job_id, step: "solve_captcha_spa",
         message: "Captcha esperado mas não encontrado na SPA",
         provider: PROVIDER, status: "failed",
-        details: { total_imgs: captchaScan.total_imgs, candidates: captchaScan.candidates.slice(0, 10) },
+        details_json: { total_imgs: captchaScan.total_imgs, candidates: captchaScan.candidates.slice(0, 10) },
       });
       throw new Error("layout_changed: spa_no_captcha — captcha esperado mas não encontrado");
     }
     await sendProgress(env, {
       job_id: payload.job_id, step: "solve_captcha_spa",
       message: "Resolvendo captcha via OCR (SPA)", provider: PROVIDER,
-      details: {
+      details_json: {
         selector_used: captchaFound.selector_used,
         width: captchaFound.width, height: captchaFound.height,
         src_prefix: captchaFound.src_prefix, alt: captchaFound.alt,
