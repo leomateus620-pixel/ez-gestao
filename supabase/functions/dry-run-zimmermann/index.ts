@@ -11,7 +11,7 @@ const corsHeaders = {
 
 const ZIMMERMANN_CNPJ = "47737345000196";
 
-async function dispatch(supabase: any, type: "cnpj" | "cnd"): Promise<string> {
+async function dispatch(_supabase: any, type: "cnpj" | "cnd" | "cndt"): Promise<string> {
   const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/lookup-dispatcher`;
   const r = await fetch(url, {
     method: "POST",
@@ -35,11 +35,15 @@ serve(async (req) => {
     );
 
     const startedAt = new Date().toISOString();
-    // Strict serialization: dispatch ONLY the CNPJ now. The status function
-    // (`dry-run-zimmermann-status`) will dispatch the CND once the CNPJ
-    // request reaches a terminal status. This guarantees zero parallel
-    // browser launches against Cloudflare Browser Rendering.
-    const cnpjReq = await dispatch(supabase, "cnpj");
+    // Parallel dispatch: CNPJ + CND + CNDT são disparados ao mesmo tempo.
+    // Cada provider tem jitter próprio (2–8s) e retry de rate-limit. Trade-off
+    // assumido: pode estourar limite do Browser Rendering (plano free) e exigir
+    // re-execução, mas reduz tempo total do dry-run quando passa.
+    const [cnpjReq, cndReq, cndtReq] = await Promise.all([
+      dispatch(supabase, "cnpj"),
+      dispatch(supabase, "cnd"),
+      dispatch(supabase, "cndt"),
+    ]);
 
     const dry_run_id = crypto.randomUUID();
     await supabase.from("automation_config_kv").upsert({
@@ -50,10 +54,12 @@ serve(async (req) => {
         dry_run_id,
         started_at: startedAt,
         cnpj_request_id: cnpjReq,
-        cnd_request_id: null,
+        cnd_request_id: cndReq,
+        cndt_request_id: cndtReq,
         cnpj_status: "running",
-        cnd_status: "pending",
-        phase: "cnpj_running",
+        cnd_status: "running",
+        cndt_status: "running",
+        phase: "all_running",
       },
       description: "Resultado do dry-run obrigatório (Zimmermann) — assíncrono",
     }, { onConflict: "key" });
@@ -62,9 +68,10 @@ serve(async (req) => {
       accepted: true,
       dry_run_id,
       cnpj_request_id: cnpjReq,
-      cnd_request_id: null,
+      cnd_request_id: cndReq,
+      cndt_request_id: cndtReq,
       status: "pending",
-      message: "Dry-run iniciado (CNPJ). CND será disparado quando CNPJ terminar. Faça polling em dry-run-zimmermann-status.",
+      message: "Dry-run iniciado (CNPJ + CND + CNDT em paralelo). Faça polling em dry-run-zimmermann-status.",
     }), { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: String(err?.message || err) }), {
