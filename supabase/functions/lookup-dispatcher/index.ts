@@ -97,10 +97,47 @@ serve(async (req) => {
           .limit(1)
           .maybeSingle();
         if (cached) {
+          // Clone request + result so the history shows a fresh entry flagged as cache_hit.
+          const { data: newReq } = await supabase
+            .from("company_lookup_requests")
+            .insert({
+              cnpj_input: body.cnpj,
+              cnpj_normalized: cnpj,
+              correlation_id,
+              requested_by,
+              source_provider: provider,
+              from_cache: true,
+              cache_hit: true,
+              status: "success",
+              started_at: new Date().toISOString(),
+              finished_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
+          if (newReq) {
+            await supabase.from("company_lookup_results").insert({
+              request_id: newReq.id,
+              official_name: cached.official_name,
+              trade_name: cached.trade_name,
+              registration_status: cached.registration_status,
+              opening_date: cached.opening_date,
+              legal_nature: cached.legal_nature,
+              main_cnae: cached.main_cnae,
+              secondary_cnaes_json: cached.secondary_cnaes_json || [],
+              qsa_json: cached.qsa_json || [],
+              address_json: cached.address_json || {},
+              source_url: cached.source_url,
+              raw_payload_json: cached.raw_payload_json || {},
+              parsed_payload_json: cached.parsed_payload_json || {},
+              parsed_confidence: cached.parsed_confidence ?? 0,
+              cache_valid_until: cached.cache_valid_until,
+            });
+          }
           return new Response(
             JSON.stringify({
               from_cache: true,
-              request_id: cached.request_id,
+              cache_hit: true,
+              request_id: newReq?.id || cached.request_id,
               correlation_id,
               status: "success",
             }),
@@ -117,10 +154,41 @@ serve(async (req) => {
           .limit(1)
           .maybeSingle();
         if (cached) {
+          const { data: newReq } = await supabase
+            .from("cnd_lookup_requests")
+            .insert({
+              cnpj_normalized: cnpj,
+              correlation_id,
+              requested_by,
+              source_provider: provider,
+              from_cache: true,
+              cache_hit: true,
+              status: "success",
+              started_at: new Date().toISOString(),
+              finished_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
+          if (newReq) {
+            await supabase.from("cnd_lookup_results").insert({
+              request_id: newReq.id,
+              cnd_status: cached.cnd_status,
+              certificate_number: cached.certificate_number,
+              issued_at: cached.issued_at,
+              valid_until: cached.valid_until,
+              source_url: cached.source_url,
+              raw_payload_json: cached.raw_payload_json || {},
+              parsed_payload_json: cached.parsed_payload_json || {},
+              pdf_path: cached.pdf_path,
+              pdf_sha256: cached.pdf_sha256,
+              cache_valid_until: cached.cache_valid_until,
+            });
+          }
           return new Response(
             JSON.stringify({
               from_cache: true,
-              request_id: cached.request_id,
+              cache_hit: true,
+              request_id: newReq?.id || cached.request_id,
               correlation_id,
               status: "success",
             }),

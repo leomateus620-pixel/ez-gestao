@@ -1,14 +1,27 @@
 import { buildTimeline } from "../services/timeline";
-import { CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
+import { CheckCircle2, Loader2, AlertTriangle, Rocket } from "lucide-react";
 
-interface Props { logs?: any[]; isFinal?: boolean }
+interface Props { logs?: any[]; isFinal?: boolean; cacheHit?: boolean }
 
-export function ExecutionTimeline({ logs, isFinal }: Props) {
+export function ExecutionTimeline({ logs, isFinal, cacheHit }: Props) {
   const steps = buildTimeline(logs);
   return (
     <div className="space-y-3">
+      {cacheHit && (
+        <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm">
+          <Rocket className="h-4 w-4 text-primary" />
+          <div>
+            <div className="font-medium text-primary">Resultado servido do cache (24h)</div>
+            <div className="text-xs text-muted-foreground">
+              Sem chamada ao portal — resposta replicada de uma consulta recente para reduzir rate limit.
+            </div>
+          </div>
+        </div>
+      )}
       {steps.length === 0 && (
-        <div className="text-sm text-muted-foreground italic">Aguardando primeiros logs…</div>
+        <div className="text-sm text-muted-foreground italic">
+          {cacheHit ? "Sem etapas — resultado veio do cache." : "Aguardando primeiros logs…"}
+        </div>
       )}
       {steps.map((s, idx) => {
         const Icon = s.level === "error" ? AlertTriangle : (idx === steps.length - 1 && !isFinal ? Loader2 : CheckCircle2);

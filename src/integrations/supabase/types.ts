@@ -479,6 +479,7 @@ export type Database = {
       }
       cnd_lookup_requests: {
         Row: {
+          cache_hit: boolean
           cnpj_normalized: string
           correlation_id: string | null
           created_at: string
@@ -495,6 +496,7 @@ export type Database = {
           status: Database["public"]["Enums"]["lookup_status"]
         }
         Insert: {
+          cache_hit?: boolean
           cnpj_normalized: string
           correlation_id?: string | null
           created_at?: string
@@ -511,6 +513,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["lookup_status"]
         }
         Update: {
+          cache_hit?: boolean
           cnpj_normalized?: string
           correlation_id?: string | null
           created_at?: string
@@ -594,6 +597,7 @@ export type Database = {
       }
       company_lookup_requests: {
         Row: {
+          cache_hit: boolean
           cnpj_input: string
           cnpj_normalized: string
           correlation_id: string | null
@@ -610,6 +614,7 @@ export type Database = {
           status: Database["public"]["Enums"]["lookup_status"]
         }
         Insert: {
+          cache_hit?: boolean
           cnpj_input: string
           cnpj_normalized: string
           correlation_id?: string | null
@@ -626,6 +631,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["lookup_status"]
         }
         Update: {
+          cache_hit?: boolean
           cnpj_input?: string
           cnpj_normalized?: string
           correlation_id?: string | null

@@ -110,7 +110,11 @@ export default function ConsultaIndex() {
                 )}
               </TabsContent>
               <TabsContent value="timeline" className="pt-4">
-                <ExecutionTimeline logs={data?.logs} isFinal={isFinal} />
+                <ExecutionTimeline
+                  logs={data?.logs}
+                  isFinal={isFinal}
+                  cacheHit={!!data?.request?.cache_hit}
+                />
               </TabsContent>
               <TabsContent value="artifacts" className="pt-4">
                 <ArtifactViewer artifacts={data?.artifacts} />

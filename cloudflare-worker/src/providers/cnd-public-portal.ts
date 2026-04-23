@@ -5,6 +5,7 @@ import { sendProgress, sendFinal, requestArtifactUpload, uploadArtifactBytes } f
 import { classifyError } from "../lib/classification";
 import { findCaptchaImage, findCaptchaInput, solveCaptcha } from "../lib/captcha";
 import { runCndSpaLookup } from "./cnd-spa-portal";
+import { withRateLimitRetry, jitterDelay } from "../lib/rate-limit";
 
 const PORTAL_URL = "https://solucoes.receita.fazenda.gov.br/Servicos/certidaointernet/PJ/Emitir";
 const PROVIDER = "provider_public_portal_cnd_cloudflare";
@@ -87,7 +88,8 @@ async function runCndLegacyLookup(env: Env, payload: ExecuteJobPayload): Promise
   let successPayload: Record<string, unknown> | null = null;
   try {
     await sendProgress(env, { job_id: payload.job_id, step: "navigate", message: "Abrindo portal CND", status: "running", provider: PROVIDER });
-    await withBrowser(env, async (browser) => {
+    await jitterDelay(2_000, 8_000);
+    await withRateLimitRetry(() => withBrowser(env, async (browser) => {
       const page = await browser.newPage();
       try {
         await page.setExtraHTTPHeaders({ "User-Agent": "Mozilla/5.0 (compatible; GestaoEZ-CND/1.0)" });
@@ -293,7 +295,7 @@ async function runCndLegacyLookup(env: Env, payload: ExecuteJobPayload): Promise
         provider: PROVIDER,
         latency_ms: Date.now() - start,
       };
-    });
+    }));
 
     if (successPayload) {
       await sendFinal(env, successPayload);
