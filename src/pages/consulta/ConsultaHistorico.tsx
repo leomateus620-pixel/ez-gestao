@@ -4,6 +4,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useLookupHistory } from "@/features/consulta/hooks/useLookup";
 import { StatusBadge } from "@/features/consulta/components/StatusBadge";
 import { maskCnpj } from "@/features/consulta/services/cnpj-utils";
+import { describeError } from "@/features/consulta/services/classification";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function ConsultaHistorico() {
   const { data, isLoading } = useLookupHistory();
@@ -39,18 +42,22 @@ function HistoryTable({ rows, loading }: { rows: any[]; loading: boolean }) {
         <TableRow>
           <TableHead>CNPJ</TableHead>
           <TableHead>Status</TableHead>
+          <TableHead>Erro</TableHead>
           <TableHead>Cache</TableHead>
           <TableHead>Solicitado</TableHead>
           <TableHead>Concluído</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {loading && <TableRow><TableCell colSpan={5}>Carregando…</TableCell></TableRow>}
-        {!loading && rows.length === 0 && <TableRow><TableCell colSpan={5}>Sem registros.</TableCell></TableRow>}
+        {loading && <TableRow><TableCell colSpan={6}>Carregando…</TableCell></TableRow>}
+        {!loading && rows.length === 0 && <TableRow><TableCell colSpan={6}>Sem registros.</TableCell></TableRow>}
         {rows.map((r) => (
           <TableRow key={r.id}>
             <TableCell className="font-mono">{maskCnpj(r.cnpj_normalized)}</TableCell>
             <TableCell><StatusBadge status={r.status} /></TableCell>
+            <TableCell className="max-w-[280px]">
+              <ErrorCell requestId={r.id} status={r.status} />
+            </TableCell>
             <TableCell>{r.from_cache ? "Sim" : "—"}</TableCell>
             <TableCell>{new Date(r.created_at).toLocaleString("pt-BR")}</TableCell>
             <TableCell>{r.finished_at ? new Date(r.finished_at).toLocaleString("pt-BR") : "—"}</TableCell>

@@ -210,22 +210,42 @@ wrangler secret put LOVABLE_HMAC_SECRET
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">Executa CNPJ + CND reais contra o portal Receita pelo Worker Cloudflare. Obrigatório antes de habilitar o módulo no menu.</p>
           <div className="flex flex-wrap gap-2 items-center">
-            <Button onClick={runDry} disabled={dryRunMut.isPending}>
-              <Play className="h-4 w-4 mr-1" /> {dryRunMut.isPending ? "Executando…" : "Executar dry-run"}
+            <Button onClick={runDry} disabled={dryRunMut.isPending || inProgress}>
+              <Play className="h-4 w-4 mr-1" /> {inProgress ? "Executando…" : dryRunMut.isPending ? "Disparando…" : "Executar dry-run"}
             </Button>
-            {dryRun && (
-              <span className={`text-sm ${passed ? "text-primary" : "text-destructive"}`}>
-                Último: {passed ? "APROVADO" : "REPROVADO"} · {(dryRun.value_json as any)?.last_run_at ? new Date((dryRun.value_json as any).last_run_at).toLocaleString("pt-BR") : "—"}
+            {(dryRun || live) && (
+              <span className={`text-sm ${inProgress ? "text-muted-foreground" : passed ? "text-primary" : "text-destructive"}`}>
+                {inProgress ? "EM ANDAMENTO" : `Último: ${passed ? "APROVADO" : "REPROVADO"}`}
+                {lastRunAt && ` · ${new Date(lastRunAt).toLocaleString("pt-BR")}`}
               </span>
             )}
-            {dryRunMut.data?.report_path && (
+            {signedUrl && (
               <Button asChild variant="outline" size="sm">
-                <Link to={`/consulta/relatorios/${encodeURIComponent(dryRunMut.data.report_path)}`}>
-                  <FileText className="h-4 w-4 mr-1" /> Ver relatório
-                </Link>
+                <a href={signedUrl} target="_blank" rel="noreferrer">
+                  <FileText className="h-4 w-4 mr-1" /> Ver relatório JSON
+                </a>
               </Button>
             )}
           </div>
+
+          {(cnpjStatus || cndStatus) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+              <DryRunSubCard
+                label="CNPJ (Receita Federal)"
+                status={cnpjStatus}
+                errorType={cnpjErr}
+                errorMessage={cnpjErrMsg}
+                requestId={cnpjReqId}
+              />
+              <DryRunSubCard
+                label="CND (Certidão Negativa)"
+                status={cndStatus}
+                errorType={cndErr}
+                errorMessage={cndErrMsg}
+                requestId={cndReqId}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -241,6 +261,39 @@ wrangler secret put LOVABLE_HMAC_SECRET
           {!passed && <span className="text-xs text-muted-foreground">Habilite após dry-run aprovado.</span>}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function DryRunSubCard({ label, status, errorType, errorMessage, requestId }: {
+  label: string; status?: string; errorType?: string | null; errorMessage?: string | null; requestId?: string;
+}) {
+  const isFailed = status === "failed";
+  const isManual = status === "manual_required";
+  const isOk = status === "success";
+  const desc = errorType ? describeError(errorType) : null;
+  return (
+    <div className={`rounded-md border p-3 text-sm ${isOk ? "border-primary/30 bg-primary/5" : isFailed ? "border-destructive/30 bg-destructive/5" : isManual ? "border-yellow-500/30 bg-yellow-500/5" : "border-border"}`}>
+      <div className="flex items-center justify-between">
+        <span className="font-medium">{label}</span>
+        <span className={`text-xs uppercase tracking-wide ${isOk ? "text-primary" : isFailed ? "text-destructive" : isManual ? "text-yellow-600" : "text-muted-foreground"}`}>
+          {status || "—"}
+        </span>
+      </div>
+      {desc && (
+        <div className="mt-2">
+          <div className="text-xs font-medium">{desc.label}</div>
+          <div className="text-xs text-muted-foreground">{desc.suggestion}</div>
+        </div>
+      )}
+      {errorMessage && (
+        <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 p-2 text-[11px] font-mono">
+          {errorMessage}
+        </pre>
+      )}
+      {requestId && (
+        <div className="mt-2 text-[11px] font-mono text-muted-foreground break-all">req: {requestId}</div>
+      )}
     </div>
   );
 }
