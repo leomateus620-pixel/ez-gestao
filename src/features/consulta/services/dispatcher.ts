@@ -27,16 +27,7 @@ export async function dispatchLookup(input: DispatchInput): Promise<DispatchResu
 }
 
 export async function fetchLookupStatus(request_id: string, type: LookupType) {
-  const { data, error } = await supabase.functions.invoke("lookup-status", {
-    body: null,
-    method: "GET",
-    headers: {},
-    // Supabase functions client doesn't directly support query strings;
-    // we use fetch with the public URL.
-  } as never).catch(() => ({ data: null, error: null }));
-  if (data) return data;
-  // Fallback to direct fetch for GET with query params
-  const projectRef = (import.meta.env.VITE_SUPABASE_URL as string).replace(/^https?:\/\//, "").split(".")[0];
+  // Use direct fetch because supabase.functions.invoke doesn't support query strings on GET.
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lookup-status?request_id=${encodeURIComponent(request_id)}&type=${type}`;
   const r = await fetch(url, {
     headers: {
