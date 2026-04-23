@@ -1,148 +1,114 @@
 
 
-# Resolver CAPTCHA com OCR grátis (Tesseract.js em Edge Function Deno)
+# Provider CND/CNPJ: SPA nova + fallback portal antigo + corrigir falso-positivo de captcha
 
-## Estratégia (adaptada ao seu stack)
+## Diagnóstico real
 
-Seu script original usa **Node + Sharp + Playwright local**. Isso não roda em Cloudflare Worker (sem `node:fs`, sem binários nativos como Sharp). Mantemos o stack atual e dividimos responsabilidades:
+Lendo `cnd-public-portal.ts` linha 56-58 confirmei: o erro `layout_changed` **não veio do formulário** — veio porque a landing institucional contém a palavra "captcha" no HTML (link, FAQ ou texto explicativo), e o regex `detectCaptcha(html)` dispara antes de tentar qualquer OCR. Mesmo padrão no CNPJ (linha 45-47).
 
-```text
-Worker CF (Playwright)  →  detecta <img> do captcha  →  envia base64
-       ↓                                                    ↓
- fluxo CND/CNPJ                          Edge Function Deno (solve-captcha)
-       ↓                                                    ↓
- preenche resposta             Tesseract.js WASM + pré-proc Canvas API
-       ↓                                                    ↓
-   submete                                  retorna texto OCR (5-7 chars)
+Sua sugestão de migrar para a SPA nova faz sentido, mas mantemos o portal antigo como fallback (mais estável, sem hidratação Angular).
+
+## O que será feito
+
+### 1. Corrigir falso-positivo de captcha (root cause)
+
+`cloudflare-worker/src/providers/cnd-public-portal.ts` e `cnpj-public-portal.ts`:
+
+- **Remover** o bloco `if (detectCaptcha(html)) throw` da landing page. Captcha textual no HTML institucional não é captcha real.
+- **Manter** a detecção de `<img>` real via `findCaptchaImage(page)` (já existe).
+- **Manter** a detecção em página de **resultado** (faz sentido lá).
+
+### 2. Implementar estratégia "SPA nova → fallback portal antigo"
+
+Novo arquivo `cloudflare-worker/src/providers/cnd-spa-portal.ts`:
+
+- URL: `https://servicos.receitafederal.gov.br/servico/certidoes/`
+- Aguarda hidratação: `waitForLoadState("networkidle")` + `waitForSelector('text=/Pessoa Jur[íi]dica/i', timeout: 20s)`
+- Clica "Pessoa Jurídica" via `page.getByText(/Pessoa Jur[íi]dica/i).first().click()`
+- Preenche CNPJ via `page.getByPlaceholder(/CNPJ|00\.000/i).first().fill(digits)`
+- OCR via helper existente `solveCaptcha(env, page)` (já genérico)
+- Preenche código via `page.locator('input[placeholder*="código" i], input[id*="captcha" i]').first()`
+- Clica "Emitir/Consultar/Gerar" via `page.getByRole('button').filter({ hasText: /Emitir|Gerar|Consultar/i }).first().click()`
+- Aguarda download OU resultado em DOM
+- Se em qualquer ponto faltar seletor → throw `layout_changed: spa_<step>` → trigger fallback
+
+Refatorar `cnd-public-portal.ts` para virar **dispatcher**:
+
+```ts
+export async function runCndLookup(env, payload) {
+  try {
+    return await runCndSpaLookup(env, payload);  // tenta SPA nova
+  } catch (errSpa) {
+    if (isLayoutOrTimeout(errSpa)) {
+      // log fallback decision
+      await sendProgress(env, {step: "fallback", message: "SPA falhou, tentando portal legado"});
+      return await runCndLegacyLookup(env, payload);  // portal antigo (lógica atual)
+    }
+    throw errSpa;  // captcha_unsolvable etc. não tenta fallback
+  }
+}
 ```
 
-Sharp é substituído por **Canvas API nativa do Deno** (greyscale + threshold + resize) — mesmo resultado, sem binário nativo.
+A lógica atual do portal antigo vira `runCndLegacyLookup` (mesmo arquivo ou novo `cnd-legacy-portal.ts`).
 
-## Mudanças
+### 3. Mesmo padrão para CNPJ
 
-### 1. Nova Edge Function `solve-captcha` (Deno)
+Novo `cloudflare-worker/src/providers/cnpj-spa-portal.ts` apontando para a mesma SPA nova (que cobre PJ — emite CND e dados cadastrais no mesmo fluxo). Se SPA não cobrir consulta cadastral pura, usar API REST que a SPA chama internamente (descoberta via DevTools — fora do escopo deste plano sem exploração real). **Decisão simplificada**: para CNPJ, manter portal antigo + apenas remover o falso-positivo. Migrar para SPA só CND, que é o caso crítico.
 
-`supabase/functions/solve-captcha/index.ts`
+### 4. Telemetria do fallback
 
-- **Input**: `{ image_base64: string, min_length?: 5, max_retries?: 2 }`
-- **Auth**: HMAC compartilhado com o Worker (reutiliza `CF_CALLBACK_HMAC_SECRET` — mesma chave do callback). Headers `X-CF-Signature/Timestamp/Nonce`. Sem JWT.
-- **Pré-processamento** (Canvas API — substitui Sharp):
-  - decode PNG via `ImageData`
-  - greyscale (média RGB)
-  - normalize (stretch 0-255)
-  - threshold binário (default 128)
-  - resize para largura 300px
-- **OCR**: `tesseract.js` via npm specifier (`npm:tesseract.js@5`). Worker LSTM, PSM single-line, whitelist `0-9A-Za-z`.
-- **Retry**: até 2x com thresholds diferentes (128, 100, 140) se texto < `min_length`.
-- **Resposta**: `{ ok: true, text: "ABC12", attempts: 1, latency_ms: 1234 }` ou `{ ok: false, reason: "low_confidence" }`.
-- **Config**: `supabase/config.toml` adiciona bloco `[functions.solve-captcha]` com `verify_jwt = false`.
+`sendProgress` com `step: "fallback_to_legacy"` para o timeline da UI mostrar quando a SPA falhou. Isso aparece em `ConsultaSaude.tsx` automaticamente (já renderiza eventos do timeline).
 
-### 2. Worker — helper `solveCaptcha`
+### 5. Bump BUILD_ID
 
-`cloudflare-worker/src/lib/captcha.ts` (novo)
+`cloudflare-worker/src/index.ts` → `"2026-04-23-spa-fallback-v1"`
 
-- `findCaptchaImage(page)`: tenta seletores em cascata — `img[src*="captcha"]`, `img[alt*="captcha"]`, `img[id*="captcha"]`, `img[src*="image.aspx"]`.
-- `solveCaptcha(env, page)`:
-  1. localiza `<img>` do captcha
-  2. screenshot do elemento → base64
-  3. POST assinado para `${CALLBACK_BASE_URL}/solve-captcha`
-  4. retorna texto ou `null` se falhou
-- Bounded: 25s timeout, 1 chamada por job (evitar loop).
+### 6. UI: nova classificação
 
-### 3. Provider CND — integrar OCR
-
-`cloudflare-worker/src/providers/cnd-public-portal.ts`
-
-Fluxo atualizado entre **fill_cnpj** e **submit**:
-
-1. preencher CNPJ (já existe)
-2. **NOVO** `detect_captcha_image`: procurar `<img>` do captcha na página
-3. **NOVO** `solve_captcha`: se encontrou, chamar `solveCaptcha(env, page)`
-4. **NOVO** `fill_captcha`: preencher input do código (`input[name*="captcha"]`, `input[id*="captcha"]`, `input[placeholder*="código"]`)
-5. **NOVO** se OCR retornou `null` → `throw "captcha_unsolvable"` → vira `manual_required`
-6. submit (já existe)
-7. parse — se aparecer mensagem `"código incorreto"`, classificar como `captcha_failed` (novo error_type) → `manual_required` com sugestão "OCR errou, tente novamente"
-
-Screenshots adicionais: `cnd_step2b_captcha`, `cnd_step2c_captcha_filled`.
-
-### 4. Provider CNPJ — mesma integração
-
-`cloudflare-worker/src/providers/cnpj-public-portal.ts`
-
-Mesma lógica: detectar `<img>` captcha após preencher CNPJ, resolver via OCR, preencher input, submeter. Hoje sai como `captcha_detected` antes de chegar no submit.
-
-### 5. Classificação
-
-`cloudflare-worker/src/lib/classification.ts`
-
-Adicionar:
-- `captcha_unsolvable` → "OCR não conseguiu ler o captcha após retries"
-- `captcha_failed` → "Captcha foi enviado mas portal rejeitou (OCR errou)"
-
-Ambos viram `manual_required` na UI.
-
-`cloudflare-worker/src/types.ts` — adicionar os 2 novos `ErrorType`.
-
-### 6. UI — sugestões no `services/classification.ts`
-
-`src/features/consulta/services/classification.ts`
-
-- `captcha_unsolvable`: "OCR automático falhou. Tente novamente em 1 min ou faça consulta manual."
-- `captcha_failed`: "OCR resolveu mas o portal rejeitou o código. Tente novamente."
-
-### 7. Bump BUILD_ID
-
-`cloudflare-worker/src/index.ts` → `"2026-04-23-ocr-captcha-v1"`
+`src/features/consulta/services/classification.ts`:
+- `spa_layout_changed`: "Portal novo da Receita mudou — fluxo legado em uso. Reporte para revisão."
+- Mantém demais.
 
 ## Arquivos alterados
 
-**Edge Function (deploy automático Lovable):**
-- `supabase/functions/solve-captcha/index.ts` (novo)
-- `supabase/config.toml` (bloco `[functions.solve-captcha]`)
-
 **Cloudflare Worker (precisa `wrangler deploy`):**
-- `cloudflare-worker/src/lib/captcha.ts` (novo)
-- `cloudflare-worker/src/providers/cnd-public-portal.ts`
-- `cloudflare-worker/src/providers/cnpj-public-portal.ts`
-- `cloudflare-worker/src/lib/classification.ts`
-- `cloudflare-worker/src/types.ts`
+- `cloudflare-worker/src/providers/cnd-spa-portal.ts` (novo)
+- `cloudflare-worker/src/providers/cnd-public-portal.ts` (vira dispatcher SPA→legado; remove falso-positivo)
+- `cloudflare-worker/src/providers/cnpj-public-portal.ts` (apenas remove falso-positivo; sem SPA)
 - `cloudflare-worker/src/index.ts` (BUILD_ID)
 
 **App:**
-- `src/features/consulta/services/classification.ts`
+- `src/features/consulta/services/classification.ts` (nova entrada `spa_layout_changed`)
 
-## Detalhes técnicos importantes
+## Por que NÃO seguir o script Node literal
 
-- **Sem custo**: Tesseract.js é grátis, roda no Deno (limite de CPU mais generoso que Worker).
-- **Sem Sharp**: substituído por Canvas API nativa do Deno (mesmo pré-processamento).
-- **Tempo OCR**: ~2-4s por captcha. Adiciona latência mas mantém manual_required como fallback.
-- **Taxa de acerto esperada**: 60-80% (alinhado com o que seu script estima). Quando errar → `captcha_failed` → manual_required.
-- **HMAC**: `solve-captcha` usa o mesmo `CF_CALLBACK_HMAC_SECRET` que `cf-progress-callback` — não precisa criar novo segredo.
-- **Sem Vision API, sem CapSolver, sem chaves novas**: 100% grátis e local ao seu stack.
+- `sharp` é binário nativo — não roda em Worker nem em edge function Deno (já resolvido com Canvas API + Tesseract WASM)
+- Seletores genéricos `canvas, img` pegam qualquer imagem da página (logo, ícone) — usar seletores específicos do helper `findCaptchaImage` que já filtra por `src/alt/id` contendo `captcha`
+- `headless: false` não é opção no Worker (sempre headless)
 
 ## Deploy necessário
 
-**SIM** — após eu aplicar as mudanças, você precisa rodar:
+**SIM:**
 
 ```bash
 cd cloudflare-worker
 npm install
 npx wrangler deploy
 curl -s https://gestaoez.leomateus620.workers.dev/health | jq .build_id
-# esperado: "2026-04-23-ocr-captcha-v1"
+# esperado: "2026-04-23-spa-fallback-v1"
 ```
 
-A edge function `solve-captcha` é deployada automaticamente pelo Lovable.
+Edge function `solve-captcha` já está deployada (sem mudança).
 
-## Resultado esperado no dry-run pós-deploy
+## Resultado esperado pós-deploy
 
-- **CNPJ**: tenta OCR. Se acertar → `success` com dados parseados. Se errar 2x → `manual_required` com `captcha_unsolvable` ou `captcha_failed`.
-- **CND**: idem.
-- Sem mais `captcha_detected` puro — sempre passa pelo OCR antes.
+- **CND**: SPA nova tenta primeiro. Se OCR resolver → `success`. Se SPA falhar com seletor → fallback automático para portal antigo. Se ambos falharem → `manual_required` com motivo claro.
+- **CNPJ**: portal antigo, sem mais falso-positivo de captcha. OCR é tentado quando há `<img>` real.
+- Timeline da UI mostra `fallback_to_legacy` quando SPA falha — visibilidade total.
 
 ## Restrições mantidas
 
-- Não mexer em HMAC, secrets existentes, bindings, callback_base
-- Não mexer no portal CND (continua o antigo)
-- Não usar APIs pagas (Sharp, CapSolver, Vision, OpenAI)
+- Sem mexer em HMAC, secrets, bindings, callback_base
+- Sem APIs pagas
+- Edge function `solve-captcha` permanece igual
 
