@@ -1,87 +1,50 @@
 
 
-# Robustecer detecção de captcha e seletores na SPA da Receita
+# Cancelar dry-run em andamento
 
-## Diagnóstico (confirmado pelos logs)
+## O que vou fazer
 
-Job `2e57a74c` mostra: `navigate_spa → select_pj → fill_cnpj_spa → submit_spa → wait_result_spa` — **não passou por `solve_captcha_spa`**. Isso significa que `findCaptchaImage(page)` retornou `null` na SPA Angular da Receita, então o submit foi enviado **sem captcha**, o portal travou, e o job vai cair em `layout_changed: spa_result` (timeout de 30s).
+### 1. Cancelar o job em execução (agora)
+- Marcar o job CND `2e57a74c-bcd9-439b-87bf-73c020a26707` como `cancelled` em `automation_jobs` (status + `error_type='cancelled'` + `finished_at=now()`).
+- Marcar qualquer outro job `queued/running/dispatched` correlacionado ao dry-run como `cancelled` também (varredura por segurança).
+- Resetar a chave `automation_config_kv.dry_run_zimmermann` para `{ in_progress: false, passed: false, cancelled: true, cancelled_at: <now> }` para que a UI pare de fazer polling e o botão "Executar Dry-run" volte a ficar disponível.
 
-Causa raiz: os seletores de captcha em `cloudflare-worker/src/lib/captcha.ts` só procuram `img` cujo `src/alt/id/name` contenha literalmente "captcha". A SPA da Receita usa atributos em português ("imagem", "verificação", "código de segurança") e provavelmente um `data:image/png;base64,...` no `src` que não casa com `*="captcha"`.
+### 2. Adicionar botão "Cancelar dry-run" na UI (`/consulta/saude`)
+Para você não precisar pedir cancelamento manual de novo:
+- Em `src/pages/consulta/ConsultaSaude.tsx`, ao lado do botão "Executando…", mostrar botão **Cancelar** quando `inProgress === true`.
+- Novo hook `useCancelDryRun()` em `src/features/consulta/hooks/useLookup.ts` que invoca uma nova edge function `dry-run-zimmermann-cancel`.
 
-## Correções
+### 3. Nova edge function `dry-run-zimmermann-cancel`
+`supabase/functions/dry-run-zimmermann-cancel/index.ts`:
+- Lê `automation_config_kv.dry_run_zimmermann` para pegar `cnpj_request_id` e `cnd_request_id`.
+- Faz `UPDATE automation_jobs SET status='cancelled', error_type='cancelled', error_message='Cancelado pelo usuário', finished_at=now() WHERE id IN (...) AND status IN ('queued','running','dispatched')`.
+- Atualiza o KV para `in_progress: false, passed: false, cancelled: true, phase: 'cancelled'`.
+- Adiciona bloco em `supabase/config.toml` com `verify_jwt = false`.
 
-### 1. Ampliar seletores de captcha (`cloudflare-worker/src/lib/captcha.ts`)
+**Observação importante**: o Cloudflare Worker que está executando o job não tem endpoint de cancelamento remoto — ele continua rodando no background até o timeout (~120s) ou até concluir. Mas como marcamos o job como `cancelled` no banco, o callback final dele será **ignorado** pela edge `cf-final-callback` (vou adicionar guard: se `automation_jobs.status='cancelled'`, descartar o resultado). Isso garante que a UI/KV permaneça limpa.
 
-Adicionar à `CAPTCHA_IMG_SELECTORS`:
-- `'img[src^="data:image"]'` — pega base64 inline (padrão Angular/SPAs)
-- `'img[alt*="imagem" i]'`, `'img[alt*="verifica" i]'`, `'img[alt*="seguran" i]'`, `'img[alt*="c\u00f3digo" i]'`
-- `'img[title*="captcha" i]'`, `'img[title*="imagem" i]'`
-- `'canvas'` como último recurso (algumas SPAs renderizam captcha em canvas)
-
-Adicionar à `CAPTCHA_INPUT_SELECTORS`:
-- `'input[placeholder*="verifica" i]'`
-- `'input[placeholder*="seguran" i]'`
-- `'input[aria-label*="c\u00f3digo" i]'`
-- `'input[aria-label*="captcha" i]'`
-
-Nova função `findCaptchaImageSmart(page)`: se nenhum seletor casar, varrer **todas** as `<img>` da página, filtrar por:
-- dimensão (entre 60-300px largura, 20-100px altura — captchas têm aspect ratio típico)
-- presença de `src` começando com `data:image` OU `src` contendo `/captcha`, `/image`, `/imagem`, `.aspx`
-- excluir logos conhecidos (alt contém "logo", "Receita Federal", "Ministério")
-
-Retorna o primeiro match. Loga (via `console.log` do worker) qual seletor/heurística casou para diagnóstico futuro.
-
-### 2. Robustecer `cnd-spa-portal.ts`
-
-- **Detecção de captcha**: usar `findCaptchaImageSmart` (não a versão estrita). Se ainda assim retornar `null`, **abortar para fallback** com `throw new Error("layout_changed: spa_no_captcha — captcha esperado mas não encontrado")` em vez de prosseguir sem captcha.
-- **Seletor "Pessoa Jurídica"**: priorizar elementos clicáveis (`button`, `[role="button"]`, `a`, `mat-card`, `.card`) com texto exato. Evitar `getByText` que pega qualquer span institucional.
-- **Input CNPJ**: remover `'input[type="text"]'` genérico (pega qualquer text input). Manter só seletores específicos. Se nenhum casar → `layout_changed: spa_fill_cnpj`.
-- **Botão submit**: priorizar `button[type="submit"]` antes de buscar por texto, e validar que o botão está **enabled** antes de clicar.
-
-### 3. Diagnóstico (sem mexer em HMAC/secrets)
-
-Adicionar `details_json` aos `sendProgress` críticos:
-- `solve_captcha_spa`: incluir `selector_used`, `image_dims`, `src_prefix` (primeiros 50 chars).
-- Quando `findCaptchaImageSmart` falhar: log com lista de **todas** as `<img>` da página (src/alt/dims), para debug pós-mortem visível em `automation_job_logs.details_json`.
-
-### 4. Bump BUILD_ID
-
-`cloudflare-worker/src/index.ts` → `"2026-04-23-spa-captcha-smart-v1"`
+### 4. Guard no `cf-final-callback`
+`supabase/functions/cf-final-callback/index.ts`: antes de gravar resultado, verificar se o job já está `cancelled`. Se sim, retornar 200 OK silenciosamente sem persistir nada.
 
 ## Arquivos alterados
 
-**Cloudflare Worker (precisa `wrangler deploy`):**
-- `cloudflare-worker/src/lib/captcha.ts` — seletores ampliados + `findCaptchaImageSmart`
-- `cloudflare-worker/src/providers/cnd-spa-portal.ts` — usa smart finder, exige captcha, seletores mais estritos para PJ/CNPJ/submit, logs de diagnóstico
-- `cloudflare-worker/src/index.ts` — BUILD_ID
+**Imediato (cancelar agora via SQL — eu executo no momento da implementação):**
+- `automation_jobs` row do job `2e57a74c…` → `status=cancelled`
+- `automation_config_kv.dry_run_zimmermann` → `in_progress=false, cancelled=true`
 
-**Sem mudanças em:**
-- App / UI / classificação (já cobre `layout_changed` e `captcha_unsolvable`)
-- Edge function `solve-captcha` (continua igual)
-- HMAC, secrets, bindings, callback_base
-- Provider CNPJ (que está aprovado pelo usuário)
+**Edge functions (deploy automático Lovable):**
+- `supabase/functions/dry-run-zimmermann-cancel/index.ts` (novo)
+- `supabase/functions/cf-final-callback/index.ts` (guard cancelled)
+- `supabase/config.toml` (bloco `[functions.dry-run-zimmermann-cancel]`)
 
-## Deploy necessário
+**App:**
+- `src/features/consulta/hooks/useLookup.ts` (novo `useCancelDryRun`)
+- `src/pages/consulta/ConsultaSaude.tsx` (botão Cancelar)
 
-**SIM:**
+## Sem mudanças em
+- HMAC, secrets, bindings, Cloudflare Worker, providers de captcha, classificação, BUILD_ID.
 
-```bash
-cd cloudflare-worker
-npm install
-npx wrangler deploy
-curl -s https://gestaoez.leomateus620.workers.dev/health | jq .build_id
-# esperado: "2026-04-23-spa-captcha-smart-v1"
-```
-
-## Resultado esperado pós-deploy
-
-- **CND**: SPA detecta o `<img>` real do captcha (mesmo sem o termo "captcha" no atributo), passa para OCR, preenche código, submete. Se OCR errar → `manual_required`. Se SPA realmente quebrou → fallback automático para portal legado (já funciona).
-- Logs de `automation_job_logs` agora terão `details_json` rico para diagnóstico visual no `/consulta/saude`.
-- CNPJ mantém comportamento atual (já aprovado).
-
-## Por que não outras alternativas
-
-- **Não migrar para nova URL**: já estamos na URL nova (`servicos.receitafederal.gov.br`) — o problema é seletor.
-- **Não trocar OCR por API paga**: OCR já está integrado e gratuito. Quando captcha for encontrado, a chain funciona.
-- **Não remover SPA e voltar só pro legado**: legado também tem captcha; a melhoria de seletores ajuda os dois.
+## Resultado esperado
+- Em segundos após aprovar: dry-run em andamento marcado como cancelado, UI libera o botão "Executar Dry-run", você pode disparar uma nova consulta imediatamente.
+- A partir de agora, sempre que houver dry-run rodando, aparece o botão **Cancelar** na UI.
 
