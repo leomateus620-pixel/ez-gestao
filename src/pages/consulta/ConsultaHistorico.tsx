@@ -67,3 +67,33 @@ function HistoryTable({ rows, loading }: { rows: any[]; loading: boolean }) {
     </Table>
   );
 }
+
+function ErrorCell({ requestId, status }: { requestId: string; status: string }) {
+  const enabled = status === "failed" || status === "manual_required";
+  const { data } = useQuery({
+    queryKey: ["job-error", requestId],
+    enabled,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("automation_jobs")
+        .select("error_type, error_message")
+        .eq("target_request_id", requestId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    staleTime: 60_000,
+  });
+  if (!enabled) return <span className="text-muted-foreground text-xs">—</span>;
+  if (!data) return <span className="text-muted-foreground text-xs">…</span>;
+  const desc = describeError(data.error_type);
+  return (
+    <div className="text-xs">
+      <div className="font-medium text-destructive">{desc.label}</div>
+      {data.error_message && (
+        <div className="text-muted-foreground line-clamp-2 break-words">{data.error_message}</div>
+      )}
+    </div>
+  );
+}
