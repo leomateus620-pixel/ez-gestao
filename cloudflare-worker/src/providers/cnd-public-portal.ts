@@ -4,6 +4,7 @@ import { withBrowser } from "../lib/browser";
 import { sendProgress, sendFinal, requestArtifactUpload, uploadArtifactBytes } from "../lib/progress";
 import { classifyError } from "../lib/classification";
 import { findCaptchaImage, findCaptchaInput, solveCaptcha } from "../lib/captcha";
+import { runCndSpaLookup } from "./cnd-spa-portal";
 
 const PORTAL_URL = "https://solucoes.receita.fazenda.gov.br/Servicos/certidaointernet/PJ/Emitir";
 const PROVIDER = "provider_public_portal_cnd_cloudflare";
@@ -37,7 +38,50 @@ function detectCaptcha(text: string): boolean {
   return /captcha|recaptcha|hcaptcha|n[ãa]o sou um rob[oô]/i.test(text);
 }
 
+/**
+ * Dispatcher: tenta a SPA nova primeiro, com fallback automático para o
+ * portal legado quando a SPA falha por mudança de layout / timeout.
+ * Falhas de captcha (unsolvable / failed) NÃO disparam fallback — o portal
+ * antigo provavelmente também falharia e isso só dobraria a latência.
+ */
 export async function runCndLookup(env: Env, payload: ExecuteJobPayload): Promise<void> {
+  try {
+    await runCndSpaLookup(env, payload);
+    return;
+  } catch (errSpa) {
+    const msg = errSpa instanceof Error ? errSpa.message : String(errSpa);
+    const isFallbackable = /^layout_changed/i.test(msg) || /^timeout/i.test(msg) || /timed? ?out/i.test(msg);
+    if (!isFallbackable) {
+      // Captcha unsolvable / failed / etc. — finaliza como manual_required.
+      const c = classifyError(errSpa, "");
+      await sendFinal(env, {
+        job_id: payload.job_id,
+        request_id: payload.request_id,
+        type: "cnd",
+        status: (c.error_type === "captcha_detected"
+          || c.error_type === "captcha_unsolvable"
+          || c.error_type === "captcha_failed"
+          || c.error_type === "manual_required") ? "manual_required" : "failed",
+        error_type: c.error_type,
+        error_message: c.message,
+        source_url: "https://servicos.receitafederal.gov.br/servico/certidoes/",
+        provider: "provider_public_portal_cnd_spa_cloudflare",
+      });
+      return;
+    }
+    // Fallback decision visible in UI timeline.
+    await sendProgress(env, {
+      job_id: payload.job_id,
+      step: "fallback_to_legacy",
+      level: "warning",
+      message: `SPA falhou (${msg.slice(0, 120)}) — tentando portal legado`,
+      provider: "provider_public_portal_cnd_cloudflare",
+    });
+    await runCndLegacyLookup(env, payload);
+  }
+}
+
+async function runCndLegacyLookup(env: Env, payload: ExecuteJobPayload): Promise<void> {
   const start = Date.now();
   let html = "";
   let successPayload: Record<string, unknown> | null = null;
@@ -51,11 +95,10 @@ export async function runCndLookup(env: Env, payload: ExecuteJobPayload): Promis
       // Step 1: landing page
       await page.goto(PORTAL_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
       await captureScreenshot(env, payload, page, "cnd_step1_landing");
-      let landingContent = await page.content();
-      html = landingContent.toLowerCase();
-      if (detectCaptcha(html)) {
-        throw new Error("captcha detected on landing page");
-      }
+      // NOTE: NÃO detectar captcha por texto na landing — a página institucional
+      // contém a palavra "captcha" em FAQs/links e gerava falso-positivo. A
+      // detecção real é feita via findCaptchaImage(page) após chegar no form.
+      html = (await page.content()).toLowerCase();
 
       // Step 2: enter form (click "Emitir Certidão" if there is an intermediate landing)
       await sendProgress(env, { job_id: payload.job_id, step: "enter_form", message: "Acessando formulário CND", provider: PROVIDER });

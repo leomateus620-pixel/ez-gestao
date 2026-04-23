@@ -15,6 +15,10 @@ export const ERROR_LABELS: Record<string, { label: string; suggestion: string }>
     label: "Layout do portal mudou",
     suggestion: "O layout do portal CND mudou. O conector precisa ser atualizado. Reporte ao time técnico com o screenshot da etapa final.",
   },
+  spa_layout_changed: {
+    label: "SPA nova mudou — usando portal legado",
+    suggestion: "A SPA nova da Receita mudou layout. O conector caiu automaticamente para o portal legado. Reporte ao time técnico para atualizar os seletores da SPA.",
+  },
   timeout: { label: "Tempo esgotado", suggestion: "Portal lento. Tente reprocessar." },
   cnpj_not_found: { label: "CNPJ não encontrado", suggestion: "Confirme se o CNPJ existe na Receita." },
   portal_unavailable: { label: "Portal indisponível", suggestion: "Aguarde restabelecimento do serviço." },

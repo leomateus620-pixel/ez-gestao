@@ -40,11 +40,10 @@ export async function runCnpjLookup(env: Env, payload: ExecuteJobPayload): Promi
       await page.goto(PORTAL_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
       await captureScreenshot(env, payload, page, "step1_portal");
 
-      // Detect captcha early
+      // NOTE: NÃO detectar captcha por texto na landing — gera falso-positivo
+      // (palavra "captcha" pode aparecer em links/FAQ). A detecção real ocorre
+      // via findCaptchaImage(page) após preencher o CNPJ.
       html = (await page.content()).toLowerCase();
-      if (/captcha|hcaptcha|recaptcha/i.test(html)) {
-        throw new Error("captcha detected on landing page");
-      }
 
       await sendProgress(env, { job_id: payload.job_id, step: "submit", message: "Enviando CNPJ", provider: PROVIDER });
 
