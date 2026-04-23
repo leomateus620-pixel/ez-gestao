@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   dispatchLookup, fetchLookupStatus, retryLookup,
   fetchProviderHealth, runDryRunZimmermann,
+  fetchDryRunStatus,
   type DispatchInput, type LookupType,
 } from "../services/dispatcher";
 
@@ -104,6 +105,19 @@ export function useExceptionsCenter() {
 
 export function useDryRun() {
   return useMutation({ mutationFn: () => runDryRunZimmermann() });
+}
+
+export function useDryRunLive(enabled: boolean) {
+  return useQuery({
+    queryKey: ["dry-run-live"],
+    queryFn: fetchDryRunStatus,
+    enabled,
+    refetchInterval: (q) => {
+      const d: any = q.state.data;
+      if (!d) return 3000;
+      return d.in_progress ? 3000 : false;
+    },
+  });
 }
 
 export function useHmacDiagnose() {

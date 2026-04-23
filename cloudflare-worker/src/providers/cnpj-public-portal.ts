@@ -26,6 +26,7 @@ export async function runCnpjLookup(env: Env, payload: ExecuteJobPayload): Promi
   const start = Date.now();
   const sourceUrl = PORTAL_URL;
   let html = "";
+  let successPayload: Record<string, unknown> | null = null;
 
   try {
     await sendProgress(env, { job_id: payload.job_id, step: "navigate", message: "Abrindo portal CNPJ", status: "running", provider: PROVIDER });
@@ -77,9 +78,9 @@ export async function runCnpjLookup(env: Env, payload: ExecuteJobPayload): Promi
 
       await sendProgress(env, { job_id: payload.job_id, step: "done", message: "Consulta concluída", provider: PROVIDER });
 
-      await sendFinal(env, {
+      successPayload = {
         job_id: payload.job_id,
-        request_id: undefined, // resolved via job_id->target_request_id (see fallback below)
+        request_id: payload.request_id,
         type: "cnpj",
         status: "success",
         official_name: parsed.official_name || null,
@@ -97,14 +98,19 @@ export async function runCnpjLookup(env: Env, payload: ExecuteJobPayload): Promi
         parsed_confidence: confidence,
         provider: PROVIDER,
         latency_ms: Date.now() - start,
-      });
+      };
     });
+
+    if (successPayload) {
+      await sendFinal(env, successPayload);
+    }
   } catch (err) {
     const c = classifyError(err, html);
     await sendFinal(env, {
       job_id: payload.job_id,
+      request_id: payload.request_id,
       type: "cnpj",
-      status: c.error_type === "captcha_detected" ? "manual_required" : "failed",
+      status: (c.error_type === "captcha_detected" || c.error_type === "manual_required") ? "manual_required" : "failed",
       error_type: c.error_type,
       error_message: c.message,
       source_url: sourceUrl,

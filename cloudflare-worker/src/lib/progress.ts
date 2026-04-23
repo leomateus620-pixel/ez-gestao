@@ -34,7 +34,12 @@ export async function sendProgress(env: Env, payload: {
 }
 
 export async function sendFinal(env: Env, payload: Record<string, unknown>): Promise<void> {
-  await postSigned(env, callbackUrl(env, "/cf-final-callback"), payload);
+  const r = await postSigned(env, callbackUrl(env, "/cf-final-callback"), payload);
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    console.error("cf-final-callback non-2xx", r.status, txt.slice(0, 300));
+    throw new Error(`callback_error cf-final-callback ${r.status}: ${txt.slice(0, 200)}`);
+  }
 }
 
 export async function requestArtifactUpload(env: Env, payload: {

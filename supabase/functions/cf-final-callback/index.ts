@@ -61,7 +61,7 @@ serve(async (req) => {
 
     const body = JSON.parse(raw);
     const {
-      job_id, request_id, type, status, error_type, error_message,
+      job_id, type, status, error_type, error_message,
       raw_payload, parsed_payload, source_url, parsed_confidence,
       // CNPJ
       official_name, trade_name, registration_status, opening_date,
@@ -71,9 +71,30 @@ serve(async (req) => {
       pdf_path, pdf_sha256,
       provider, latency_ms,
     } = body;
+    let { request_id } = body;
 
     const reqTable = type === "cnpj" ? "company_lookup_requests" : "cnd_lookup_requests";
     const resTable = type === "cnpj" ? "company_lookup_results" : "cnd_lookup_results";
+
+    // Fallback: resolve request_id via job_id when worker omits it
+    if (!request_id && job_id) {
+      const { data: jobRow } = await supabase
+        .from("automation_jobs")
+        .select("target_request_id")
+        .eq("id", job_id)
+        .maybeSingle();
+      if (jobRow?.target_request_id) {
+        request_id = jobRow.target_request_id;
+        console.log("cf-final-callback resolved request_id via fallback", { job_id, request_id });
+      } else {
+        console.error("cf-final-callback missing request_id and no fallback", { job_id });
+      }
+    }
+    if (!request_id) {
+      return new Response(JSON.stringify({ error: "missing_request_id", job_id }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     if (status === "success") {
       if (type === "cnpj") {
@@ -105,23 +126,27 @@ serve(async (req) => {
           cache_valid_until: cacheUntil,
         });
       }
-      await supabase.from(reqTable).update({
+      const upd1 = await supabase.from(reqTable).update({
         status: "success", finished_at: new Date().toISOString(),
-      }).eq("id", request_id);
-      await supabase.from("automation_jobs").update({
+      }).eq("id", request_id).select("id");
+      if (!upd1.data?.length) console.warn("cf-final-callback request update affected 0 rows", { request_id, reqTable });
+      const upd2 = await supabase.from("automation_jobs").update({
         status: "success", finished_at: new Date().toISOString(),
-      }).eq("id", job_id);
+      }).eq("id", job_id).select("id");
+      if (!upd2.data?.length) console.warn("cf-final-callback job update affected 0 rows", { job_id });
     } else {
       const finalStatus = status === "manual_required" ? "manual_required" : "failed";
-      await supabase.from(reqTable).update({
+      const upd1 = await supabase.from(reqTable).update({
         status: finalStatus, finished_at: new Date().toISOString(),
-      }).eq("id", request_id);
-      await supabase.from("automation_jobs").update({
+      }).eq("id", request_id).select("id");
+      if (!upd1.data?.length) console.warn("cf-final-callback request update affected 0 rows (failure path)", { request_id, reqTable });
+      const upd2 = await supabase.from("automation_jobs").update({
         status: finalStatus,
         error_type: error_type || "unknown",
         error_message: (error_message || "").slice(0, 500),
         finished_at: new Date().toISOString(),
-      }).eq("id", job_id);
+      }).eq("id", job_id).select("id");
+      if (!upd2.data?.length) console.warn("cf-final-callback job update affected 0 rows (failure path)", { job_id });
       await supabase.from("automation_exceptions").insert({
         title: error_type || "Falha na execução",
         description: (error_message || "").slice(0, 500),

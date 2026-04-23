@@ -12,6 +12,7 @@ export interface ExecuteJobPayload {
   cnpj: string;
   correlation_id: string;
   callback_base?: string;
+  request_id?: string;
 }
 
 export type ErrorType =
@@ -22,4 +23,8 @@ export type ErrorType =
   | "portal_unavailable"
   | "navigation_error"
   | "parsing_error"
+  | "rate_limited"
+  | "browser_unavailable"
+  | "callback_error"
+  | "manual_required"
   | "unknown";

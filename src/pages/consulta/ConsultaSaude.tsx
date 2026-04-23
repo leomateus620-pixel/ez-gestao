@@ -2,13 +2,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { useProviderHealth, useDryRun, useDryRunStatus, useFeatureFlag, useHmacDiagnose } from "@/features/consulta/hooks/useLookup";
+import { useProviderHealth, useDryRun, useDryRunStatus, useFeatureFlag, useHmacDiagnose, useDryRunLive } from "@/features/consulta/hooks/useLookup";
 import { ProviderHealthCard } from "@/features/consulta/components/ProviderHealthCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Play, FileText, Lock, ShieldCheck, ShieldAlert, Server } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
+import { useState } from "react";
+import { describeError } from "@/features/consulta/services/classification";
 
 export default function ConsultaSaude() {
   const { data: health } = useProviderHealth();
@@ -17,8 +19,22 @@ export default function ConsultaSaude() {
   const dryRunMut = useDryRun();
   const diagMut = useHmacDiagnose();
   const qc = useQueryClient();
+  const [polling, setPolling] = useState(false);
+  const { data: live } = useDryRunLive(polling);
 
-  const passed = (dryRun?.value_json as any)?.passed === true;
+  const dryV: any = (dryRun?.value_json as any) || {};
+  const passed = (live?.passed ?? dryV.passed) === true;
+  const inProgress = !!(live?.in_progress ?? dryV.in_progress);
+  const cnpjStatus = live?.cnpj_status ?? dryV.cnpj_status;
+  const cndStatus = live?.cnd_status ?? dryV.cnd_status;
+  const cnpjErr = live?.cnpj_error_type ?? dryV.cnpj_error_type;
+  const cnpjErrMsg = live?.cnpj_error_message ?? dryV.cnpj_error_message;
+  const cndErr = live?.cnd_error_type ?? dryV.cnd_error_type;
+  const cndErrMsg = live?.cnd_error_message ?? dryV.cnd_error_message;
+  const signedUrl = live?.signed_url || null;
+  const lastRunAt = live?.last_run_at ?? dryV.last_run_at;
+  const cnpjReqId = live?.cnpj_request_id ?? dryV.cnpj_request_id;
+  const cndReqId = live?.cnd_request_id ?? dryV.cnd_request_id;
   const workerHealth: any = (health as any)?.worker_health?.body ?? null;
   const workerHealthOk = !!(health as any)?.worker_health?.ok;
 
@@ -48,11 +64,12 @@ export default function ConsultaSaude() {
         return;
       }
     }
-    toast.message("Dry-run iniciado", { description: "Pode levar até 90s." });
+    toast.message("Dry-run iniciado", { description: "Acompanhando progresso ao vivo…" });
     try {
-      const r = await dryRunMut.mutateAsync();
+      await dryRunMut.mutateAsync();
+      setPolling(true);
+      qc.invalidateQueries({ queryKey: ["dry-run-live"] });
       refetchDryRun();
-      toast.success(`Dry-run ${r.passed ? "aprovado" : "reprovado"}`);
     } catch (e: any) {
       toast.error("Falha no dry-run", { description: e?.message });
     }
@@ -193,22 +210,42 @@ wrangler secret put LOVABLE_HMAC_SECRET
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">Executa CNPJ + CND reais contra o portal Receita pelo Worker Cloudflare. Obrigatório antes de habilitar o módulo no menu.</p>
           <div className="flex flex-wrap gap-2 items-center">
-            <Button onClick={runDry} disabled={dryRunMut.isPending}>
-              <Play className="h-4 w-4 mr-1" /> {dryRunMut.isPending ? "Executando…" : "Executar dry-run"}
+            <Button onClick={runDry} disabled={dryRunMut.isPending || inProgress}>
+              <Play className="h-4 w-4 mr-1" /> {inProgress ? "Executando…" : dryRunMut.isPending ? "Disparando…" : "Executar dry-run"}
             </Button>
-            {dryRun && (
-              <span className={`text-sm ${passed ? "text-primary" : "text-destructive"}`}>
-                Último: {passed ? "APROVADO" : "REPROVADO"} · {(dryRun.value_json as any)?.last_run_at ? new Date((dryRun.value_json as any).last_run_at).toLocaleString("pt-BR") : "—"}
+            {(dryRun || live) && (
+              <span className={`text-sm ${inProgress ? "text-muted-foreground" : passed ? "text-primary" : "text-destructive"}`}>
+                {inProgress ? "EM ANDAMENTO" : `Último: ${passed ? "APROVADO" : "REPROVADO"}`}
+                {lastRunAt && ` · ${new Date(lastRunAt).toLocaleString("pt-BR")}`}
               </span>
             )}
-            {dryRunMut.data?.report_path && (
+            {signedUrl && (
               <Button asChild variant="outline" size="sm">
-                <Link to={`/consulta/relatorios/${encodeURIComponent(dryRunMut.data.report_path)}`}>
-                  <FileText className="h-4 w-4 mr-1" /> Ver relatório
-                </Link>
+                <a href={signedUrl} target="_blank" rel="noreferrer">
+                  <FileText className="h-4 w-4 mr-1" /> Ver relatório JSON
+                </a>
               </Button>
             )}
           </div>
+
+          {(cnpjStatus || cndStatus) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+              <DryRunSubCard
+                label="CNPJ (Receita Federal)"
+                status={cnpjStatus}
+                errorType={cnpjErr}
+                errorMessage={cnpjErrMsg}
+                requestId={cnpjReqId}
+              />
+              <DryRunSubCard
+                label="CND (Certidão Negativa)"
+                status={cndStatus}
+                errorType={cndErr}
+                errorMessage={cndErrMsg}
+                requestId={cndReqId}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -224,6 +261,39 @@ wrangler secret put LOVABLE_HMAC_SECRET
           {!passed && <span className="text-xs text-muted-foreground">Habilite após dry-run aprovado.</span>}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function DryRunSubCard({ label, status, errorType, errorMessage, requestId }: {
+  label: string; status?: string; errorType?: string | null; errorMessage?: string | null; requestId?: string;
+}) {
+  const isFailed = status === "failed";
+  const isManual = status === "manual_required";
+  const isOk = status === "success";
+  const desc = errorType ? describeError(errorType) : null;
+  return (
+    <div className={`rounded-md border p-3 text-sm ${isOk ? "border-primary/30 bg-primary/5" : isFailed ? "border-destructive/30 bg-destructive/5" : isManual ? "border-yellow-500/30 bg-yellow-500/5" : "border-border"}`}>
+      <div className="flex items-center justify-between">
+        <span className="font-medium">{label}</span>
+        <span className={`text-xs uppercase tracking-wide ${isOk ? "text-primary" : isFailed ? "text-destructive" : isManual ? "text-yellow-600" : "text-muted-foreground"}`}>
+          {status || "—"}
+        </span>
+      </div>
+      {desc && (
+        <div className="mt-2">
+          <div className="text-xs font-medium">{desc.label}</div>
+          <div className="text-xs text-muted-foreground">{desc.suggestion}</div>
+        </div>
+      )}
+      {errorMessage && (
+        <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 p-2 text-[11px] font-mono">
+          {errorMessage}
+        </pre>
+      )}
+      {requestId && (
+        <div className="mt-2 text-[11px] font-mono text-muted-foreground break-all">req: {requestId}</div>
+      )}
     </div>
   );
 }

@@ -7,6 +7,18 @@ export function classifyError(err: unknown, html?: string): { error_type: ErrorT
   if (/captcha|recaptcha|hcaptcha|i'm not a robot|não sou um robô/i.test(lower)) {
     return { error_type: "captcha_detected", message: "Portal exigiu captcha" };
   }
+  if (/429|rate.?limit|too many requests|quota.*exceed/i.test(lower)) {
+    return { error_type: "rate_limited", message: "Cloudflare Browser Rendering rate limit atingido. Reduza concorrência ou aguarde." };
+  }
+  if (/unable to create.*browser|browser.*unavailable|workers.*browser|browser binding|browser rendering.*not/i.test(lower)) {
+    return { error_type: "browser_unavailable", message: "Browser Rendering indisponível ou binding incorreto." };
+  }
+  if (/cannot read propert.*of null|reading 'accept'|reading "accept"|null \(reading/i.test(lower)) {
+    return { error_type: "browser_unavailable", message: "Falha ao iniciar Browser Rendering (binding nulo)." };
+  }
+  if (/callback.*(failed|error|non-2xx)|cf-final-callback|cf-progress-callback/i.test(lower)) {
+    return { error_type: "callback_error", message: msg };
+  }
   if (/timeout|timed out|navigation timeout/i.test(lower)) {
     return { error_type: "timeout", message: msg };
   }

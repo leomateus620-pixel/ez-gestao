@@ -72,3 +72,25 @@ export async function runDryRunZimmermann() {
   if (error) throw error;
   return data;
 }
+
+export async function fetchDryRunStatus() {
+  const { data, error } = await supabase.functions.invoke("dry-run-zimmermann-status", {
+    body: {},
+  });
+  if (error) throw error;
+  return data as {
+    in_progress: boolean;
+    passed: boolean;
+    cnpj_request_id?: string;
+    cnd_request_id?: string;
+    cnpj_status?: string;
+    cnd_status?: string;
+    cnpj_error_type?: string | null;
+    cnpj_error_message?: string | null;
+    cnd_error_type?: string | null;
+    cnd_error_message?: string | null;
+    report_path?: string | null;
+    signed_url?: string | null;
+    last_run_at?: string | null;
+  };
+}
