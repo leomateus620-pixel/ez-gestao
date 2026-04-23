@@ -2,13 +2,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { useProviderHealth, useDryRun, useDryRunStatus, useFeatureFlag, useHmacDiagnose } from "@/features/consulta/hooks/useLookup";
+import { useProviderHealth, useDryRun, useDryRunStatus, useFeatureFlag, useHmacDiagnose, useDryRunLive } from "@/features/consulta/hooks/useLookup";
 import { ProviderHealthCard } from "@/features/consulta/components/ProviderHealthCard";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Play, FileText, Lock, ShieldCheck, ShieldAlert, Server } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
+import { useState } from "react";
+import { describeError } from "@/features/consulta/services/classification";
 
 export default function ConsultaSaude() {
   const { data: health } = useProviderHealth();
@@ -17,8 +19,22 @@ export default function ConsultaSaude() {
   const dryRunMut = useDryRun();
   const diagMut = useHmacDiagnose();
   const qc = useQueryClient();
+  const [polling, setPolling] = useState(false);
+  const { data: live } = useDryRunLive(polling);
 
-  const passed = (dryRun?.value_json as any)?.passed === true;
+  const dryV: any = (dryRun?.value_json as any) || {};
+  const passed = (live?.passed ?? dryV.passed) === true;
+  const inProgress = !!(live?.in_progress ?? dryV.in_progress);
+  const cnpjStatus = live?.cnpj_status ?? dryV.cnpj_status;
+  const cndStatus = live?.cnd_status ?? dryV.cnd_status;
+  const cnpjErr = live?.cnpj_error_type ?? dryV.cnpj_error_type;
+  const cnpjErrMsg = live?.cnpj_error_message ?? dryV.cnpj_error_message;
+  const cndErr = live?.cnd_error_type ?? dryV.cnd_error_type;
+  const cndErrMsg = live?.cnd_error_message ?? dryV.cnd_error_message;
+  const signedUrl = live?.signed_url || null;
+  const lastRunAt = live?.last_run_at ?? dryV.last_run_at;
+  const cnpjReqId = live?.cnpj_request_id ?? dryV.cnpj_request_id;
+  const cndReqId = live?.cnd_request_id ?? dryV.cnd_request_id;
   const workerHealth: any = (health as any)?.worker_health?.body ?? null;
   const workerHealthOk = !!(health as any)?.worker_health?.ok;
 
@@ -48,11 +64,12 @@ export default function ConsultaSaude() {
         return;
       }
     }
-    toast.message("Dry-run iniciado", { description: "Pode levar até 90s." });
+    toast.message("Dry-run iniciado", { description: "Acompanhando progresso ao vivo…" });
     try {
-      const r = await dryRunMut.mutateAsync();
+      await dryRunMut.mutateAsync();
+      setPolling(true);
+      qc.invalidateQueries({ queryKey: ["dry-run-live"] });
       refetchDryRun();
-      toast.success(`Dry-run ${r.passed ? "aprovado" : "reprovado"}`);
     } catch (e: any) {
       toast.error("Falha no dry-run", { description: e?.message });
     }
