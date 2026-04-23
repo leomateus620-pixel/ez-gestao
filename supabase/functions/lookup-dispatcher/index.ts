@@ -152,8 +152,9 @@ serve(async (req) => {
       } else {
         const { data: cached } = await supabase
           .from("cnd_lookup_results")
-          .select("*, cnd_lookup_requests!inner(cnpj_normalized)")
+          .select("*, cnd_lookup_requests!inner(cnpj_normalized, source_provider)")
           .eq("cnd_lookup_requests.cnpj_normalized", cnpj)
+          .eq("cnd_lookup_requests.source_provider", provider)
           .gt("cache_valid_until", new Date().toISOString())
           .order("consulted_at", { ascending: false })
           .limit(1)
@@ -227,7 +228,9 @@ serve(async (req) => {
     const { data: jobRow, error: jobErr } = await supabase
       .from("automation_jobs")
       .insert({
-        job_type: type === "cnpj" ? "cnpj_lookup" : "cnd_lookup",
+        job_type: type === "cnpj"
+          ? "cnpj_lookup"
+          : type === "cnd" ? "cnd_lookup" : "cndt_lookup",
         target_request_id: requestRow.id,
         provider,
         status: "queued",
@@ -270,7 +273,9 @@ serve(async (req) => {
 
     const payload = {
       job_id: jobRow.id,
-      job_type: type === "cnpj" ? "cnpj_lookup" : "cnd_lookup",
+      job_type: type === "cnpj"
+        ? "cnpj_lookup"
+        : type === "cnd" ? "cnd_lookup" : "cndt_lookup",
       cnpj,
       correlation_id,
       request_id: requestRow.id,
