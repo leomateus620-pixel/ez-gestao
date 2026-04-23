@@ -141,7 +141,23 @@ export async function runCndSpaLookup(
     let pdfArtifactPath: string | null = null;
     let pdfSize = 0;
     try {
-      const download = await downloadPromise;
+      let download = await downloadPromise;
+      if (!download) {
+        // Fallback: SPA may render a "Baixar" link/button instead of firing the download event.
+        await page.waitForTimeout(2_000);
+        const dlEl = await trySelectors(page, [
+          'a[href$=".pdf"]',
+          'a[href*=".pdf?"]',
+          'a:has-text("Baixar")',
+          'a:has-text("Download")',
+          'button:has-text("Baixar")',
+        ]);
+        if (dlEl) {
+          const retryDownload = page.waitForEvent("download", { timeout: 15_000 }).catch(() => null);
+          try { await (dlEl as { click: (opts?: unknown) => Promise<void> }).click({ timeout: 5_000 }); } catch { /* best-effort */ }
+          download = await retryDownload;
+        }
+      }
       if (download) {
         await sendProgress(env, {
           job_id: payload.job_id, step: "download_pdf_spa",
