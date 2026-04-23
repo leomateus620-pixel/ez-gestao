@@ -11,6 +11,7 @@ const corsHeaders = {
 
 const PROVIDER_CNPJ = "provider_public_portal_cnpj_cloudflare";
 const PROVIDER_CND = "provider_public_portal_cnd_cloudflare";
+const PROVIDER_CNDT = "provider_public_portal_cndt_cloudflare";
 
 function normalizeCnpj(input: string): string {
   return (input || "").replace(/\D/g, "");
@@ -59,12 +60,12 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const type: "cnpj" | "cnd" = body.type;
+    const type: "cnpj" | "cnd" | "cndt" = body.type;
     const force_refresh: boolean = !!body.force_refresh;
     const cnpj = normalizeCnpj(body.cnpj || "");
     const requested_by = (body.requested_by || "anonymous").toString();
 
-    if (!type || !["cnpj", "cnd"].includes(type)) {
+    if (!type || !["cnpj", "cnd", "cndt"].includes(type)) {
       return new Response(JSON.stringify({ error: "invalid_type" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -83,7 +84,11 @@ serve(async (req) => {
     );
 
     const correlation_id = crypto.randomUUID();
-    const provider = type === "cnpj" ? PROVIDER_CNPJ : PROVIDER_CND;
+    const provider = type === "cnpj"
+      ? PROVIDER_CNPJ
+      : type === "cnd" ? PROVIDER_CND : PROVIDER_CNDT;
+    // CNDT reuses CND tables; provider differentiates rows.
+    const isCndLike = type === "cnd" || type === "cndt";
 
     // ---- Cache check ----
     if (!force_refresh) {
