@@ -43,6 +43,9 @@ export function classifyError(err: unknown, html?: string): { error_type: ErrorT
   if (/selector|element not found|waiting for/i.test(lower)) {
     return { error_type: "layout_changed", message: "Layout do portal mudou" };
   }
+  if (/layout_changed|no known markers/i.test(lower)) {
+    return { error_type: "layout_changed", message: "Layout do portal CND mudou — nenhum marcador conhecido encontrado" };
+  }
   if (/parse|json|unexpected token/i.test(lower)) {
     return { error_type: "parsing_error", message: msg };
   }
