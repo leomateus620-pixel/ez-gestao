@@ -1,0 +1,2 @@
+ALTER TABLE public.cnd_lookup_requests ADD COLUMN IF NOT EXISTS cache_hit boolean NOT NULL DEFAULT false;
+ALTER TABLE public.company_lookup_requests ADD COLUMN IF NOT EXISTS cache_hit boolean NOT NULL DEFAULT false;
