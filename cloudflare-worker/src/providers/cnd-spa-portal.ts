@@ -32,11 +32,17 @@ export async function runCndSpaLookup(
   await withRateLimitRetry(() => withBrowser(env, async (browser) => {
     const page = await browser.newPage();
     try {
+      // Hard timeouts: any unspecified wait dies fast instead of hanging forever.
+      page.setDefaultTimeout(20_000);
+      page.setDefaultNavigationTimeout(30_000);
+    } catch { /* setDefault* are sync but guarded for safety */ }
+    try {
       await page.setExtraHTTPHeaders({
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
       });
     } catch { /* optional */ }
 
+    try {
     await page.goto(SPA_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
     try {
       await page.waitForLoadState("networkidle", { timeout: 20_000 });
