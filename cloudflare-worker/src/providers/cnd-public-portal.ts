@@ -3,6 +3,7 @@ import type { Env, ExecuteJobPayload } from "../types";
 import { withBrowser } from "../lib/browser";
 import { sendProgress, sendFinal, requestArtifactUpload, uploadArtifactBytes } from "../lib/progress";
 import { classifyError } from "../lib/classification";
+import { findCaptchaImage, findCaptchaInput, solveCaptcha } from "../lib/captcha";
 
 const PORTAL_URL = "https://solucoes.receita.fazenda.gov.br/Servicos/certidaointernet/PJ/Emitir";
 const PROVIDER = "provider_public_portal_cnd_cloudflare";
@@ -94,6 +95,23 @@ export async function runCndLookup(env: Env, payload: ExecuteJobPayload): Promis
       await (input as { fill: (v: string) => Promise<void> }).fill(cnpjDigits);
       await captureScreenshot(env, payload, page, "cnd_step2_form");
 
+      // Step 3b: detect + solve captcha (if present)
+      const captchaImg = await findCaptchaImage(page);
+      if (captchaImg) {
+        await sendProgress(env, { job_id: payload.job_id, step: "solve_captcha", message: "Resolvendo captcha via OCR", provider: PROVIDER });
+        await captureScreenshot(env, payload, page, "cnd_step2b_captcha");
+        const solved = await solveCaptcha(env, page);
+        if (!solved.ok || !solved.text) {
+          throw new Error(`captcha_unsolvable: ${solved.reason || "unknown"}`);
+        }
+        const captchaInput = await findCaptchaInput(page);
+        if (!captchaInput) {
+          throw new Error("layout_changed: captcha image found but input not found");
+        }
+        await (captchaInput as { fill: (v: string) => Promise<void> }).fill(solved.text);
+        await captureScreenshot(env, payload, page, "cnd_step2c_captcha_filled");
+      }
+
       // Step 4: submit
       await sendProgress(env, { job_id: payload.job_id, step: "submit", message: "Enviando consulta", provider: PROVIDER });
       const submitSelectors = [
@@ -136,6 +154,10 @@ export async function runCndLookup(env: Env, payload: ExecuteJobPayload): Promis
       // Step 6: detect captcha on result
       if (detectCaptcha(lower)) {
         throw new Error("captcha detected on result page");
+      }
+      // Detect "código incorreto" -> OCR was wrong
+      if (/c[oó]digo (incorreto|inv[áa]lido)|captcha (inv[áa]lido|incorreto)/i.test(lower)) {
+        throw new Error("captcha_failed: portal rejected OCR text");
       }
 
       // Step 7: parse
@@ -187,7 +209,10 @@ export async function runCndLookup(env: Env, payload: ExecuteJobPayload): Promis
       job_id: payload.job_id,
       request_id: payload.request_id,
       type: "cnd",
-      status: (c.error_type === "captcha_detected" || c.error_type === "manual_required") ? "manual_required" : "failed",
+      status: (c.error_type === "captcha_detected"
+        || c.error_type === "captcha_unsolvable"
+        || c.error_type === "captcha_failed"
+        || c.error_type === "manual_required") ? "manual_required" : "failed",
       error_type: c.error_type,
       error_message: c.message,
       source_url: PORTAL_URL,

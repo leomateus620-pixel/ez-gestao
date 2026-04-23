@@ -3,6 +3,7 @@ import type { Env, ExecuteJobPayload } from "../types";
 import { withBrowser } from "../lib/browser";
 import { sendProgress, sendFinal, requestArtifactUpload, uploadArtifactBytes } from "../lib/progress";
 import { classifyError } from "../lib/classification";
+import { findCaptchaImage, findCaptchaInput, solveCaptcha } from "../lib/captcha";
 
 const PORTAL_URL = "https://solucoes.receita.fazenda.gov.br/Servicos/cnpjreva/Cnpjreva_Solicitacao.asp";
 const PROVIDER = "provider_public_portal_cnpj_cloudflare";
@@ -52,6 +53,23 @@ export async function runCnpjLookup(env: Env, payload: ExecuteJobPayload): Promi
       if (!cnpjInput) throw new Error("selector input[name=cnpj] not found");
       await cnpjInput.fill(payload.cnpj);
 
+      // Detect + solve captcha (if present) before submit
+      const captchaImg = await findCaptchaImage(page);
+      if (captchaImg) {
+        await sendProgress(env, { job_id: payload.job_id, step: "solve_captcha", message: "Resolvendo captcha via OCR", provider: PROVIDER });
+        await captureScreenshot(env, payload, page, "cnpj_step1b_captcha");
+        const solved = await solveCaptcha(env, page);
+        if (!solved.ok || !solved.text) {
+          throw new Error(`captcha_unsolvable: ${solved.reason || "unknown"}`);
+        }
+        const captchaInput = await findCaptchaInput(page);
+        if (!captchaInput) {
+          throw new Error("layout_changed: captcha image found but input not found");
+        }
+        await (captchaInput as { fill: (v: string) => Promise<void> }).fill(solved.text);
+        await captureScreenshot(env, payload, page, "cnpj_step1c_captcha_filled");
+      }
+
       const submit = await page.$('input[type="submit"], button[type="submit"]');
       if (submit) await submit.click();
       await page.waitForLoadState("domcontentloaded", { timeout: 30_000 });
@@ -60,6 +78,11 @@ export async function runCnpjLookup(env: Env, payload: ExecuteJobPayload): Promi
       await sendProgress(env, { job_id: payload.job_id, step: "parse", message: "Extraindo dados", provider: PROVIDER });
       const content = await page.content();
       html = content;
+
+      // Detect "código incorreto" -> OCR was wrong
+      if (/c[oó]digo (incorreto|inv[áa]lido)|captcha (inv[áa]lido|incorreto)/i.test(content)) {
+        throw new Error("captcha_failed: portal rejected OCR text");
+      }
 
       // Heuristic parsing — portal returns a printable HTML; fields vary.
       // This intentionally captures the raw HTML in raw_payload and lets the
@@ -112,7 +135,10 @@ export async function runCnpjLookup(env: Env, payload: ExecuteJobPayload): Promi
       job_id: payload.job_id,
       request_id: payload.request_id,
       type: "cnpj",
-      status: (c.error_type === "captcha_detected" || c.error_type === "manual_required") ? "manual_required" : "failed",
+      status: (c.error_type === "captcha_detected"
+        || c.error_type === "captcha_unsolvable"
+        || c.error_type === "captcha_failed"
+        || c.error_type === "manual_required") ? "manual_required" : "failed",
       error_type: c.error_type,
       error_message: c.message,
       source_url: sourceUrl,

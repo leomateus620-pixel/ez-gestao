@@ -10,6 +10,18 @@ export function classifyError(err: unknown, html?: string): { error_type: ErrorT
       message: "Runtime do Worker não suporta esta API (fs.mkdtemp/unenv). Atualizar @cloudflare/playwright e usar browser.newPage() direto sem newContext().",
     };
   }
+  if (/captcha_unsolvable|ocr.*(low_confidence|failed|n\u00e3o conseguiu)/i.test(lower)) {
+    return {
+      error_type: "captcha_unsolvable",
+      message: "OCR não conseguiu ler o captcha após retries. Tente novamente em 1 min ou faça consulta manual.",
+    };
+  }
+  if (/captcha_failed|c[oó]digo (incorreto|inv[áa]lido)|captcha (inv[áa]lido|incorreto)/i.test(lower)) {
+    return {
+      error_type: "captcha_failed",
+      message: "Captcha foi enviado mas o portal rejeitou (OCR errou). Tente novamente.",
+    };
+  }
   if (/connectovercdp|cdp.*error|protocol error.*target|browsertype\.connect/i.test(lower)) {
     return {
       error_type: "browser_unavailable",

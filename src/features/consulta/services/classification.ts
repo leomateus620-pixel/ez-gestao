@@ -3,6 +3,14 @@ export const ERROR_LABELS: Record<string, { label: string; suggestion: string }>
     label: "Captcha detectado",
     suggestion: "Receita exigiu captcha. Tente novamente em 5–10 min ou faça consulta manual em solucoes.receita.fazenda.gov.br.",
   },
+  captcha_unsolvable: {
+    label: "OCR não leu o captcha",
+    suggestion: "OCR automático falhou após retries. Tente novamente em 1 min ou faça consulta manual.",
+  },
+  captcha_failed: {
+    label: "Captcha rejeitado pelo portal",
+    suggestion: "OCR resolveu mas o portal rejeitou o código. Tente novamente — geralmente acerta na 2ª tentativa.",
+  },
   layout_changed: {
     label: "Layout do portal mudou",
     suggestion: "O layout do portal CND mudou. O conector precisa ser atualizado. Reporte ao time técnico com o screenshot da etapa final.",
