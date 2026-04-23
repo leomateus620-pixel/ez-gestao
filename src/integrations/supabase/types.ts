@@ -1486,7 +1486,7 @@ export type Database = {
         | "manual_required"
         | "retry_scheduled"
         | "cancelled"
-      job_type: "cnpj_lookup" | "cnd_lookup" | "dry_run"
+      job_type: "cnpj_lookup" | "cnd_lookup" | "dry_run" | "cndt_lookup"
       log_acao: "envio" | "abertura" | "visualizacao" | "download"
       log_level: "info" | "warning" | "error"
       lookup_status:
@@ -1728,7 +1728,7 @@ export const Constants = {
         "retry_scheduled",
         "cancelled",
       ],
-      job_type: ["cnpj_lookup", "cnd_lookup", "dry_run"],
+      job_type: ["cnpj_lookup", "cnd_lookup", "dry_run", "cndt_lookup"],
       log_acao: ["envio", "abertura", "visualizacao", "download"],
       log_level: ["info", "warning", "error"],
       lookup_status: [

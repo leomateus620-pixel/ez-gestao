@@ -24,9 +24,10 @@ serve(async (req) => {
     const v: any = (kv?.value_json as any) || {};
     const cnpjReq: string | null = v.cnpj_request_id ?? null;
     const cndReq: string | null = v.cnd_request_id ?? null;
+    const cndtReq: string | null = v.cndt_request_id ?? null;
 
     const cancelledStatuses = ["queued", "running", "dispatched", "waiting_callback"];
-    const targetIds = [cnpjReq, cndReq].filter(Boolean) as string[];
+    const targetIds = [cnpjReq, cndReq, cndtReq].filter(Boolean) as string[];
 
     // Cancel jobs linked to these requests (and any orphan running job as safety net)
     const jobUpdates: any[] = [];
@@ -68,6 +69,13 @@ serve(async (req) => {
         .eq("id", cndReq)
         .in("status", ["queued", "running"]);
     }
+    if (cndtReq) {
+      // CNDT também vive em cnd_lookup_requests
+      await supabase.from("cnd_lookup_requests")
+        .update({ status: "cancelled", finished_at: new Date().toISOString() })
+        .eq("id", cndtReq)
+        .in("status", ["queued", "running"]);
+    }
 
     // Reset KV so the UI unlocks the "Executar dry-run" button
     await supabase.from("automation_config_kv").upsert({
@@ -89,6 +97,7 @@ serve(async (req) => {
       cancelled_jobs: jobUpdates.length,
       cnpj_request_id: cnpjReq,
       cnd_request_id: cndReq,
+      cndt_request_id: cndtReq,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: String(err?.message || err) }), {

@@ -74,12 +74,16 @@ export async function fetchDryRunStatus() {
     passed: boolean;
     cnpj_request_id?: string;
     cnd_request_id?: string;
+    cndt_request_id?: string;
     cnpj_status?: string;
     cnd_status?: string;
+    cndt_status?: string;
     cnpj_error_type?: string | null;
     cnpj_error_message?: string | null;
     cnd_error_type?: string | null;
     cnd_error_message?: string | null;
+    cndt_error_type?: string | null;
+    cndt_error_message?: string | null;
     report_path?: string | null;
     signed_url?: string | null;
     last_run_at?: string | null;

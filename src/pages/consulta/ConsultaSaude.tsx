@@ -28,14 +28,18 @@ export default function ConsultaSaude() {
   const inProgress = !!(live?.in_progress ?? dryV.in_progress);
   const cnpjStatus = live?.cnpj_status ?? dryV.cnpj_status;
   const cndStatus = live?.cnd_status ?? dryV.cnd_status;
+  const cndtStatus = live?.cndt_status ?? dryV.cndt_status;
   const cnpjErr = live?.cnpj_error_type ?? dryV.cnpj_error_type;
   const cnpjErrMsg = live?.cnpj_error_message ?? dryV.cnpj_error_message;
   const cndErr = live?.cnd_error_type ?? dryV.cnd_error_type;
   const cndErrMsg = live?.cnd_error_message ?? dryV.cnd_error_message;
+  const cndtErr = live?.cndt_error_type ?? dryV.cndt_error_type;
+  const cndtErrMsg = live?.cndt_error_message ?? dryV.cndt_error_message;
   const signedUrl = live?.signed_url || null;
   const lastRunAt = live?.last_run_at ?? dryV.last_run_at;
   const cnpjReqId = live?.cnpj_request_id ?? dryV.cnpj_request_id;
   const cndReqId = live?.cnd_request_id ?? dryV.cnd_request_id;
+  const cndtReqId = live?.cndt_request_id ?? dryV.cndt_request_id;
   const workerHealth: any = (health as any)?.worker_health?.body ?? null;
   const workerHealthOk = !!(health as any)?.worker_health?.ok;
 
@@ -220,7 +224,7 @@ wrangler secret put LOVABLE_HMAC_SECRET
           <CardTitle className="text-base flex items-center gap-2"><Play className="h-4 w-4" /> Dry-run Weinert (47.737.345/0001-96)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">Executa CNPJ + CND reais contra o portal Receita pelo Worker Cloudflare. Obrigatório antes de habilitar o módulo no menu.</p>
+          <p className="text-sm text-muted-foreground">Executa CNPJ + CND + CNDT (TST) em paralelo via Worker Cloudflare. Obrigatório antes de habilitar o módulo no menu. Nota: 3 sessões paralelas podem estourar o limite do Browser Rendering — se isso acontecer, basta retentar.</p>
           <div className="flex flex-wrap gap-2 items-center">
             <Button onClick={runDry} disabled={dryRunMut.isPending || inProgress}>
               <Play className="h-4 w-4 mr-1" /> {inProgress ? "Executando…" : dryRunMut.isPending ? "Disparando…" : "Executar dry-run"}
@@ -245,8 +249,8 @@ wrangler secret put LOVABLE_HMAC_SECRET
             )}
           </div>
 
-          {(cnpjStatus || cndStatus) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+          {(cnpjStatus || cndStatus || cndtStatus) && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
               <DryRunSubCard
                 label="CNPJ (Receita Federal)"
                 status={cnpjStatus}
@@ -255,11 +259,18 @@ wrangler secret put LOVABLE_HMAC_SECRET
                 requestId={cnpjReqId}
               />
               <DryRunSubCard
-                label="CND (Certidão Negativa)"
+                label="CND (Receita Federal)"
                 status={cndStatus}
                 errorType={cndErr}
                 errorMessage={cndErrMsg}
                 requestId={cndReqId}
+              />
+              <DryRunSubCard
+                label="CNDT (Justiça do Trabalho)"
+                status={cndtStatus}
+                errorType={cndtErr}
+                errorMessage={cndtErrMsg}
+                requestId={cndtReqId}
               />
             </div>
           )}

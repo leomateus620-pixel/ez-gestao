@@ -11,6 +11,7 @@ const corsHeaders = {
 
 const PROVIDER_CNPJ = "provider_public_portal_cnpj_cloudflare";
 const PROVIDER_CND = "provider_public_portal_cnd_cloudflare";
+const PROVIDER_CNDT = "provider_public_portal_cndt_cloudflare";
 
 function normalizeCnpj(input: string): string {
   return (input || "").replace(/\D/g, "");
@@ -59,12 +60,12 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const type: "cnpj" | "cnd" = body.type;
+    const type: "cnpj" | "cnd" | "cndt" = body.type;
     const force_refresh: boolean = !!body.force_refresh;
     const cnpj = normalizeCnpj(body.cnpj || "");
     const requested_by = (body.requested_by || "anonymous").toString();
 
-    if (!type || !["cnpj", "cnd"].includes(type)) {
+    if (!type || !["cnpj", "cnd", "cndt"].includes(type)) {
       return new Response(JSON.stringify({ error: "invalid_type" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -83,7 +84,9 @@ serve(async (req) => {
     );
 
     const correlation_id = crypto.randomUUID();
-    const provider = type === "cnpj" ? PROVIDER_CNPJ : PROVIDER_CND;
+    const provider = type === "cnpj"
+      ? PROVIDER_CNPJ
+      : type === "cnd" ? PROVIDER_CND : PROVIDER_CNDT;
 
     // ---- Cache check ----
     if (!force_refresh) {
@@ -147,8 +150,9 @@ serve(async (req) => {
       } else {
         const { data: cached } = await supabase
           .from("cnd_lookup_results")
-          .select("*, cnd_lookup_requests!inner(cnpj_normalized)")
+          .select("*, cnd_lookup_requests!inner(cnpj_normalized, source_provider)")
           .eq("cnd_lookup_requests.cnpj_normalized", cnpj)
+          .eq("cnd_lookup_requests.source_provider", provider)
           .gt("cache_valid_until", new Date().toISOString())
           .order("consulted_at", { ascending: false })
           .limit(1)
@@ -222,7 +226,9 @@ serve(async (req) => {
     const { data: jobRow, error: jobErr } = await supabase
       .from("automation_jobs")
       .insert({
-        job_type: type === "cnpj" ? "cnpj_lookup" : "cnd_lookup",
+        job_type: type === "cnpj"
+          ? "cnpj_lookup"
+          : type === "cnd" ? "cnd_lookup" : "cndt_lookup",
         target_request_id: requestRow.id,
         provider,
         status: "queued",
@@ -265,7 +271,9 @@ serve(async (req) => {
 
     const payload = {
       job_id: jobRow.id,
-      job_type: type === "cnpj" ? "cnpj_lookup" : "cnd_lookup",
+      job_type: type === "cnpj"
+        ? "cnpj_lookup"
+        : type === "cnd" ? "cnd_lookup" : "cndt_lookup",
       cnpj,
       correlation_id,
       request_id: requestRow.id,
