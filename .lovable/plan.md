@@ -1,94 +1,148 @@
 
 
-# Corrigir provider CND no Worker (layout atual do portal)
+# Resolver CAPTCHA com OCR grátis (Tesseract.js em Edge Function Deno)
 
-## Diagnóstico
+## Estratégia (adaptada ao seu stack)
 
-Hoje o `runCndLookup` faz:
-1. `goto("/Servicos/certidaointernet/PJ/Emitir")`
-2. procura `input[name="NI"]` ou `input[name="cnpj"]`
-3. clica no primeiro `input[type="submit"]`
+Seu script original usa **Node + Sharp + Playwright local**. Isso não roda em Cloudflare Worker (sem `node:fs`, sem binários nativos como Sharp). Mantemos o stack atual e dividimos responsabilidades:
 
-O portal atual da Receita **mudou**. A página `/Emitir` é a landing institucional com botão "Emitir Certidão" que leva ao formulário real. O input do CNPJ no formulário atual usa `id="NI"` dentro de um `<form action="emitir.aspx">`, e há uma etapa intermediária. Por isso o seletor cai e cai como `layout_changed`.
+```text
+Worker CF (Playwright)  →  detecta <img> do captcha  →  envia base64
+       ↓                                                    ↓
+ fluxo CND/CNPJ                          Edge Function Deno (solve-captcha)
+       ↓                                                    ↓
+ preenche resposta             Tesseract.js WASM + pré-proc Canvas API
+       ↓                                                    ↓
+   submete                                  retorna texto OCR (5-7 chars)
+```
 
-## O que será feito
+Sharp é substituído por **Canvas API nativa do Deno** (greyscale + threshold + resize) — mesmo resultado, sem binário nativo.
 
-### 1. Reescrever `cloudflare-worker/src/providers/cnd-public-portal.ts`
+## Mudanças
 
-Fluxo novo:
+### 1. Nova Edge Function `solve-captcha` (Deno)
 
-1. **navigate**: `goto` na landing (`/PJ/Emitir`), captura screenshot `cnd_step1_landing`.
-2. **enter_form**: detectar e clicar no link/botão "Emitir Certidão" (seletores em cascata: `a:has-text("Emitir Certidão")`, `button:has-text("Emitir")`, `a[href*="emitir"]`). Se não houver, considerar que já está no formulário.
-3. **fill_cnpj**: tentar seletores em ordem — `#NI`, `input[name="NI"]`, `input[name="cnpj"]`, `input[type="text"]`. Preencher com `payload.cnpj` (apenas dígitos).
-4. **submit**: tentar `button:has-text("Consultar")`, `input[type="submit"][value*="Consultar"]`, `#btnConsultar`, `input[type="submit"]`.
-5. **wait_result**: `waitForLoadState("networkidle")` com fallback `domcontentloaded` + `waitForSelector` em qualquer um dos marcadores conhecidos da página de resultado: `text=/CERTID[ÃA]O/i`, `text=/c[oó]digo de controle/i`, `text=/n[ãa]o consta/i`, `text=/captcha/i`, timeout 30s.
-6. **detect_captcha**: se aparecer `captcha|recaptcha|hcaptcha|"não sou um robô"` → `throw new Error("captcha")` (vai virar `captcha_detected` → `manual_required`).
-7. **parse**: regex já existentes + novos marcadores do layout atual:
-   - `cnd_status`:
-     - `/positiva com efeitos de negativa/i` → `positiva_com_efeitos`
-     - `/negativa de d[ée]bitos|certid[ãa]o negativa/i` → `negativa`
-     - `/positiva/i` → `positiva`
-     - `/n[ãa]o (consta|foi poss[íi]vel)/i` → `nao_emitida`
-   - `certificate_number`: `/c[óo]digo de controle[^A-Z0-9]*([A-Z0-9.\-]{6,})/i`
-   - `valid_until`: `/v[áa]lida at[ée]\s*(\d{2}\/\d{2}\/\d{4})/i`
-   - `issued_at`: `/emitida em\s*(\d{2}\/\d{2}\/\d{4})/i` (usar quando presente; senão fallback `new Date().toISOString()`)
-8. **classify_layout_changed**: se nenhum marcador foi encontrado E não houve captcha, lançar `Error("layout_changed: no known markers in result page")`. Isso garante classificação explícita em vez de cair como sucesso vazio.
-9. screenshots em cada etapa: `cnd_step1_landing`, `cnd_step2_form`, `cnd_step3_result`.
-10. progress events em cada etapa para aparecer no timeline da UI.
+`supabase/functions/solve-captcha/index.ts`
 
-### 2. Garantir classificação explícita
+- **Input**: `{ image_base64: string, min_length?: 5, max_retries?: 2 }`
+- **Auth**: HMAC compartilhado com o Worker (reutiliza `CF_CALLBACK_HMAC_SECRET` — mesma chave do callback). Headers `X-CF-Signature/Timestamp/Nonce`. Sem JWT.
+- **Pré-processamento** (Canvas API — substitui Sharp):
+  - decode PNG via `ImageData`
+  - greyscale (média RGB)
+  - normalize (stretch 0-255)
+  - threshold binário (default 128)
+  - resize para largura 300px
+- **OCR**: `tesseract.js` via npm specifier (`npm:tesseract.js@5`). Worker LSTM, PSM single-line, whitelist `0-9A-Za-z`.
+- **Retry**: até 2x com thresholds diferentes (128, 100, 140) se texto < `min_length`.
+- **Resposta**: `{ ok: true, text: "ABC12", attempts: 1, latency_ms: 1234 }` ou `{ ok: false, reason: "low_confidence" }`.
+- **Config**: `supabase/config.toml` adiciona bloco `[functions.solve-captcha]` com `verify_jwt = false`.
 
-`cloudflare-worker/src/lib/classification.ts` já trata:
-- `captcha` → `captcha_detected`
-- `selector|element not found|waiting for` → `layout_changed`
+### 2. Worker — helper `solveCaptcha`
 
-Adicionar mais um padrão para o erro novo que o provider lança:
-- `/layout_changed|no known markers/i` → `layout_changed`
+`cloudflare-worker/src/lib/captcha.ts` (novo)
 
-### 3. UI / classificação no front
+- `findCaptchaImage(page)`: tenta seletores em cascata — `img[src*="captcha"]`, `img[alt*="captcha"]`, `img[id*="captcha"]`, `img[src*="image.aspx"]`.
+- `solveCaptcha(env, page)`:
+  1. localiza `<img>` do captcha
+  2. screenshot do elemento → base64
+  3. POST assinado para `${CALLBACK_BASE_URL}/solve-captcha`
+  4. retorna texto ou `null` se falhou
+- Bounded: 25s timeout, 1 chamada por job (evitar loop).
 
-`src/features/consulta/services/classification.ts` já tem entradas para `captcha_detected`, `manual_required` e `layout_changed`. **Ajuste**: melhorar a sugestão de `layout_changed` para refletir que é o conector da CND que precisa de revisão (não "equipe técnica" genérico):
+### 3. Provider CND — integrar OCR
 
-- `layout_changed.suggestion` → "O layout do portal CND mudou. O conector precisa ser atualizado. Reporte ao time técnico com o screenshot da etapa final."
+`cloudflare-worker/src/providers/cnd-public-portal.ts`
 
-E `captcha_detected.suggestion` reforçado:
-- "Receita exigiu captcha. Tente novamente em 5–10 min ou faça consulta manual em solucoes.receita.fazenda.gov.br."
+Fluxo atualizado entre **fill_cnpj** e **submit**:
 
-### 4. Garantir que o relatório do dry-run mostra os dois corretamente
+1. preencher CNPJ (já existe)
+2. **NOVO** `detect_captcha_image`: procurar `<img>` do captcha na página
+3. **NOVO** `solve_captcha`: se encontrou, chamar `solveCaptcha(env, page)`
+4. **NOVO** `fill_captcha`: preencher input do código (`input[name*="captcha"]`, `input[id*="captcha"]`, `input[placeholder*="código"]`)
+5. **NOVO** se OCR retornou `null` → `throw "captcha_unsolvable"` → vira `manual_required`
+6. submit (já existe)
+7. parse — se aparecer mensagem `"código incorreto"`, classificar como `captcha_failed` (novo error_type) → `manual_required` com sugestão "OCR errou, tente novamente"
 
-Validado em `ConsultaSaude.tsx`: já renderiza `cnpjErr/cnpjErrMsg` e `cndErr/cndErrMsg` via `describeError()`. Sem mudança aqui.
+Screenshots adicionais: `cnd_step2b_captcha`, `cnd_step2c_captcha_filled`.
+
+### 4. Provider CNPJ — mesma integração
+
+`cloudflare-worker/src/providers/cnpj-public-portal.ts`
+
+Mesma lógica: detectar `<img>` captcha após preencher CNPJ, resolver via OCR, preencher input, submeter. Hoje sai como `captcha_detected` antes de chegar no submit.
+
+### 5. Classificação
+
+`cloudflare-worker/src/lib/classification.ts`
+
+Adicionar:
+- `captcha_unsolvable` → "OCR não conseguiu ler o captcha após retries"
+- `captcha_failed` → "Captcha foi enviado mas portal rejeitou (OCR errou)"
+
+Ambos viram `manual_required` na UI.
+
+`cloudflare-worker/src/types.ts` — adicionar os 2 novos `ErrorType`.
+
+### 6. UI — sugestões no `services/classification.ts`
+
+`src/features/consulta/services/classification.ts`
+
+- `captcha_unsolvable`: "OCR automático falhou. Tente novamente em 1 min ou faça consulta manual."
+- `captcha_failed`: "OCR resolveu mas o portal rejeitou o código. Tente novamente."
+
+### 7. Bump BUILD_ID
+
+`cloudflare-worker/src/index.ts` → `"2026-04-23-ocr-captcha-v1"`
 
 ## Arquivos alterados
 
+**Edge Function (deploy automático Lovable):**
+- `supabase/functions/solve-captcha/index.ts` (novo)
+- `supabase/config.toml` (bloco `[functions.solve-captcha]`)
+
 **Cloudflare Worker (precisa `wrangler deploy`):**
-- `cloudflare-worker/src/providers/cnd-public-portal.ts` — rewrite completo do fluxo
-- `cloudflare-worker/src/lib/classification.ts` — adicionar padrão `layout_changed|no known markers`
-- `cloudflare-worker/src/index.ts` — bump `BUILD_ID` para `"2026-04-23-cnd-layout-fix-v1"`
+- `cloudflare-worker/src/lib/captcha.ts` (novo)
+- `cloudflare-worker/src/providers/cnd-public-portal.ts`
+- `cloudflare-worker/src/providers/cnpj-public-portal.ts`
+- `cloudflare-worker/src/lib/classification.ts`
+- `cloudflare-worker/src/types.ts`
+- `cloudflare-worker/src/index.ts` (BUILD_ID)
 
-**App (deploy automático):**
-- `src/features/consulta/services/classification.ts` — sugestões mais específicas para `layout_changed` e `captcha_detected`
+**App:**
+- `src/features/consulta/services/classification.ts`
 
-CNPJ não é alterado: `captcha_detected` → `manual_required` já é o comportamento correto.
+## Detalhes técnicos importantes
+
+- **Sem custo**: Tesseract.js é grátis, roda no Deno (limite de CPU mais generoso que Worker).
+- **Sem Sharp**: substituído por Canvas API nativa do Deno (mesmo pré-processamento).
+- **Tempo OCR**: ~2-4s por captcha. Adiciona latência mas mantém manual_required como fallback.
+- **Taxa de acerto esperada**: 60-80% (alinhado com o que seu script estima). Quando errar → `captcha_failed` → manual_required.
+- **HMAC**: `solve-captcha` usa o mesmo `CF_CALLBACK_HMAC_SECRET` que `cf-progress-callback` — não precisa criar novo segredo.
+- **Sem Vision API, sem CapSolver, sem chaves novas**: 100% grátis e local ao seu stack.
 
 ## Deploy necessário
 
-**SIM**, você vai precisar rodar de novo:
+**SIM** — após eu aplicar as mudanças, você precisa rodar:
 
 ```bash
 cd cloudflare-worker
 npm install
-wrangler deploy
+npx wrangler deploy
 curl -s https://gestaoez.leomateus620.workers.dev/health | jq .build_id
-# esperado: "2026-04-23-cnd-layout-fix-v1"
+# esperado: "2026-04-23-ocr-captcha-v1"
 ```
 
-Depois, dispare o dry-run em `/consulta/saude` e o resultado esperado é:
-- **CNPJ**: `manual_required` / `captcha_detected` (mesmo comportamento — portal exige captcha mesmo)
-- **CND**: `success` com `cnd_status` preenchido **OU** `layout_changed` com sugestão clara (sem cair em `unknown`)
+A edge function `solve-captcha` é deployada automaticamente pelo Lovable.
+
+## Resultado esperado no dry-run pós-deploy
+
+- **CNPJ**: tenta OCR. Se acertar → `success` com dados parseados. Se errar 2x → `manual_required` com `captcha_unsolvable` ou `captcha_failed`.
+- **CND**: idem.
+- Sem mais `captcha_detected` puro — sempre passa pelo OCR antes.
 
 ## Restrições mantidas
 
-- Não mexer em HMAC, secrets, bindings ou `CALLBACK_BASE_URL`
-- Não mexer no provider CNPJ
-- Foco exclusivo: provider CND + classificação + sugestões da UI
+- Não mexer em HMAC, secrets existentes, bindings, callback_base
+- Não mexer no portal CND (continua o antigo)
+- Não usar APIs pagas (Sharp, CapSolver, Vision, OpenAI)
 
