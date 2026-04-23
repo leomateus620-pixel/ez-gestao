@@ -25,6 +25,7 @@ async function captureScreenshot(env: Env, payload: ExecuteJobPayload, page: Pag
 export async function runCndLookup(env: Env, payload: ExecuteJobPayload): Promise<void> {
   const start = Date.now();
   let html = "";
+  let successPayload: Record<string, unknown> | null = null;
   try {
     await sendProgress(env, { job_id: payload.job_id, step: "navigate", message: "Abrindo portal CND", status: "running", provider: PROVIDER });
     await withBrowser(env, async (browser) => {
@@ -61,8 +62,9 @@ export async function runCndLookup(env: Env, payload: ExecuteJobPayload): Promis
 
       await sendProgress(env, { job_id: payload.job_id, step: "done", message: "Consulta CND concluída", provider: PROVIDER });
 
-      await sendFinal(env, {
+      successPayload = {
         job_id: payload.job_id,
+        request_id: payload.request_id,
         type: "cnd",
         status: "success",
         cnd_status,
@@ -74,14 +76,19 @@ export async function runCndLookup(env: Env, payload: ExecuteJobPayload): Promis
         parsed_payload: { cnd_status, certificate_number: certMatch?.[1] || null },
         provider: PROVIDER,
         latency_ms: Date.now() - start,
-      });
+      };
     });
+
+    if (successPayload) {
+      await sendFinal(env, successPayload);
+    }
   } catch (err) {
     const c = classifyError(err, html);
     await sendFinal(env, {
       job_id: payload.job_id,
+      request_id: payload.request_id,
       type: "cnd",
-      status: c.error_type === "captcha_detected" ? "manual_required" : "failed",
+      status: (c.error_type === "captcha_detected" || c.error_type === "manual_required") ? "manual_required" : "failed",
       error_type: c.error_type,
       error_message: c.message,
       source_url: PORTAL_URL,
