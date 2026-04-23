@@ -11,6 +11,26 @@ const corsHeaders = {
 
 const TERMINAL = ["success", "failed", "manual_required", "partial"];
 
+async function dispatchCnd(): Promise<string> {
+  const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/lookup-dispatcher`;
+  const r = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+    },
+    body: JSON.stringify({
+      cnpj: "88736335000113",
+      type: "cnd",
+      force_refresh: true,
+      requested_by: "dry-run",
+    }),
+  });
+  const j = await r.json();
+  if (!j.request_id) throw new Error(`dispatch cnd failed: ${JSON.stringify(j)}`);
+  return j.request_id;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -27,9 +47,10 @@ serve(async (req) => {
 
     const v = (kv?.value_json || {}) as any;
     const cnpjReq = v.cnpj_request_id;
-    const cndReq = v.cnd_request_id;
+    let cndReq = v.cnd_request_id;
+    let phase = v.phase || (cndReq ? "cnd_running" : "cnpj_running");
 
-    if (!cnpjReq || !cndReq) {
+    if (!cnpjReq) {
       return new Response(JSON.stringify({
         in_progress: false,
         passed: !!v.passed,
@@ -37,15 +58,38 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const [{ data: cnpjReqRow }, { data: cndReqRow }] = await Promise.all([
-      supabase.from("company_lookup_requests").select("status, finished_at").eq("id", cnpjReq).maybeSingle(),
-      supabase.from("cnd_lookup_requests").select("status, finished_at").eq("id", cndReq).maybeSingle(),
-    ]);
-
+    const { data: cnpjReqRow } = await supabase
+      .from("company_lookup_requests").select("status, finished_at").eq("id", cnpjReq).maybeSingle();
     const cnpjStatus = cnpjReqRow?.status || "running";
-    const cndStatus = cndReqRow?.status || "running";
+    const cnpjDoneEarly = TERMINAL.includes(cnpjStatus);
+
+    // Auto-dispatch CND once CNPJ reaches a terminal state.
+    if (cnpjDoneEarly && !cndReq && phase === "cnpj_running") {
+      try {
+        cndReq = await dispatchCnd();
+        phase = "cnd_running";
+        await supabase.from("automation_config_kv").upsert({
+          key: "dry_run_zimmermann",
+          value_json: {
+            ...v,
+            cnd_request_id: cndReq,
+            cnd_status: "running",
+            phase,
+          },
+          description: "Resultado do dry-run obrigatório (Zimmermann) — assíncrono",
+        }, { onConflict: "key" });
+      } catch (err) {
+        console.error("auto-dispatch CND failed", err);
+        phase = "cnd_dispatch_failed";
+      }
+    }
+
+    const { data: cndReqRow } = cndReq
+      ? await supabase.from("cnd_lookup_requests").select("status, finished_at").eq("id", cndReq).maybeSingle()
+      : { data: null as any };
+    const cndStatus = cndReqRow?.status || (cndReq ? "running" : "pending");
     const cnpjDone = TERMINAL.includes(cnpjStatus);
-    const cndDone = TERMINAL.includes(cndStatus);
+    const cndDone = !!cndReq && TERMINAL.includes(cndStatus);
     const allDone = cnpjDone && cndDone;
 
     let cnpjJob: any = null, cndJob: any = null;
@@ -104,6 +148,7 @@ serve(async (req) => {
           cnd_request_id: cndReq,
           cnpj_status: cnpjStatus,
           cnd_status: cndStatus,
+          phase: "done",
           cnpj_error_type: cnpjJob?.error_type || null,
           cnpj_error_message: cnpjJob?.error_message || null,
           cnd_error_type: cndJob?.error_type || null,
@@ -126,6 +171,7 @@ serve(async (req) => {
       cnd_request_id: cndReq,
       cnpj_status: cnpjStatus,
       cnd_status: cndStatus,
+      phase,
       cnpj_error_type: cnpjJob?.error_type || v.cnpj_error_type || null,
       cnpj_error_message: cnpjJob?.error_message || v.cnpj_error_message || null,
       cnd_error_type: cndJob?.error_type || v.cnd_error_type || null,

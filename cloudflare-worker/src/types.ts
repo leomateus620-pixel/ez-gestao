@@ -27,4 +27,5 @@ export type ErrorType =
   | "browser_unavailable"
   | "callback_error"
   | "manual_required"
+  | "runtime_incompatibility"
   | "unknown";

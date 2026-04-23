@@ -35,11 +35,11 @@ serve(async (req) => {
     );
 
     const startedAt = new Date().toISOString();
-    // Serialize CNPJ then CND to avoid Browser Rendering 429 rate limit
+    // Strict serialization: dispatch ONLY the CNPJ now. The status function
+    // (`dry-run-zimmermann-status`) will dispatch the CND once the CNPJ
+    // request reaches a terminal status. This guarantees zero parallel
+    // browser launches against Cloudflare Browser Rendering.
     const cnpjReq = await dispatch(supabase, "cnpj");
-    // small gap before CND to spread browser launches
-    await new Promise((r) => setTimeout(r, 1500));
-    const cndReq = await dispatch(supabase, "cnd");
 
     const dry_run_id = crypto.randomUUID();
     await supabase.from("automation_config_kv").upsert({
@@ -50,9 +50,10 @@ serve(async (req) => {
         dry_run_id,
         started_at: startedAt,
         cnpj_request_id: cnpjReq,
-        cnd_request_id: cndReq,
+        cnd_request_id: null,
         cnpj_status: "running",
-        cnd_status: "running",
+        cnd_status: "pending",
+        phase: "cnpj_running",
       },
       description: "Resultado do dry-run obrigatório (Zimmermann) — assíncrono",
     }, { onConflict: "key" });
@@ -61,9 +62,9 @@ serve(async (req) => {
       accepted: true,
       dry_run_id,
       cnpj_request_id: cnpjReq,
-      cnd_request_id: cndReq,
+      cnd_request_id: null,
       status: "pending",
-      message: "Dry-run iniciado. Faça polling em dry-run-zimmermann-status.",
+      message: "Dry-run iniciado (CNPJ). CND será disparado quando CNPJ terminar. Faça polling em dry-run-zimmermann-status.",
     }), { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: String(err?.message || err) }), {

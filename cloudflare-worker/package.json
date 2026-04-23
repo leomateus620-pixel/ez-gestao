@@ -8,7 +8,7 @@
     "tail": "wrangler tail"
   },
   "dependencies": {
-    "@cloudflare/playwright": "^1.46.0",
+    "@cloudflare/playwright": "latest",
     "hono": "^4.6.0"
   },
   "devDependencies": {
