@@ -4,6 +4,18 @@ export function classifyError(err: unknown, html?: string): { error_type: ErrorT
   const msg = err instanceof Error ? err.message : String(err);
   const lower = (msg + " " + (html || "")).toLowerCase();
 
+  if (/fs\.mkdtemp|\[unenv\]|is not implemented/i.test(lower)) {
+    return {
+      error_type: "runtime_incompatibility",
+      message: "Runtime do Worker não suporta esta API (fs.mkdtemp/unenv). Atualizar @cloudflare/playwright e usar browser.newPage() direto sem newContext().",
+    };
+  }
+  if (/connectovercdp|cdp.*error|protocol error.*target|browsertype\.connect/i.test(lower)) {
+    return {
+      error_type: "browser_unavailable",
+      message: "Falha ao conectar ao Browser Rendering (CDP). Verificar binding 'gestaoez' e versão do @cloudflare/playwright.",
+    };
+  }
   if (/captcha|recaptcha|hcaptcha|i'm not a robot|não sou um robô/i.test(lower)) {
     return { error_type: "captcha_detected", message: "Portal exigiu captcha" };
   }
