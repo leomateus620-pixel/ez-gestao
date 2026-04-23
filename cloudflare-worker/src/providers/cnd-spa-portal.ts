@@ -32,11 +32,17 @@ export async function runCndSpaLookup(
   await withRateLimitRetry(() => withBrowser(env, async (browser) => {
     const page = await browser.newPage();
     try {
+      // Hard timeouts: any unspecified wait dies fast instead of hanging forever.
+      page.setDefaultTimeout(20_000);
+      page.setDefaultNavigationTimeout(30_000);
+    } catch { /* setDefault* are sync but guarded for safety */ }
+    try {
       await page.setExtraHTTPHeaders({
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
       });
     } catch { /* optional */ }
 
+    try {
     await page.goto(SPA_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
     try {
       await page.waitForLoadState("networkidle", { timeout: 20_000 });
@@ -135,7 +141,23 @@ export async function runCndSpaLookup(
     let pdfArtifactPath: string | null = null;
     let pdfSize = 0;
     try {
-      const download = await downloadPromise;
+      let download = await downloadPromise;
+      if (!download) {
+        // Fallback: SPA may render a "Baixar" link/button instead of firing the download event.
+        await page.waitForTimeout(2_000);
+        const dlEl = await trySelectors(page, [
+          'a[href$=".pdf"]',
+          'a[href*=".pdf?"]',
+          'a:has-text("Baixar")',
+          'a:has-text("Download")',
+          'button:has-text("Baixar")',
+        ]);
+        if (dlEl) {
+          const retryDownload = page.waitForEvent("download", { timeout: 15_000 }).catch(() => null);
+          try { await (dlEl as { click: (opts?: unknown) => Promise<void> }).click({ timeout: 5_000 }); } catch { /* best-effort */ }
+          download = await retryDownload;
+        }
+      }
       if (download) {
         await sendProgress(env, {
           job_id: payload.job_id, step: "download_pdf_spa",
@@ -180,7 +202,7 @@ export async function runCndSpaLookup(
     // Wait for result
     await sendProgress(env, { job_id: payload.job_id, step: "wait_result_spa", message: "Aguardando resposta (SPA)", provider: PROVIDER });
     try {
-      await page.waitForLoadState("networkidle", { timeout: 30_000 });
+      await page.waitForLoadState("networkidle", { timeout: 15_000 });
     } catch { /* may stay busy */ }
     try {
       await page.waitForFunction(
@@ -188,7 +210,7 @@ export async function runCndSpaLookup(
           const t = (document.body?.innerText || "").toLowerCase();
           return /certid[ãa]o|c[oó]digo de controle|n[ãa]o consta|positiva|negativa|c[oó]digo (incorreto|inv[áa]lido)/i.test(t);
         },
-        { timeout: 30_000 },
+        { timeout: 15_000 },
       );
     } catch { /* fall through */ }
     await captureScreenshot(env, payload, page, "cnd_spa_step3_result");
@@ -242,6 +264,9 @@ export async function runCndSpaLookup(
       provider: PROVIDER,
       latency_ms: Date.now() - start,
     };
+    } finally {
+      await page.close().catch(() => {});
+    }
   }));
 
   if (!result) {
