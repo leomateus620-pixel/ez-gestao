@@ -128,6 +128,11 @@ serve(async (req) => {
         });
       } else {
         const cacheUntil = valid_until || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        // Prefer explicit pdf_path; fall back to parsed_payload.certificate_pdf_path
+        const finalPdfPath = pdf_path
+          || parsed_payload?.certificate_pdf_path
+          || raw_payload?.pdf_artifact_path
+          || null;
         await supabase.from(resTable).insert({
           request_id,
           cnd_status: cnd_status || "indisponivel",
@@ -137,7 +142,7 @@ serve(async (req) => {
           source_url,
           raw_payload_json: raw_payload || {},
           parsed_payload_json: parsed_payload || {},
-          pdf_path, pdf_sha256,
+          pdf_path: finalPdfPath, pdf_sha256,
           cache_valid_until: cacheUntil,
         });
       }

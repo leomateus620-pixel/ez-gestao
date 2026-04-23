@@ -168,7 +168,55 @@ async function runCndLegacyLookup(env: Env, payload: ExecuteJobPayload): Promise
       if (!submit) {
         throw new Error("layout_changed: submit button not found on form");
       }
+      // Register download listener BEFORE click
+      const downloadPromise = page.waitForEvent("download", { timeout: 30_000 }).catch(() => null);
       await (submit as { click: () => Promise<void> }).click();
+
+      // Best-effort PDF capture
+      let pdfArtifactPath: string | null = null;
+      let pdfSize = 0;
+      try {
+        const download = await downloadPromise;
+        if (download) {
+          await sendProgress(env, {
+            job_id: payload.job_id, step: "download_pdf",
+            message: "Recebendo PDF da certidão", provider: PROVIDER,
+          });
+          const stream = await (download as { createReadStream: () => Promise<ReadableStream<Uint8Array> | null> })
+            .createReadStream().catch(() => null);
+          let pdfBytes: Uint8Array | null = null;
+          if (stream) {
+            const chunks: Uint8Array[] = [];
+            const reader = stream.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (value) chunks.push(value);
+            }
+            pdfBytes = concatUint8(chunks);
+          }
+          if (pdfBytes && pdfBytes.byteLength > 0) {
+            pdfSize = pdfBytes.byteLength;
+            const ticket = await requestArtifactUpload(env, {
+              job_id: payload.job_id, artifact_type: "pdf",
+              filename: `cnd_${cnpjDigits}_${Date.now()}.pdf`,
+              mime_type: "application/pdf",
+            });
+            if (ticket) {
+              const okUpload = await uploadArtifactBytes(ticket.upload_url, pdfBytes, "application/pdf");
+              if (okUpload) pdfArtifactPath = ticket.path;
+            }
+          }
+          await sendProgress(env, {
+            job_id: payload.job_id, step: "download_pdf",
+            status: pdfArtifactPath ? "success" : "warning",
+            level: pdfArtifactPath ? "info" : "warning",
+            message: pdfArtifactPath ? "PDF salvo no storage (legado)" : "Download chegou mas upload falhou (legado)",
+            provider: PROVIDER,
+            details_json: { size_bytes: pdfSize, artifact_path: pdfArtifactPath },
+          });
+        }
+      } catch { /* best-effort */ }
 
       // Step 5: wait for result page
       await sendProgress(env, { job_id: payload.job_id, step: "wait_result", message: "Aguardando resposta do portal", provider: PROVIDER });
@@ -214,8 +262,10 @@ async function runCndLegacyLookup(env: Env, payload: ExecuteJobPayload): Promise
       const validityMatch = content.match(/v[áa]lida at[ée]\s*(\d{2}\/\d{2}\/\d{4})/i);
       const issuedMatch = content.match(/emitida em\s*(\d{2}\/\d{2}\/\d{4})/i);
 
+      // If portal delivered a PDF, treat as negativa even without DOM markers.
+      if (!cnd_status && pdfArtifactPath) cnd_status = "negativa";
       // Step 8: layout_changed if no known markers at all
-      if (!cnd_status && !certMatch && !validityMatch) {
+      if (!cnd_status && !certMatch && !validityMatch && !pdfArtifactPath) {
         throw new Error("layout_changed: no known markers in result page");
       }
 
@@ -231,12 +281,14 @@ async function runCndLegacyLookup(env: Env, payload: ExecuteJobPayload): Promise
         issued_at: issuedMatch ? toIsoDate(issuedMatch[1]) : new Date().toISOString(),
         valid_until: validityMatch ? toIsoDate(validityMatch[1]) : null,
         source_url: PORTAL_URL,
-        raw_payload: { html_excerpt: content.slice(0, 5000) },
+        pdf_path: pdfArtifactPath,
+        raw_payload: { html_excerpt: content.slice(0, 5000), pdf_artifact_path: pdfArtifactPath, pdf_size_bytes: pdfSize },
         parsed_payload: {
           cnd_status: cnd_status || "indisponivel",
           certificate_number: certMatch?.[1] || null,
           valid_until: validityMatch ? toIsoDate(validityMatch[1]) : null,
           issued_at: issuedMatch ? toIsoDate(issuedMatch[1]) : null,
+          certificate_pdf_path: pdfArtifactPath,
         },
         provider: PROVIDER,
         latency_ms: Date.now() - start,
@@ -268,4 +320,13 @@ async function runCndLegacyLookup(env: Env, payload: ExecuteJobPayload): Promise
 function toIsoDate(br: string): string | null {
   const m = br.match(/(\d{2})\/(\d{2})\/(\d{4})/);
   return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+}
+
+function concatUint8(chunks: Uint8Array[]): Uint8Array {
+  let total = 0;
+  for (const c of chunks) total += c.byteLength;
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) { out.set(c, offset); offset += c.byteLength; }
+  return out;
 }
