@@ -186,7 +186,7 @@ export async function runCndSpaLookup(
     // Wait for result
     await sendProgress(env, { job_id: payload.job_id, step: "wait_result_spa", message: "Aguardando resposta (SPA)", provider: PROVIDER });
     try {
-      await page.waitForLoadState("networkidle", { timeout: 30_000 });
+      await page.waitForLoadState("networkidle", { timeout: 15_000 });
     } catch { /* may stay busy */ }
     try {
       await page.waitForFunction(
@@ -194,7 +194,7 @@ export async function runCndSpaLookup(
           const t = (document.body?.innerText || "").toLowerCase();
           return /certid[ãa]o|c[oó]digo de controle|n[ãa]o consta|positiva|negativa|c[oó]digo (incorreto|inv[áa]lido)/i.test(t);
         },
-        { timeout: 30_000 },
+        { timeout: 15_000 },
       );
     } catch { /* fall through */ }
     await captureScreenshot(env, payload, page, "cnd_spa_step3_result");
