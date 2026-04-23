@@ -9,7 +9,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const ZIMMERMANN_CNPJ = "88736335000113";
+const ZIMMERMANN_CNPJ = "47737345000196";
 
 async function dispatch(supabase: any, type: "cnpj" | "cnd"): Promise<string> {
   const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/lookup-dispatcher`;
