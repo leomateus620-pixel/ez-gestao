@@ -209,7 +209,10 @@ export async function runCndLookup(env: Env, payload: ExecuteJobPayload): Promis
       job_id: payload.job_id,
       request_id: payload.request_id,
       type: "cnd",
-      status: (c.error_type === "captcha_detected" || c.error_type === "manual_required") ? "manual_required" : "failed",
+      status: (c.error_type === "captcha_detected"
+        || c.error_type === "captcha_unsolvable"
+        || c.error_type === "captcha_failed"
+        || c.error_type === "manual_required") ? "manual_required" : "failed",
       error_type: c.error_type,
       error_message: c.message,
       source_url: PORTAL_URL,
