@@ -96,6 +96,21 @@ serve(async (req) => {
       });
     }
 
+    // Guard: if the job has been cancelled by the user, ignore the callback silently.
+    if (job_id) {
+      const { data: jobStatus } = await supabase
+        .from("automation_jobs")
+        .select("status")
+        .eq("id", job_id)
+        .maybeSingle();
+      if (jobStatus?.status === "cancelled") {
+        console.log("cf-final-callback ignored: job cancelled", { job_id });
+        return new Response(JSON.stringify({ ok: true, ignored: "cancelled" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     if (status === "success") {
       if (type === "cnpj") {
         await supabase.from(resTable).insert({

@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.solve-captcha]
 verify_jwt = false
+
+[functions.dry-run-zimmermann-cancel]
+verify_jwt = false

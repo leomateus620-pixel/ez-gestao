@@ -107,6 +107,21 @@ export function useDryRun() {
   return useMutation({ mutationFn: () => runDryRunZimmermann() });
 }
 
+export function useCancelDryRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("dry-run-zimmermann-cancel", { body: {} });
+      if (error) throw error;
+      return data as { ok: boolean; cancelled_jobs: number };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["dry-run-status"] });
+      qc.invalidateQueries({ queryKey: ["dry-run-live"] });
+    },
+  });
+}
+
 export function useDryRunLive(enabled: boolean) {
   return useQuery({
     queryKey: ["dry-run-live"],
