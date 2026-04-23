@@ -20,7 +20,7 @@ async function dispatchCnd(): Promise<string> {
       "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
     },
     body: JSON.stringify({
-      cnpj: "88736335000113",
+      cnpj: "47737345000196",
       type: "cnd",
       force_refresh: true,
       requested_by: "dry-run",
