@@ -118,7 +118,7 @@ serve(async (req) => {
       const report = {
         generated_at: new Date().toISOString(),
         started_at: v.started_at,
-        cnpj: "88736335000113",
+        cnpj: "47737345000196",
         cnpj_request_id: cnpjReq,
         cnd_request_id: cndReq,
         cnpj_status: cnpjStatus,
