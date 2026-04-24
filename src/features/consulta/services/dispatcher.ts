@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export type LookupType = "cnpj" | "cnd";
+export type LookupType = "cnpj" | "cnd" | "cndt";
 
 export interface DispatchInput {
   cnpj: string;
@@ -87,5 +87,6 @@ export async function fetchDryRunStatus() {
     report_path?: string | null;
     signed_url?: string | null;
     last_run_at?: string | null;
+    phase?: string | null;
   };
 }

@@ -35,7 +35,7 @@ export function useLookupStatus(request_id: string | null, type: LookupType) {
     if (elapsed > 30_000 && pollMs !== 10_000) setPollMs(10_000);
     else if (elapsed > 10_000 && pollMs !== 3_000) setPollMs(3_000);
     const status = (query.data as any)?.request?.status;
-    if (status && ["success", "failed", "manual_required", "partial"].includes(status)) {
+    if (status && ["success", "failed", "manual_required", "partial", "cancelled"].includes(status)) {
       setPollMs(0);
     }
   }, [query.data, pollMs]);
