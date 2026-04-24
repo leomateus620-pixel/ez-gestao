@@ -337,3 +337,19 @@ function DryRunSubCard({ label, status, errorType, errorMessage, requestId }: {
     </div>
   );
 }
+
+function statusLabel(status?: string) {
+  const labels: Record<string, string> = {
+    success: "Concluído",
+    failed: "Falhou",
+    manual_required: "Manual",
+    partial: "Parcial",
+    cancelled: "Cancelado",
+    running: "Rodando",
+    queued: "Na fila",
+    dispatched: "Enviado",
+    pending: "Pendente",
+    skipped: "Ignorado",
+  };
+  return status ? (labels[status] || status) : "—";
+}
