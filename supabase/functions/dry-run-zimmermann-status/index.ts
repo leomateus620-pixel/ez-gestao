@@ -37,7 +37,13 @@ async function fetchRequest(supabase: any, type: "cnpj" | "cnd" | "cndt", id?: s
 
 async function markStalled(supabase: any, type: "cnpj" | "cnd" | "cndt", request: any, job: any) {
   if (!request || TERMINAL.includes(request.status)) return { request, job };
-  const last = new Date(job?.updated_at || job?.dispatched_at || request.started_at || request.created_at || Date.now()).getTime();
+  const [{ data: lastLog }, { data: lastArtifact }] = await Promise.all([
+    job?.id ? supabase.from("automation_job_logs").select("created_at").eq("job_id", job.id).order("created_at", { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null }),
+    job?.id ? supabase.from("automation_artifacts").select("created_at").eq("job_id", job.id).order("created_at", { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null }),
+  ]);
+  const markers = [job?.updated_at, job?.dispatched_at, lastLog?.created_at, lastArtifact?.created_at, request.started_at, request.created_at]
+    .filter(Boolean).map((d: string) => new Date(d).getTime()).filter((n: number) => Number.isFinite(n));
+  const last = markers.length ? Math.max(...markers) : Date.now();
   if (Date.now() - last < STALL_MS) return { request, job };
   const table = type === "cnpj" ? "company_lookup_requests" : "cnd_lookup_requests";
   const now = new Date().toISOString();
@@ -50,19 +56,13 @@ async function markStalled(supabase: any, type: "cnpj" | "cnd" | "cndt", request
 
 async function maybeNext(supabase: any, v: any, cnpjStatus: string, cndStatus: string) {
   if (!v.in_progress || v.phase === "cancelled") return v;
-  if (TERMINAL.includes(cnpjStatus) && !v.cnd_request_id && cnpjStatus === "success") {
+  if (TERMINAL.includes(cnpjStatus) && !v.cnd_request_id) {
     const cndReq = await dispatch("cnd");
     return { ...v, cnd_request_id: cndReq, cnd_status: "running", phase: "cnd_running" };
   }
-  if (TERMINAL.includes(cnpjStatus) && !v.cnd_request_id && cnpjStatus !== "success") {
-    return { ...v, cnd_status: "skipped", cndt_status: "skipped", phase: "done" };
-  }
-  if (TERMINAL.includes(cndStatus) && v.cnd_request_id && !v.cndt_request_id && ["success", "manual_required"].includes(cndStatus)) {
+  if (TERMINAL.includes(cndStatus) && v.cnd_request_id && !v.cndt_request_id) {
     const cndtReq = await dispatch("cndt");
     return { ...v, cndt_request_id: cndtReq, cndt_status: "running", phase: "cndt_running" };
-  }
-  if (TERMINAL.includes(cndStatus) && v.cnd_request_id && !v.cndt_request_id && !["success", "manual_required"].includes(cndStatus)) {
-    return { ...v, cndt_status: "skipped", phase: "done" };
   }
   return v;
 }

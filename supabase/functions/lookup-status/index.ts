@@ -49,7 +49,13 @@ serve(async (req) => {
       const { data: j } = await supabase
         .from("automation_jobs").select("*").eq("id", request.latest_job_id).maybeSingle();
       job = j;
-      const lastProgressAt = new Date(job?.updated_at || job?.dispatched_at || request.started_at || request.created_at || Date.now()).getTime();
+      const [{ data: lastLog }, { data: lastArtifact }] = await Promise.all([
+        job?.id ? supabase.from("automation_job_logs").select("created_at").eq("job_id", job.id).order("created_at", { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null }),
+        job?.id ? supabase.from("automation_artifacts").select("created_at").eq("job_id", job.id).order("created_at", { ascending: false }).limit(1).maybeSingle() : Promise.resolve({ data: null }),
+      ]);
+      const markers = [job?.updated_at, job?.dispatched_at, lastLog?.created_at, lastArtifact?.created_at, request.started_at, request.created_at]
+        .filter(Boolean).map((d: string) => new Date(d).getTime()).filter((n: number) => Number.isFinite(n));
+      const lastProgressAt = markers.length ? Math.max(...markers) : Date.now();
       if (ACTIVE.includes(request.status) && Date.now() - lastProgressAt > STALL_MS) {
         const now = new Date().toISOString();
         await supabase.from(reqTable).update({

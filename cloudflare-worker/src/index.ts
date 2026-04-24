@@ -11,13 +11,21 @@ const app = new Hono<{ Bindings: Env }>();
 // Build identifier — changes on every deploy via wrangler `--var` or fallback to compile time.
 // Without dynamic injection, we surface a hash of the worker's bound secrets/url config so the
 // UI can detect when the deploy is stale relative to a code change that updated this string.
-const BUILD_ID = "2026-04-24-dryrun-serial-watchdog-v1";
+const BUILD_ID = "2026-04-24-dryrun-callback-timeout-v1";
 
 function withJobTimeout<T>(promise: Promise<T>, ms = 115_000): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout: execução excedeu o orçamento global do job")), ms)),
   ]);
+}
+
+function classifyWorkerError(err: unknown): { error_type: string; error_message: string } {
+  const message = err instanceof Error ? err.message : String(err);
+  return {
+    error_type: /^timeout:/i.test(message) ? "timeout" : "unknown",
+    error_message: message,
+  };
 }
 
 function validateCallbackBase(raw: string | undefined | null) {
@@ -119,14 +127,16 @@ app.post("/execute-job", async (c) => {
         });
       }
     } catch (err) {
+      const classified = classifyWorkerError(err);
       await sendFinal(c.env, {
         job_id: payload.job_id,
         type: payload.job_type === "cnd_lookup"
           ? "cnd"
           : payload.job_type === "cndt_lookup" ? "cndt" : "cnpj",
-        status: "failed", error_type: "unknown",
-        error_message: err instanceof Error ? err.message : String(err),
-      });
+        status: "failed",
+        error_type: classified.error_type,
+        error_message: classified.error_message,
+      }).catch((finalErr) => console.error("sendFinal after worker failure failed", finalErr));
     }
   })());
 
