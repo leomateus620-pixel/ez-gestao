@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Play, FileText, Lock, ShieldCheck, ShieldAlert, Server, X } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { describeError } from "@/features/consulta/services/classification";
 
 export default function ConsultaSaude() {
@@ -40,8 +40,20 @@ export default function ConsultaSaude() {
   const cnpjReqId = live?.cnpj_request_id ?? dryV.cnpj_request_id;
   const cndReqId = live?.cnd_request_id ?? dryV.cnd_request_id;
   const cndtReqId = live?.cndt_request_id ?? dryV.cndt_request_id;
+  const phase = live?.phase ?? dryV.phase;
   const workerHealth: any = (health as any)?.worker_health?.body ?? null;
   const workerHealthOk = !!(health as any)?.worker_health?.ok;
+
+  useEffect(() => {
+    const terminalPhases = ["done", "cancelled"];
+    if ((dryV.in_progress === true || (!!phase && !terminalPhases.includes(phase))) && !polling) {
+      setPolling(true);
+    }
+    if (live && !live.in_progress && polling) {
+      setPolling(false);
+      refetchDryRun();
+    }
+  }, [dryV.in_progress, phase, live, polling, refetchDryRun]);
 
   const toggleFlag = async (enabled: boolean) => {
     if (enabled && !passed) { toast.error("Execute o dry-run com sucesso antes de habilitar."); return; }
@@ -224,7 +236,7 @@ wrangler secret put LOVABLE_HMAC_SECRET
           <CardTitle className="text-base flex items-center gap-2"><Play className="h-4 w-4" /> Dry-run Weinert (47.737.345/0001-96)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">Executa CNPJ + CND + CNDT (TST) em paralelo via Worker Cloudflare. Obrigatório antes de habilitar o módulo no menu. Nota: 3 sessões paralelas podem estourar o limite do Browser Rendering — se isso acontecer, basta retentar.</p>
+          <p className="text-sm text-muted-foreground">Executa CNPJ → CND → CNDT (TST) em sequência controlada via Worker Cloudflare. Obrigatório antes de habilitar o módulo no menu.</p>
           <div className="flex flex-wrap gap-2 items-center">
             <Button onClick={runDry} disabled={dryRunMut.isPending || inProgress}>
               <Play className="h-4 w-4 mr-1" /> {inProgress ? "Executando…" : dryRunMut.isPending ? "Disparando…" : "Executar dry-run"}
@@ -304,8 +316,8 @@ function DryRunSubCard({ label, status, errorType, errorMessage, requestId }: {
     <div className={`rounded-md border p-3 text-sm ${isOk ? "border-primary/30 bg-primary/5" : isFailed ? "border-destructive/30 bg-destructive/5" : isManual ? "border-yellow-500/30 bg-yellow-500/5" : "border-border"}`}>
       <div className="flex items-center justify-between">
         <span className="font-medium">{label}</span>
-        <span className={`text-xs uppercase tracking-wide ${isOk ? "text-primary" : isFailed ? "text-destructive" : isManual ? "text-yellow-600" : "text-muted-foreground"}`}>
-          {status || "—"}
+          <span className={`text-xs uppercase tracking-wide ${isOk ? "text-primary" : isFailed || status === "cancelled" ? "text-destructive" : isManual ? "text-yellow-600" : "text-muted-foreground"}`}>
+          {statusLabel(status)}
         </span>
       </div>
       {desc && (
@@ -324,4 +336,20 @@ function DryRunSubCard({ label, status, errorType, errorMessage, requestId }: {
       )}
     </div>
   );
+}
+
+function statusLabel(status?: string) {
+  const labels: Record<string, string> = {
+    success: "Concluído",
+    failed: "Falhou",
+    manual_required: "Manual",
+    partial: "Parcial",
+    cancelled: "Cancelado",
+    running: "Rodando",
+    queued: "Na fila",
+    dispatched: "Enviado",
+    pending: "Pendente",
+    skipped: "Ignorado",
+  };
+  return status ? (labels[status] || status) : "—";
 }

@@ -264,6 +264,13 @@ export async function runCndtLookup(env: Env, payload: ExecuteJobPayload): Promi
       } finally {
         await page.close().catch(() => {});
       }
+    }), 2, (attempt, waitMs, err) => sendProgress(env, {
+      job_id: payload.job_id,
+      step: "retry_rate_limit",
+      level: "warning",
+      message: `Browser Rendering em limite de taxa; retry ${attempt} em ${Math.round(waitMs / 1000)}s`,
+      provider: PROVIDER,
+      details_json: { error: String((err as Error)?.message || err) },
     }));
 
     if (result) {

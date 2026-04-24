@@ -26,7 +26,7 @@ serve(async (req) => {
     const cndReq: string | null = v.cnd_request_id ?? null;
     const cndtReq: string | null = v.cndt_request_id ?? null;
 
-    const cancelledStatuses = ["queued", "running", "dispatched", "waiting_callback"];
+    const cancelledStatuses = ["queued", "running", "dispatched", "waiting_callback", "retry_scheduled"];
     const targetIds = [cnpjReq, cndReq, cndtReq].filter(Boolean) as string[];
 
     // Cancel jobs linked to these requests (and any orphan running job as safety net)
@@ -87,6 +87,15 @@ serve(async (req) => {
         cancelled: true,
         cancelled_at: new Date().toISOString(),
         phase: "cancelled",
+        cnpj_status: cnpjReq ? "cancelled" : (v.cnpj_status || "pending"),
+        cnd_status: cndReq ? "cancelled" : (v.cnd_status || "pending"),
+        cndt_status: cndtReq ? "cancelled" : (v.cndt_status || "pending"),
+        cnpj_error_type: cnpjReq ? "cancelled" : (v.cnpj_error_type || null),
+        cnd_error_type: cndReq ? "cancelled" : (v.cnd_error_type || null),
+        cndt_error_type: cndtReq ? "cancelled" : (v.cndt_error_type || null),
+        cnpj_error_message: cnpjReq ? "Cancelado pelo usuário" : (v.cnpj_error_message || null),
+        cnd_error_message: cndReq ? "Cancelado pelo usuário" : (v.cnd_error_message || null),
+        cndt_error_message: cndtReq ? "Cancelado pelo usuário" : (v.cndt_error_message || null),
         last_run_at: new Date().toISOString(),
       },
       description: "Resultado do dry-run obrigatório (Zimmermann) — assíncrono",
