@@ -11,7 +11,14 @@ const app = new Hono<{ Bindings: Env }>();
 // Build identifier — changes on every deploy via wrangler `--var` or fallback to compile time.
 // Without dynamic injection, we surface a hash of the worker's bound secrets/url config so the
 // UI can detect when the deploy is stale relative to a code change that updated this string.
-const BUILD_ID = "2026-04-23-cndt-parallel-v1";
+const BUILD_ID = "2026-04-24-dryrun-serial-watchdog-v1";
+
+function withJobTimeout<T>(promise: Promise<T>, ms = 115_000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout: execução excedeu o orçamento global do job")), ms)),
+  ]);
+}
 
 function validateCallbackBase(raw: string | undefined | null) {
   if (!raw) return { value: null, valid: false, issue: "missing" as const };
@@ -102,9 +109,9 @@ app.post("/execute-job", async (c) => {
   // Run async; respond 202 immediately
   c.executionCtx.waitUntil((async () => {
     try {
-      if (payload.job_type === "cnpj_lookup") await runCnpjLookup(c.env, payload);
-      else if (payload.job_type === "cnd_lookup") await runCndLookup(c.env, payload);
-      else if (payload.job_type === "cndt_lookup") await runCndtLookup(c.env, payload);
+      if (payload.job_type === "cnpj_lookup") await withJobTimeout(runCnpjLookup(c.env, payload));
+      else if (payload.job_type === "cnd_lookup") await withJobTimeout(runCndLookup(c.env, payload));
+      else if (payload.job_type === "cndt_lookup") await withJobTimeout(runCndtLookup(c.env, payload));
       else {
         await sendFinal(c.env, {
           job_id: payload.job_id, type: "cnpj", status: "failed",

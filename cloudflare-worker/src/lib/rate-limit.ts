@@ -31,6 +31,7 @@ export function isRateLimitError(err: unknown): boolean {
 export async function withRateLimitRetry<T>(
   fn: () => Promise<T>,
   maxRetries = 2,
+  onRetry?: (attempt: number, waitMs: number, err: unknown) => Promise<void> | void,
 ): Promise<T> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -45,6 +46,7 @@ export async function withRateLimitRetry<T>(
       console.warn(
         `withRateLimitRetry: rate-limited on attempt ${attempt + 1}/${maxRetries + 1}, waiting ${wait}ms`,
       );
+      await onRetry?.(attempt + 1, wait, err);
       await new Promise((r) => setTimeout(r, wait));
     }
   }
