@@ -237,6 +237,11 @@ wrangler secret put LOVABLE_HMAC_SECRET
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">Executa CNPJ → CND → CNDT (TST) em sequência controlada via Worker Cloudflare. Obrigatório antes de habilitar o módulo no menu.</p>
+          {phase && (
+            <div className="text-sm text-muted-foreground">
+              Fase atual: <span className="font-medium text-foreground">{phaseLabel(phase)}</span>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 items-center">
             <Button onClick={runDry} disabled={dryRunMut.isPending || inProgress}>
               <Play className="h-4 w-4 mr-1" /> {inProgress ? "Executando…" : dryRunMut.isPending ? "Disparando…" : "Executar dry-run"}
@@ -311,13 +316,14 @@ function DryRunSubCard({ label, status, errorType, errorMessage, requestId }: {
   const isFailed = status === "failed";
   const isManual = status === "manual_required";
   const isOk = status === "success";
+  const isStalled = errorType === "stalled_execution" || errorType === "timeout";
   const desc = errorType ? describeError(errorType) : null;
   return (
-    <div className={`rounded-md border p-3 text-sm ${isOk ? "border-primary/30 bg-primary/5" : isFailed ? "border-destructive/30 bg-destructive/5" : isManual ? "border-yellow-500/30 bg-yellow-500/5" : "border-border"}`}>
+    <div className={`rounded-md border p-3 text-sm ${isOk ? "border-primary/30 bg-primary/5" : isFailed ? "border-destructive/30 bg-destructive/5" : isManual ? "border-accent/30 bg-accent/5" : "border-border"}`}>
       <div className="flex items-center justify-between">
         <span className="font-medium">{label}</span>
-          <span className={`text-xs uppercase tracking-wide ${isOk ? "text-primary" : isFailed || status === "cancelled" ? "text-destructive" : isManual ? "text-yellow-600" : "text-muted-foreground"}`}>
-          {statusLabel(status)}
+          <span className={`text-xs uppercase tracking-wide ${isOk ? "text-primary" : isFailed || status === "cancelled" || isStalled ? "text-destructive" : isManual ? "text-accent-foreground" : "text-muted-foreground"}`}>
+          {statusLabel(status, errorType)}
         </span>
       </div>
       {desc && (
@@ -338,7 +344,8 @@ function DryRunSubCard({ label, status, errorType, errorMessage, requestId }: {
   );
 }
 
-function statusLabel(status?: string) {
+function statusLabel(status?: string, errorType?: string | null) {
+  if (errorType === "stalled_execution" || errorType === "timeout") return "Travado / timeout";
   const labels: Record<string, string> = {
     success: "Concluído",
     failed: "Falhou",
@@ -348,8 +355,20 @@ function statusLabel(status?: string) {
     running: "Rodando",
     queued: "Na fila",
     dispatched: "Enviado",
-    pending: "Pendente",
-    skipped: "Ignorado",
+    pending: "Aguardando",
+    skipped: "Não executado",
   };
   return status ? (labels[status] || status) : "—";
+}
+
+function phaseLabel(phase?: string | null) {
+  const labels: Record<string, string> = {
+    idle: "Aguardando início",
+    cnpj_running: "Executando CNPJ",
+    cnd_running: "Executando CND",
+    cndt_running: "Executando CNDT",
+    done: "Finalizado",
+    cancelled: "Cancelado",
+  };
+  return phase ? (labels[phase] || phase) : "—";
 }
