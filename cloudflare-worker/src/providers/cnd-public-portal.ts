@@ -92,8 +92,11 @@ async function runCndLegacyLookup(env: Env, payload: ExecuteJobPayload): Promise
     await withRateLimitRetry(() => withBrowser(env, async (browser) => {
       const page = await browser.newPage();
       try {
+        page.setDefaultTimeout(20_000);
+        page.setDefaultNavigationTimeout(30_000);
         await page.setExtraHTTPHeaders({ "User-Agent": "Mozilla/5.0 (compatible; GestaoEZ-CND/1.0)" });
       } catch { /* ignore: optional */ }
+      try {
       // Step 1: landing page
       await page.goto(PORTAL_URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
       await captureScreenshot(env, payload, page, "cnd_step1_landing");
@@ -295,6 +298,16 @@ async function runCndLegacyLookup(env: Env, payload: ExecuteJobPayload): Promise
         provider: PROVIDER,
         latency_ms: Date.now() - start,
       };
+      } finally {
+        await page.close().catch(() => {});
+      }
+    }), 2, (attempt, waitMs, err) => sendProgress(env, {
+      job_id: payload.job_id,
+      step: "retry_rate_limit",
+      level: "warning",
+      message: `Browser Rendering em limite de taxa; retry ${attempt} em ${Math.round(waitMs / 1000)}s`,
+      provider: PROVIDER,
+      details_json: { error: String((err as Error)?.message || err) },
     }));
 
     if (successPayload) {
