@@ -35,15 +35,7 @@ serve(async (req) => {
     );
 
     const startedAt = new Date().toISOString();
-    // Parallel dispatch: CNPJ + CND + CNDT são disparados ao mesmo tempo.
-    // Cada provider tem jitter próprio (2–8s) e retry de rate-limit. Trade-off
-    // assumido: pode estourar limite do Browser Rendering (plano free) e exigir
-    // re-execução, mas reduz tempo total do dry-run quando passa.
-    const [cnpjReq, cndReq, cndtReq] = await Promise.all([
-      dispatch(supabase, "cnpj"),
-      dispatch(supabase, "cnd"),
-      dispatch(supabase, "cndt"),
-    ]);
+    const cnpjReq = await dispatch(supabase, "cnpj");
 
     const dry_run_id = crypto.randomUUID();
     await supabase.from("automation_config_kv").upsert({
@@ -54,12 +46,12 @@ serve(async (req) => {
         dry_run_id,
         started_at: startedAt,
         cnpj_request_id: cnpjReq,
-        cnd_request_id: cndReq,
-        cndt_request_id: cndtReq,
+          cnd_request_id: null,
+          cndt_request_id: null,
         cnpj_status: "running",
-        cnd_status: "running",
-        cndt_status: "running",
-        phase: "all_running",
+          cnd_status: "pending",
+          cndt_status: "pending",
+          phase: "cnpj_running",
       },
       description: "Resultado do dry-run obrigatório (Zimmermann) — assíncrono",
     }, { onConflict: "key" });
@@ -68,10 +60,10 @@ serve(async (req) => {
       accepted: true,
       dry_run_id,
       cnpj_request_id: cnpjReq,
-      cnd_request_id: cndReq,
-      cndt_request_id: cndtReq,
+      cnd_request_id: null,
+      cndt_request_id: null,
       status: "pending",
-      message: "Dry-run iniciado (CNPJ + CND + CNDT em paralelo). Faça polling em dry-run-zimmermann-status.",
+      message: "Dry-run iniciado em modo controlado (CNPJ → CND → CNDT). Faça polling em dry-run-zimmermann-status.",
     }), { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: String(err?.message || err) }), {
