@@ -73,7 +73,19 @@ serve(async (req) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const { data: kv } = await supabase.from("automation_config_kv").select("*").eq("key", "dry_run_zimmermann").maybeSingle();
     let v: any = (kv?.value_json || {}) as any;
-    if (!v.cnpj_request_id || v.phase === "cancelled" || v.in_progress === false) {
+    if (v.phase === "cancelled") {
+      const cancelled = {
+        ...v,
+        in_progress: false,
+        passed: false,
+        cnpj_status: v.cnpj_request_id ? "cancelled" : (v.cnpj_status || "pending"),
+        cnd_status: v.cnd_request_id ? "cancelled" : (v.cnd_status || "pending"),
+        cndt_status: v.cndt_request_id ? "cancelled" : (v.cndt_status || "pending"),
+      };
+      await supabase.from("automation_config_kv").upsert({ key: "dry_run_zimmermann", value_json: cancelled, description: "Resultado do dry-run obrigatório (Zimmermann) — cancelado" }, { onConflict: "key" });
+      return new Response(JSON.stringify(cancelled), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (!v.cnpj_request_id || v.in_progress === false) {
       return new Response(JSON.stringify({ in_progress: false, passed: !!v.passed, ...v }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
