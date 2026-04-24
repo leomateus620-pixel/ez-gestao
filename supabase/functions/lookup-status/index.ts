@@ -9,6 +9,9 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 };
 
+const ACTIVE = ["queued", "running", "dispatched", "waiting_callback", "retry_scheduled"];
+const STALL_MS = 3 * 60_000;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -46,6 +49,24 @@ serve(async (req) => {
       const { data: j } = await supabase
         .from("automation_jobs").select("*").eq("id", request.latest_job_id).maybeSingle();
       job = j;
+      const lastProgressAt = new Date(job?.updated_at || job?.dispatched_at || request.started_at || request.created_at || Date.now()).getTime();
+      if (ACTIVE.includes(request.status) && Date.now() - lastProgressAt > STALL_MS) {
+        const now = new Date().toISOString();
+        await supabase.from(reqTable).update({
+          status: "failed",
+          finished_at: now,
+          notes: "stalled_execution: sem progresso por mais de 3 minutos",
+        }).eq("id", request_id);
+        await supabase.from("automation_jobs").update({
+          status: "failed",
+          error_type: "stalled_execution",
+          error_message: "Execução sem progresso por mais de 3 minutos",
+          finished_at: now,
+        }).eq("id", request.latest_job_id).in("status", ACTIVE);
+        request.status = "failed";
+        request.finished_at = now;
+        job = { ...job, status: "failed", error_type: "stalled_execution", error_message: "Execução sem progresso por mais de 3 minutos", finished_at: now };
+      }
       const { data: l } = await supabase
         .from("automation_job_logs").select("*")
         .eq("job_id", request.latest_job_id)
