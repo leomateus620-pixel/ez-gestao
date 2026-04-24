@@ -69,13 +69,14 @@ serve(async (req) => {
       message: message || "", details_json: details_json || {},
     });
 
+    const jobUpdate: any = { updated_at: new Date().toISOString() };
     if (status) {
-      const update: any = { status, updated_at: new Date().toISOString() };
+      jobUpdate.status = status;
       if (status === "running" && !body.no_started_at) {
-        update.started_at = new Date().toISOString();
+        jobUpdate.started_at = new Date().toISOString();
       }
-      await supabase.from("automation_jobs").update(update).eq("id", job_id);
     }
+    await supabase.from("automation_jobs").update(jobUpdate).eq("id", job_id);
 
     // heartbeat provider_health
     if (body.provider) {
