@@ -38,3 +38,12 @@ verify_jwt = false
 
 [functions.bootstrap-test-folder]
 verify_jwt = true
+
+[functions.create-empresa-folder]
+verify_jwt = false
+
+[functions.upload-empresa-doc]
+verify_jwt = false
+
+[functions.dispatch-empresa-guias]
+verify_jwt = false

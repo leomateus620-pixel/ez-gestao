@@ -960,6 +960,7 @@ export type Database = {
           cnpj: string
           comunicacao_ativa: boolean
           created_at: string
+          drive_folder_id: string | null
           email_principal: string
           email_validado: boolean
           estado: string
@@ -982,6 +983,7 @@ export type Database = {
           cnpj: string
           comunicacao_ativa?: boolean
           created_at?: string
+          drive_folder_id?: string | null
           email_principal?: string
           email_validado?: boolean
           estado?: string
@@ -1004,6 +1006,7 @@ export type Database = {
           cnpj?: string
           comunicacao_ativa?: boolean
           created_at?: string
+          drive_folder_id?: string | null
           email_principal?: string
           email_validado?: boolean
           estado?: string
