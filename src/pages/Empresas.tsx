@@ -120,10 +120,23 @@ export default function Empresas() {
       setShowForm(false);
       setForm(emptyEmpresa);
       setFormErrors({});
+      setBusca('');
+      setFiltroStatus('todos');
+      setFiltroRegime('todos');
+      setPage(1);
     } else {
       toast.error('Erro ao criar empresa', { description: 'CNPJ já cadastrado no sistema.' });
     }
   }, [form, validateForm, addEmpresa]);
+
+  const filtrosAtivos = busca !== '' || filtroStatus !== 'todos' || filtroRegime !== 'todos';
+  const ocultas = state.empresas.length - empresasFiltradas.length;
+  const limparFiltros = useCallback(() => {
+    setBusca('');
+    setFiltroStatus('todos');
+    setFiltroRegime('todos');
+    setPage(1);
+  }, []);
 
   return (
     <div className="space-y-6 animate-slide-in">
@@ -171,6 +184,16 @@ export default function Empresas() {
       </div>
 
       <div className="space-y-2">
+        {filtrosAtivos && ocultas > 0 && empresasFiltradas.length > 0 && (
+          <div className="glass-card flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
+            <span className="text-foreground/70">
+              {ocultas} {ocultas === 1 ? 'empresa oculta' : 'empresas ocultas'} pelos filtros atuais.
+            </span>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={limparFiltros}>
+              Limpar filtros
+            </Button>
+          </div>
+        )}
         {paginatedEmpresas.map((empresa, i) => {
           const resumo = resumos[empresa.id];
           return (
@@ -222,7 +245,17 @@ export default function Empresas() {
           </div>
         )}
         {empresasFiltradas.length === 0 && (
-          <EmptyState icon={Building2} title="Nenhuma empresa encontrada" description="Tente ajustar os filtros ou adicione uma nova empresa." actionLabel="Nova Empresa" onAction={() => setShowForm(true)} />
+          filtrosAtivos && state.empresas.length > 0 ? (
+            <EmptyState
+              icon={Building2}
+              title="Nenhuma empresa corresponde aos filtros"
+              description={`Você tem ${state.empresas.length} ${state.empresas.length === 1 ? 'empresa cadastrada' : 'empresas cadastradas'}, mas nenhuma combina com os filtros atuais.`}
+              actionLabel="Limpar filtros"
+              onAction={limparFiltros}
+            />
+          ) : (
+            <EmptyState icon={Building2} title="Nenhuma empresa encontrada" description="Adicione sua primeira empresa para começar." actionLabel="Nova Empresa" onAction={() => setShowForm(true)} />
+          )
         )}
       </div>
 
