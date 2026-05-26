@@ -1,0 +1,1 @@
+UPDATE public.empresas SET cnpj='00000000000100' WHERE id='8a96e4e5-9bf6-4a02-ae2c-8154fdbb2c34';
