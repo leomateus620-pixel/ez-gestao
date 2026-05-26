@@ -145,9 +145,21 @@ async function processOneGuide(db: any, guide: any, driveKey: string, gmailKey: 
   }
   const candidates = [...new Set([...filenameCands, ...contentCands])];
   if (candidates.length !== 1) {
+    if (relaxCnpj && candidates.length > 1) {
+      // In relax mode, try to match any candidate to an existing active company
+      const { data: companiesPre } = await db.from("empresas").select("id,cnpj,status");
+      const match = candidates.find((c: string) =>
+        companiesPre?.some((co: any) => normalizeCnpj(co.cnpj) === c && co.status === "ativa"));
+      if (match) {
+        candidates.splice(0, candidates.length, match);
+      }
+    }
+  }
+  if (candidates.length !== 1) {
     await logException(db, guide.id, "cnpj_ambiguous",
       "Nao foi encontrado um unico CNPJ valido na guia.",
-      "Vincule a empresa manualmente.", { candidates });
+      "Vincule a empresa manualmente.",
+      { candidates, text_sample: extraction.text.slice(0, 400) });
     return { status: "revisao", reason: "cnpj_ambiguous" };
   }
   const minSignals = relaxCnpj ? 0 : 1;
