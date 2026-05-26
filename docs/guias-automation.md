@@ -5,7 +5,9 @@
 1. `scan-guide-folder` lista arquivos da pasta Google Drive `a enviar`.
 2. PDFs novos sao registrados em `guias`; formatos diferentes geram excecao.
 3. `process-guide` tenta identificar CNPJ e metadados no PDF. Quando necessario,
-   envia o PDF para OCR assincrono no Google Cloud Vision usando bucket privado.
+   tenta extrair texto **nativamente** do PDF (sem OCR externo). Se o PDF nao tiver
+   camada de texto extraivel (PDF escaneado/imagem), a guia e marcada como excecao
+   com motivo `pdf_without_text_layer`.
 4. Somente uma correspondencia segura com empresa ativa avanca para
    `dispatch-guide`.
 5. O canal vem exclusivamente de `empresas.canal_preferido`.
@@ -35,7 +37,7 @@ GOOGLE_CLIENT_SECRET
 GOOGLE_OAUTH_REDIRECT_URI
 GOOGLE_OAUTH_STATE_SECRET
 GOOGLE_TOKEN_ENCRYPTION_KEY
-GCS_OCR_BUCKET
+# (OCR externo desativado — leitura nativa de PDF)
 GOOGLE_CLOUD_ACCESS_TOKEN
 GMAIL_SENDER
 TWILIO_ACCOUNT_SID
@@ -66,7 +68,9 @@ criptografado em uma tabela sem politica de leitura para clientes.
 
 - Nenhum envio automatico ocorre sem CNPJ unico valido, empresa ativa, canal
   escolhido, contato valido, consentimento WhatsApp quando aplicavel e conector ativo.
-- Identificacao obtida apenas por OCR requer confianca minima `0.90`.
+- Identificacao por nome do arquivo exige sinais fiscais (valor, vencimento, tipo)
+  no texto extraido; do contrario a guia vai para Excecoes com motivo
+  `insufficient_pdf_signals`.
 - `guia_envios.idempotency_key` evita envio duplicado.
 - Segredos nao sao expostos ao frontend; logs guardam somente payload sanitizado.
 - As telas e funcoes CND permanecem separadas no grupo `Consulta CND (legado)`.
