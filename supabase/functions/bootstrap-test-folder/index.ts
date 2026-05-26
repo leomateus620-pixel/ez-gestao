@@ -42,9 +42,10 @@ async function findOrCreateFolder(driveKey: string, name: string, parentId?: str
   return (await create.json()).id as string;
 }
 
-async function hasAdminSession(req: Request) {
+async function isAuthorized(req: Request) {
   const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   if (!token) return false;
+  if (token === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) return true;
   const auth = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!);
   const { data, error } = await auth.auth.getUser(token);
   return !error && !!data.user;
@@ -55,7 +56,7 @@ serve(async (req) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "method_not_allowed" }), { status: 405, headers: cors });
   }
-  if (!(await hasAdminSession(req))) {
+  if (!(await isAuthorized(req))) {
     return new Response(JSON.stringify({ error: "authentication_required" }), { status: 401, headers: cors });
   }
   const driveKey = Deno.env.get("GOOGLE_DRIVE_API_KEY");
