@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Building2, Mail, Phone, MapPin, FileText, Send, Clock, Download, Eye, Upload, Bell, Edit, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { EmpresaAutomacaoCards } from '@/components/EmpresaAutomacaoCards';
 
 export default function EmpresaDetalhe() {
   const { id } = useParams();
@@ -166,6 +167,8 @@ export default function EmpresaDetalhe() {
           ))}
         </div>
       )}
+
+      <EmpresaAutomacaoCards empresaId={empresa.id} />
 
       <Tabs defaultValue="checklist" className="space-y-4">
         <TabsList className="w-full justify-start overflow-x-auto bg-muted/30 p-1">
