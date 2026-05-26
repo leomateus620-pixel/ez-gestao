@@ -10,22 +10,40 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.lookup-dispatcher]
-verify_jwt = false
+verify_jwt = true
 
 [functions.lookup-status]
-verify_jwt = false
+verify_jwt = true
 
 [functions.lookup-retry]
-verify_jwt = false
+verify_jwt = true
 
 [functions.provider-health-summary]
-verify_jwt = false
+verify_jwt = true
 
 [functions.dry-run-zimmermann]
-verify_jwt = false
+verify_jwt = true
 
 [functions.solve-captcha]
 verify_jwt = false
 
 [functions.dry-run-zimmermann-cancel]
+verify_jwt = true
+
+[functions.scan-guide-folder]
 verify_jwt = false
+
+[functions.process-guide]
+verify_jwt = false
+
+[functions.dispatch-guide]
+verify_jwt = false
+
+[functions.twilio-status-webhook]
+verify_jwt = false
+
+[functions.connect-google-oauth]
+verify_jwt = true
+
+[functions.run-guide-scan-now]
+verify_jwt = true

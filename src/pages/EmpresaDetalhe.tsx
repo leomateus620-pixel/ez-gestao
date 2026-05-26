@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMemo, useRef, useCallback } from 'react';
 import { useDataStore } from '@/data/DataProvider';
+import { useGuides } from '@/features/guias/GuideProvider';
 import { GlassCard } from '@/components/GlassCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import { HealthRing } from '@/components/HealthRing';
@@ -19,6 +20,7 @@ export default function EmpresaDetalhe() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { state, addDocumento, addLog, resolveAlerta, markAlertaLido } = useDataStore();
+  const { guides } = useGuides();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const empresa = useMemo(() => state.empresas.find(e => e.id === id), [state.empresas, id]);
@@ -28,6 +30,7 @@ export default function EmpresaDetalhe() {
   const envios = useMemo(() => state.envios.filter(e => e.empresaId === id), [state.envios, id]);
   const alertas = useMemo(() => state.alertas.filter(a => a.empresaId === id && !a.resolvido), [state.alertas, id]);
   const logs = useMemo(() => state.logs.filter(l => l.empresaId === id), [state.logs, id]);
+  const guias = useMemo(() => guides.filter(guide => guide.empresaId === id), [guides, id]);
 
   const { vencidas, vencendo, validas, pendentes, pctValid } = useMemo(() => {
     const v = cnds.filter(c => c.status === 'vencida').length;
@@ -132,6 +135,11 @@ export default function EmpresaDetalhe() {
           </div>
         </div>
         <div className="flex gap-2 px-6 py-3 border-t border-border/40 bg-muted/20">
+          <div className="mr-auto flex items-center gap-2 rounded-lg border border-border/50 bg-background/50 px-3 text-xs">
+            Canal de guias: <span className="font-semibold capitalize">{empresa.canalPreferido || 'nao configurado'}</span>
+            {empresa.canalPreferido === 'whatsapp' && !empresa.whatsappOptInAt && <span className="text-warning">sem opt-in</span>}
+            {empresa.canalPreferido === 'email' && !empresa.emailValidado && <span className="text-warning">nao validado</span>}
+          </div>
           <Button variant="outline" size="sm" className="text-xs gap-1.5 h-8" onClick={() => fileInputRef.current?.click()}>
             <Upload className="h-3.5 w-3.5" /> Upload PDF
           </Button>
@@ -172,6 +180,9 @@ export default function EmpresaDetalhe() {
           </TabsTrigger>
           <TabsTrigger value="logs" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <Clock className="h-3.5 w-3.5" /> Logs <span className="ml-1 text-[10px] text-foreground/50">({logs.length})</span>
+          </TabsTrigger>
+          <TabsTrigger value="guias" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <FileText className="h-3.5 w-3.5" /> Guias <span className="ml-1 text-[10px] text-foreground/50">({guias.length})</span>
           </TabsTrigger>
           <TabsTrigger value="observacoes" className="text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
             Observações
@@ -306,6 +317,20 @@ export default function EmpresaDetalhe() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="guias" className="space-y-2">
+          {guias.length === 0 ? (
+            <EmptyState icon={FileText} title="Nenhuma guia processada" description="Guias identificadas pelo CNPJ desta empresa aparecerao aqui." />
+          ) : guias.map(guia => (
+            <div key={guia.id} className="glass-card-subtle flex items-center justify-between gap-3 p-4">
+              <div>
+                <p className="text-sm font-medium">{guia.fileName}</p>
+                <p className="mt-1 text-xs text-foreground/55">{guia.tipoGuia || 'Guia'} | {formatDateTime(guia.receivedAt)}</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => navigate(`/guias/${guia.id}`)}>Abrir</Button>
+            </div>
+          ))}
         </TabsContent>
 
         <TabsContent value="observacoes">

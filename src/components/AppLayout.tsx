@@ -1,13 +1,16 @@
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from '@/components/AppSidebar';
-import { Bell, Search } from 'lucide-react';
+import { Bell, LogOut, Search } from 'lucide-react';
 import { useDataStore } from '@/data/DataProvider';
 import { Button } from '@/components/ui/button';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/auth/AuthProvider';
 
 const routeNames: Record<string, string> = {
   '/': 'Dashboard',
   '/empresas': 'Empresas',
+  '/guias': 'Guias',
+  '/integracoes': 'Integracoes',
   '/agenda': 'Agenda',
   '/certidoes': 'Certidões',
   '/documentos': 'Documentos',
@@ -26,6 +29,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const alertasNaoLidos = state.alertas.filter(a => !a.lido && !a.resolvido).length;
   const navigate = useNavigate();
   const location = useLocation();
+  const { session, signOut } = useAuth();
 
   const basePath = '/' + (location.pathname.split('/')[1] || '');
   const currentRoute = routeNames[basePath] || '';
@@ -35,7 +39,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <div className="min-h-screen flex w-full">
         <AppSidebar />
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border/60 bg-background/80 backdrop-blur-xl px-4">
+          <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border/60 bg-background/65 backdrop-blur-xl px-4">
             <div className="flex items-center gap-3">
               <SidebarTrigger />
               {currentRoute && (
@@ -69,16 +73,19 @@ export function AppLayout({ children }: AppLayoutProps) {
 
               <div className="flex items-center gap-2.5 pl-3 ml-1 border-l border-border/50">
                 <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-xs font-bold text-primary ring-2 ring-primary/10">
-                  AS
+                  AD
                 </div>
                 <div className="hidden sm:block">
-                  <p className="text-xs font-semibold leading-none">Ana Silva</p>
+                  <p className="max-w-40 truncate text-xs font-semibold leading-none">{session?.user.email}</p>
                   <p className="text-[10px] text-foreground/50 mt-0.5">Administrador</p>
                 </div>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => signOut()} aria-label="Sair">
+                  <LogOut className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           </header>
-          <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 scrollbar-thin">
+          <main className="liquid-stage flex-1 overflow-auto p-4 md:p-6 lg:p-8 scrollbar-thin">
             {children}
           </main>
         </div>

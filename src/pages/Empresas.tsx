@@ -7,17 +7,19 @@ import { HealthBar } from '@/components/HealthBar';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { formatCNPJ, getRegimeLabel, maskCNPJ, maskPhone, validateCNPJ, validateEmail, sanitizeInput } from '@/lib/formatters';
+import { formatCNPJ, getRegimeLabel, maskCNPJ, validateCNPJ, validateEmail, sanitizeInput } from '@/lib/formatters';
 import { calcularResumoEmpresa } from '@/lib/status-utils';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Search, Plus, Building2, MapPin, ArrowRight, ArrowUpDown } from 'lucide-react';
+import { Search, Plus, Building2, MapPin, ArrowRight, ArrowUpDown, Mail, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { Empresa, RegimeTributario } from '@/data/types';
+import type { CanalEnvio, Empresa, RegimeTributario } from '@/data/types';
 
 type SortField = 'nome' | 'vencidas' | 'status';
 const ITEMS_PER_PAGE = 20;
@@ -26,11 +28,13 @@ const emptyEmpresa = {
   razaoSocial: '', nomeFantasia: '', cnpj: '', regimeTributario: 'simples_nacional' as RegimeTributario,
   municipio: '', estado: '', responsavelInterno: '', responsavelCliente: '',
   emailPrincipal: '', whatsappPrincipal: '', observacoes: '',
+  canalPreferido: 'email' as CanalEnvio, emailValidado: false, whatsappOptIn: false,
+  comunicacaoAtiva: true, saudacaoGuia: '',
 };
 
 export default function Empresas() {
   const navigate = useNavigate();
-  const { state, addEmpresa, cnpjExists, generateChecklistForRegime } = useDataStore();
+  const { state, addEmpresa, cnpjExists } = useDataStore();
   const [busca, setBusca] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   const [filtroRegime, setFiltroRegime] = useState<string>('todos');
@@ -75,8 +79,11 @@ export default function Empresas() {
     if (!cnpjDigits) errors.cnpj = 'Obrigatório';
     else if (!validateCNPJ(cnpjDigits)) errors.cnpj = 'CNPJ inválido';
     else if (cnpjExists(cnpjDigits)) errors.cnpj = 'CNPJ já cadastrado';
-    if (!form.emailPrincipal.trim()) errors.emailPrincipal = 'Obrigatório';
-    else if (!validateEmail(form.emailPrincipal)) errors.emailPrincipal = 'E-mail inválido';
+    if (form.canalPreferido === 'email' && !form.emailPrincipal.trim()) errors.emailPrincipal = 'Obrigatório para envio por e-mail';
+    else if (form.emailPrincipal && !validateEmail(form.emailPrincipal)) errors.emailPrincipal = 'E-mail inválido';
+    if (form.canalPreferido === 'whatsapp' && !/^\+[1-9]\d{7,14}$/.test(form.whatsappPrincipal.trim())) {
+      errors.whatsappPrincipal = 'Informe no formato E.164, como +5511999999999';
+    }
     if (!form.municipio.trim()) errors.municipio = 'Obrigatório';
     if (!form.estado.trim()) errors.estado = 'Obrigatório';
     setFormErrors(errors);
@@ -96,7 +103,12 @@ export default function Empresas() {
       responsavelInterno: sanitizeInput(form.responsavelInterno),
       responsavelCliente: sanitizeInput(form.responsavelCliente),
       emailPrincipal: form.emailPrincipal.trim(),
-      whatsappPrincipal: form.whatsappPrincipal.replace(/\D/g, ''),
+      whatsappPrincipal: form.whatsappPrincipal.trim(),
+      canalPreferido: form.canalPreferido,
+      emailValidado: form.emailValidado,
+      whatsappOptInAt: form.whatsappOptIn ? new Date().toISOString() : null,
+      comunicacaoAtiva: form.comunicacaoAtiva,
+      saudacaoGuia: sanitizeInput(form.saudacaoGuia),
       observacoes: sanitizeInput(form.observacoes),
       status: 'ativa',
       criadoEm: new Date().toISOString().split('T')[0],
@@ -104,15 +116,14 @@ export default function Empresas() {
     };
     const success = addEmpresa(newEmpresa);
     if (success) {
-      generateChecklistForRegime(newEmpresa.id, newEmpresa.regimeTributario, newEmpresa.responsavelInterno || 'Sistema');
-      toast.success('Empresa criada com sucesso', { description: `${newEmpresa.nomeFantasia} foi adicionada com checklist base.` });
+      toast.success('Empresa criada com sucesso', { description: `${newEmpresa.nomeFantasia} está disponível para o roteamento de guias.` });
       setShowForm(false);
       setForm(emptyEmpresa);
       setFormErrors({});
     } else {
       toast.error('Erro ao criar empresa', { description: 'CNPJ já cadastrado no sistema.' });
     }
-  }, [form, validateForm, addEmpresa, generateChecklistForRegime]);
+  }, [form, validateForm, addEmpresa]);
 
   return (
     <div className="space-y-6 animate-slide-in">
@@ -179,6 +190,10 @@ export default function Empresas() {
                       <span className="font-mono">{formatCNPJ(empresa.cnpj)}</span>
                       <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{empresa.municipio}/{empresa.estado}</span>
                       <span className="hidden sm:inline">{getRegimeLabel(empresa.regimeTributario)}</span>
+                      <Badge variant="outline" className="gap-1 text-[10px] capitalize">
+                        {empresa.canalPreferido === 'whatsapp' ? <MessageCircle className="h-3 w-3" /> : <Mail className="h-3 w-3" />}
+                        {empresa.canalPreferido || 'sem canal'}
+                      </Badge>
                     </div>
                   </div>
                 </div>
@@ -246,13 +261,50 @@ export default function Empresas() {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">E-mail *</Label>
+                <Label className="text-xs">E-mail</Label>
                 <Input type="email" value={form.emailPrincipal} onChange={e => setForm(f => ({ ...f, emailPrincipal: e.target.value }))} className={formErrors.emailPrincipal ? 'border-destructive' : ''} />
                 {formErrors.emailPrincipal && <p className="text-[10px] text-destructive mt-0.5">{formErrors.emailPrincipal}</p>}
               </div>
               <div>
-                <Label className="text-xs">WhatsApp</Label>
-                <Input value={form.whatsappPrincipal} onChange={e => setForm(f => ({ ...f, whatsappPrincipal: maskPhone(e.target.value) }))} placeholder="(00) 00000-0000" />
+                <Label className="text-xs">WhatsApp (E.164)</Label>
+                <Input value={form.whatsappPrincipal} onChange={e => setForm(f => ({ ...f, whatsappPrincipal: e.target.value.replace(/[^\d+]/g, '') }))} placeholder="+5511999999999" className={formErrors.whatsappPrincipal ? 'border-destructive' : ''} />
+                {formErrors.whatsappPrincipal && <p className="text-[10px] text-destructive mt-0.5">{formErrors.whatsappPrincipal}</p>}
+              </div>
+              <div className="col-span-2 rounded-xl border border-border/60 bg-muted/25 p-4 space-y-4">
+                <div>
+                  <Label className="text-xs">Canal preferido para guias *</Label>
+                  <Select value={form.canalPreferido} onValueChange={v => setForm(f => ({ ...f, canalPreferido: v as CanalEnvio }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="email">E-mail com PDF anexo</SelectItem>
+                      <SelectItem value="whatsapp">WhatsApp com documento</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-medium">Comunicação ativa</p>
+                    <p className="text-[11px] text-foreground/55">Permite que validações iniciem envios automáticos.</p>
+                  </div>
+                  <Switch checked={form.comunicacaoAtiva} onCheckedChange={checked => setForm(f => ({ ...f, comunicacaoAtiva: checked }))} />
+                </div>
+                {form.canalPreferido === 'email' ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium">E-mail validado</p>
+                      <p className="text-[11px] text-foreground/55">Sem validação, a guia vai para exceção.</p>
+                    </div>
+                    <Switch checked={form.emailValidado} onCheckedChange={checked => setForm(f => ({ ...f, emailValidado: checked }))} />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium">Opt-in WhatsApp registrado</p>
+                      <p className="text-[11px] text-foreground/55">Obrigatório para envio por template utilitário.</p>
+                    </div>
+                    <Switch checked={form.whatsappOptIn} onCheckedChange={checked => setForm(f => ({ ...f, whatsappOptIn: checked }))} />
+                  </div>
+                )}
               </div>
               <div>
                 <Label className="text-xs">Município *</Label>
@@ -271,6 +323,10 @@ export default function Empresas() {
               <div>
                 <Label className="text-xs">Responsável Cliente</Label>
                 <Input value={form.responsavelCliente} onChange={e => setForm(f => ({ ...f, responsavelCliente: e.target.value }))} />
+              </div>
+              <div className="col-span-2">
+                <Label className="text-xs">Saudação opcional da guia</Label>
+                <Input value={form.saudacaoGuia} onChange={e => setForm(f => ({ ...f, saudacaoGuia: e.target.value }))} placeholder="Olá, equipe financeira." />
               </div>
               <div className="col-span-2">
                 <Label className="text-xs">Observações</Label>
