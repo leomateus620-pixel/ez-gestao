@@ -956,9 +956,12 @@ export type Database = {
       }
       empresas: {
         Row: {
+          canal_preferido: Database["public"]["Enums"]["canal_envio"] | null
           cnpj: string
+          comunicacao_ativa: boolean
           created_at: string
           email_principal: string
+          email_validado: boolean
           estado: string
           id: string
           municipio: string
@@ -968,14 +971,19 @@ export type Database = {
           regime_tributario: Database["public"]["Enums"]["regime_tributario"]
           responsavel_cliente: string
           responsavel_interno: string
+          saudacao_guia: string
           status: Database["public"]["Enums"]["empresa_status"]
           updated_at: string
+          whatsapp_opt_in_at: string | null
           whatsapp_principal: string
         }
         Insert: {
+          canal_preferido?: Database["public"]["Enums"]["canal_envio"] | null
           cnpj: string
+          comunicacao_ativa?: boolean
           created_at?: string
           email_principal?: string
+          email_validado?: boolean
           estado?: string
           id?: string
           municipio?: string
@@ -985,14 +993,19 @@ export type Database = {
           regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
           responsavel_cliente?: string
           responsavel_interno?: string
+          saudacao_guia?: string
           status?: Database["public"]["Enums"]["empresa_status"]
           updated_at?: string
+          whatsapp_opt_in_at?: string | null
           whatsapp_principal?: string
         }
         Update: {
+          canal_preferido?: Database["public"]["Enums"]["canal_envio"] | null
           cnpj?: string
+          comunicacao_ativa?: boolean
           created_at?: string
           email_principal?: string
+          email_validado?: boolean
           estado?: string
           id?: string
           municipio?: string
@@ -1002,8 +1015,10 @@ export type Database = {
           regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
           responsavel_cliente?: string
           responsavel_interno?: string
+          saudacao_guia?: string
           status?: Database["public"]["Enums"]["empresa_status"]
           updated_at?: string
+          whatsapp_opt_in_at?: string | null
           whatsapp_principal?: string
         }
         Relationships: []
