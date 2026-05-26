@@ -223,8 +223,11 @@ async function processOneGuide(db: any, guide: any, driveKey: string, gmailKey: 
   const idemKey = `${guide.id}:email`;
   const { data: prior } = await db.from("guia_envios").select("*")
     .eq("idempotency_key", idemKey).maybeSingle();
-  if (prior && prior.status !== "falhou") {
+  if (prior && prior.status !== "falhou" && !(mode === "live" && prior.status === "simulado")) {
     return { status: prior.status, duplicate_prevented: true };
+  }
+  if (prior && mode === "live" && prior.status === "simulado") {
+    await db.from("guia_envios").delete().eq("id", prior.id);
   }
 
   // 7. Build email
