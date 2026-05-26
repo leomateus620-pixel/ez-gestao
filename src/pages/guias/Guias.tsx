@@ -17,7 +17,6 @@ type GuideView = 'fila' | 'enviadas' | 'excecoes';
 const guideLabels: Record<GuiaStatus, string> = {
   aguardando: 'Aguardando',
   lendo: 'Lendo',
-  ocr: 'OCR',
   identificada: 'Identificada',
   enviando: 'Enviando',
   enviada: 'Enviada',
@@ -30,7 +29,7 @@ function GuideBadge({ status }: { status: GuiaStatus }) {
     <Badge variant="outline" className={cn(
       'font-medium',
       status === 'enviada' && 'border-success/30 bg-success/10 text-success',
-      ['lendo', 'ocr', 'identificada', 'enviando'].includes(status) && 'border-primary/30 bg-primary/10 text-primary',
+      ['lendo', 'identificada', 'enviando'].includes(status) && 'border-primary/30 bg-primary/10 text-primary',
       status === 'aguardando' && 'border-info/30 bg-info/10 text-info',
       status === 'revisao' && 'border-warning/30 bg-warning/10 text-warning',
       status === 'erro' && 'border-destructive/30 bg-destructive/10 text-destructive',

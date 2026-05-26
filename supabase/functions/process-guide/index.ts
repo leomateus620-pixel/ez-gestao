@@ -2,8 +2,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, no-useless-escape */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+// unpdf is a serverless/Deno-friendly fork of pdf.js – no Node deps, no OCR.
+import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
 
 const jsonHeaders = { "Content-Type": "application/json" };
+const MIN_TEXT_LENGTH = 40;
 
 function isInternal(req: Request) {
   const provided = req.headers.get("x-guide-internal-secret") || "";
@@ -33,14 +36,48 @@ function cnpjCandidates(text: string) {
   return [...new Set(matches.map(normalizeCnpj).filter(validCnpj))];
 }
 
-function pdfText(bytes: Uint8Array) {
-  const decoded = new TextDecoder("latin1").decode(bytes);
-  const fragments = [...decoded.matchAll(/\(([^()]{3,})\)\s*Tj/g)].map((match) => match[1]);
-  return fragments.join(" ").replace(/\\[()]/g, "").slice(0, 20000);
-}
-
 function fromBase64(value: string) {
   return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+}
+
+/**
+ * Native PDF text extraction. NO external OCR. Returns rich metadata so callers
+ * can decide if the document is digital (text layer) or a scanned image.
+ */
+export interface NativeExtraction {
+  text: string;
+  pageCount: number;
+  hasTextLayer: boolean;
+  extractionMethod: "native_pdf_text";
+  confidence: number; // 0..1 derived from text density + fiscal signals
+}
+
+function fiscalSignals(text: string) {
+  const due = /(?:vencimento|venc\.)\s*[:\-]?\s*\d{2}\/\d{2}\/\d{4}/i.test(text);
+  const amount = /(?:valor(?:\s+total)?|total)\s*[:\-]?\s*R?\$?\s*[\d.]+,\d{2}/i.test(text);
+  const kind = /\b(DAS|DARF|FGTS|INSS|ICMS|ISS|GPS|DAE)\b/i.test(text);
+  return [due, amount, kind].filter(Boolean).length;
+}
+
+async function extractPdfText(bytes: Uint8Array): Promise<NativeExtraction> {
+  const pdf = await getDocumentProxy(bytes);
+  const { text, totalPages } = await extractText(pdf, { mergePages: true });
+  const normalized = (Array.isArray(text) ? text.join("\n") : (text as string))
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const hasTextLayer = normalized.length >= MIN_TEXT_LENGTH;
+  const signals = fiscalSignals(normalized);
+  // density: 0..1, signals: 0..3 → confidence weighted by both
+  const density = Math.min(1, normalized.length / 600);
+  const confidence = hasTextLayer ? Math.min(1, 0.4 * density + 0.2 * signals) : 0;
+  return {
+    text: normalized.slice(0, 20000),
+    pageCount: totalPages || 0,
+    hasTextLayer,
+    extractionMethod: "native_pdf_text",
+    confidence,
+  };
 }
 
 async function googleAccessToken(db: any) {
@@ -96,78 +133,8 @@ async function exception(db: any, guideId: string, type: string, reason: string,
     event_type: "exception",
     level: "warning",
     message: reason,
-    metadata_json: { type },
+    metadata_json: { type, ...data },
   });
-}
-
-async function queueVisionOcr(db: any, guide: any, bytes: Uint8Array) {
-  const token = Deno.env.get("GOOGLE_CLOUD_ACCESS_TOKEN");
-  const bucket = Deno.env.get("GCS_OCR_BUCKET");
-  if (!token || !bucket) return null;
-  const objectName = `pending/${guide.id}.pdf`;
-  const upload = await fetch(
-    `https://storage.googleapis.com/upload/storage/v1/b/${encodeURIComponent(bucket)}/o?uploadType=media&name=${encodeURIComponent(objectName)}`,
-    { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/pdf" }, body: bytes },
-  );
-  if (!upload.ok) return null;
-  const outputPrefix = `gs://${bucket}/results/${guide.id}/`;
-  const vision = await fetch("https://vision.googleapis.com/v1/files:asyncBatchAnnotate", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      requests: [{
-        inputConfig: { gcsSource: { uri: `gs://${bucket}/${objectName}` }, mimeType: "application/pdf" },
-        features: [{ type: "DOCUMENT_TEXT_DETECTION" }],
-        outputConfig: { gcsDestination: { uri: outputPrefix }, batchSize: 5 },
-      }],
-    }),
-  });
-  if (!vision.ok) return null;
-  const operation = await vision.json();
-  await db.from("guias").update({
-    status: "ocr",
-    ocr_operation_name: operation.name,
-    ocr_output_uri: outputPrefix,
-    locked_at: null,
-  }).eq("id", guide.id);
-  await db.from("guia_eventos").insert({
-    guia_id: guide.id,
-    event_type: "ocr_requested",
-    message: "OCR assincrono solicitado ao Google Cloud Vision.",
-  });
-  return operation.name;
-}
-
-async function readVisionResult(guide: any) {
-  const token = Deno.env.get("GOOGLE_CLOUD_ACCESS_TOKEN");
-  const bucket = Deno.env.get("GCS_OCR_BUCKET");
-  if (!token || !bucket || !guide.ocr_operation_name) return null;
-  const operation = await fetch(`https://vision.googleapis.com/v1/${guide.ocr_operation_name}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  }).then((response) => response.json());
-  if (!operation.done) return { pending: true };
-  const prefix = `results/${guide.id}/`;
-  const listed = await fetch(
-    `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o?prefix=${encodeURIComponent(prefix)}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  ).then((response) => response.json());
-  const resultFile = listed.items?.find((item: any) => item.name.endsWith(".json"));
-  if (!resultFile) return null;
-  const result = await fetch(
-    `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(resultFile.name)}?alt=media`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  ).then((response) => response.json());
-  const annotations = result.responses || [];
-  const text = annotations.map((entry: any) => entry.fullTextAnnotation?.text || "").join("\n");
-  const confidences = annotations.flatMap((entry: any) =>
-    (entry.fullTextAnnotation?.pages || []).flatMap((page: any) =>
-      (page.blocks || []).map((block: any) => block.confidence).filter((value: any) => typeof value === "number")
-    )
-  );
-  const confidence = confidences.length
-    ? confidences.reduce((sum: number, value: number) => sum + value, 0) / confidences.length
-    : 0;
-  return { pending: false, text, confidence };
 }
 
 async function drivePdf(db: any, fileId: string) {
@@ -193,77 +160,121 @@ serve(async (req) => {
   const { data: guide } = await db.from("guias").select("*").eq("id", guia_id).single();
   if (!guide) return new Response(JSON.stringify({ error: "guide_not_found" }), { status: 404, headers: jsonHeaders });
 
-  let text = "";
-  let confidence: number | null = null;
-  let source = "pdf_text";
-  if (guide.status === "ocr" && guide.ocr_operation_name) {
-    const ocr = await readVisionResult(guide);
-    if (ocr?.pending) return new Response(JSON.stringify({ status: "ocr_pending" }), { status: 202, headers: jsonHeaders });
-    if (!ocr?.text) {
-      await exception(db, guide.id, "ocr_failed", "OCR finalizado sem texto utilizavel.", "Revise a guia manualmente.");
-      return new Response(JSON.stringify({ status: "revisao" }), { headers: jsonHeaders });
-    }
-    text = ocr.text;
-    confidence = ocr.confidence;
-    source = "ocr";
-  } else {
-    await db.from("guias").update({ status: "lendo", locked_at: new Date().toISOString() }).eq("id", guide.id);
-    const bytes = await drivePdf(db, guide.drive_file_id);
-    if (!bytes) {
-      await exception(db, guide.id, "drive_download_failed", "Nao foi possivel baixar o PDF do Drive.", "Verifique a conexao Google OAuth.");
-      return new Response(JSON.stringify({ status: "revisao" }), { headers: jsonHeaders });
-    }
-    text = pdfText(bytes);
-    const nameCandidates = cnpjCandidates(guide.file_name);
-    if (text.length < 20 && nameCandidates.length === 0) {
-      const operation = await queueVisionOcr(db, guide, bytes);
-      if (!operation) {
-        await exception(db, guide.id, "ocr_unavailable", "A guia requer OCR, mas o Vision nao esta ativo.", "Ative Google Cloud Vision e o bucket temporario.");
-      }
-      return new Response(JSON.stringify({ status: operation ? "ocr" : "revisao" }), { headers: jsonHeaders });
-    }
+  await db.from("guias").update({ status: "lendo", locked_at: new Date().toISOString() }).eq("id", guide.id);
+
+  const bytes = await drivePdf(db, guide.drive_file_id);
+  if (!bytes) {
+    await exception(db, guide.id, "drive_download_failed",
+      "Nao foi possivel baixar o PDF do Drive.",
+      "Verifique a conexao Google Drive da pasta de origem.");
+    return new Response(JSON.stringify({ status: "revisao" }), { headers: jsonHeaders });
   }
 
+  let extraction: NativeExtraction;
+  try {
+    extraction = await extractPdfText(bytes);
+  } catch (err) {
+    await exception(db, guide.id, "pdf_text_extraction_failed",
+      "Falha ao ler o conteudo do PDF.",
+      "Reenvie o arquivo ou revise manualmente.",
+      { error: String(err).slice(0, 300) });
+    return new Response(JSON.stringify({ status: "revisao" }), { headers: jsonHeaders });
+  }
+
+  await db.from("guia_eventos").insert({
+    guia_id: guide.id,
+    event_type: "pdf_text_extracted",
+    message: "Leitura nativa de PDF concluida.",
+    metadata_json: {
+      page_count: extraction.pageCount,
+      has_text_layer: extraction.hasTextLayer,
+      extraction_method: extraction.extractionMethod,
+      text_length: extraction.text.length,
+      confidence: extraction.confidence,
+    },
+  });
+
+  const text = extraction.text;
   const filenameCandidates = cnpjCandidates(guide.file_name);
   const contentCandidates = cnpjCandidates(text);
-  const candidates = [...new Set([...filenameCandidates, ...contentCandidates])];
+
+  if (!extraction.hasTextLayer && filenameCandidates.length === 0) {
+    await exception(db, guide.id, "pdf_without_text_layer",
+      "O PDF parece ser escaneado ou imagem. Envie uma versao digital/textual ou revise manualmente.",
+      "Substitua por um PDF digital (com camada de texto) ou processe manualmente.",
+      { page_count: extraction.pageCount });
+    return new Response(JSON.stringify({ status: "revisao" }), { headers: jsonHeaders });
+  }
+
   if (filenameCandidates.length === 1 && contentCandidates.length === 1 && filenameCandidates[0] !== contentCandidates[0]) {
-    await exception(db, guide.id, "source_conflict", "O CNPJ do nome do arquivo difere do conteudo.", "Corrija a guia ou o nome do arquivo.", { filenameCandidates, contentCandidates });
+    await exception(db, guide.id, "filename_content_conflict",
+      "O CNPJ do nome do arquivo difere do conteudo do PDF.",
+      "Corrija a guia ou o nome do arquivo.",
+      { filenameCandidates, contentCandidates });
     return new Response(JSON.stringify({ status: "revisao" }), { headers: jsonHeaders });
   }
+
+  const candidates = [...new Set([...filenameCandidates, ...contentCandidates])];
   if (candidates.length !== 1) {
-    await exception(db, guide.id, "cnpj_ambiguous", "Nao foi encontrado um unico CNPJ valido na guia.", "Confirme o arquivo e vincule a empresa manualmente.", { candidates });
+    await exception(db, guide.id, "cnpj_ambiguous",
+      "Nao foi encontrado um unico CNPJ valido na guia.",
+      "Confirme o arquivo e vincule a empresa manualmente.",
+      { candidates });
     return new Response(JSON.stringify({ status: "revisao" }), { headers: jsonHeaders });
   }
-  if (source === "ocr" && (confidence === null || confidence < 0.9)) {
-    await exception(db, guide.id, "low_ocr_confidence", "A identificacao via OCR ficou abaixo da confianca minima de 0.90.", "Revise a leitura antes do envio.", { confidence });
+
+  // CNPJ from filename only + PDF text without fiscal signals → not enough trust
+  if (contentCandidates.length === 0 && fiscalSignals(text) < 1) {
+    await exception(db, guide.id, "insufficient_pdf_signals",
+      "O PDF nao tem indicios suficientes (valor, vencimento, tipo) para envio automatico.",
+      "Revise manualmente antes de enviar.",
+      { text_length: text.length });
     return new Response(JSON.stringify({ status: "revisao" }), { headers: jsonHeaders });
   }
-  const { data: companies } = await db.from("empresas").select("*").eq("status", "ativa");
-  const company = companies?.find((entry: any) => normalizeCnpj(entry.cnpj) === candidates[0]);
-  if (!company) {
-    await exception(db, guide.id, "company_not_found", "Nenhuma empresa ativa corresponde ao CNPJ detectado.", "Cadastre ou ative a empresa antes de reenviar.", { cnpj: candidates[0] });
+
+  const { data: companies } = await db.from("empresas").select("*");
+  const matched = companies?.find((entry: any) => normalizeCnpj(entry.cnpj) === candidates[0]);
+  if (!matched) {
+    await exception(db, guide.id, "company_not_found",
+      "Nenhuma empresa corresponde ao CNPJ detectado.",
+      "Cadastre a empresa antes de reenviar.",
+      { cnpj: candidates[0] });
     return new Response(JSON.stringify({ status: "revisao" }), { headers: jsonHeaders });
   }
+  if (matched.status !== "ativa") {
+    await exception(db, guide.id, "company_inactive",
+      "A empresa identificada esta inativa.",
+      "Ative a empresa antes de reenviar.",
+      { cnpj: candidates[0], status: matched.status });
+    return new Response(JSON.stringify({ status: "revisao" }), { headers: jsonHeaders });
+  }
+
   const extracted = metadata(text);
-  const matchSource = filenameCandidates.length && contentCandidates.length ? "multiple" : source === "ocr" ? "ocr" : filenameCandidates.length ? "filename" : "pdf_text";
+  const matchSource = filenameCandidates.length && contentCandidates.length
+    ? "multiple"
+    : filenameCandidates.length ? "filename" : "pdf_native";
+
   await db.from("guias").update({
     status: "identificada",
     match_source: matchSource,
     cnpj_detectado: candidates[0],
-    empresa_id: company.id,
+    empresa_id: matched.id,
     texto_extraido_preview: text.slice(0, 600),
-    ocr_confidence: confidence,
+    pagina_count: extraction.pageCount,
+    extraction_method: extraction.extractionMethod,
+    has_text_layer: extraction.hasTextLayer,
     processed_at: new Date().toISOString(),
     locked_at: null,
     ...extracted,
   }).eq("id", guide.id);
+
   await db.from("guia_eventos").insert({
     guia_id: guide.id,
     event_type: "company_matched",
     message: "Empresa identificada com correspondencia segura.",
-    metadata_json: { match_source: matchSource, cnpj: candidates[0] },
+    metadata_json: { match_source: matchSource, cnpj: candidates[0], confidence: extraction.confidence },
   });
+
   const dispatched = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/dispatch-guide`, {
     method: "POST",
     headers: {

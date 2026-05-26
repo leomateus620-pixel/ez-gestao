@@ -143,25 +143,26 @@ export interface EmpresaResumo {
   pctValid: number;
 }
 
-export type GuiaStatus = 'aguardando' | 'lendo' | 'ocr' | 'identificada' | 'enviando' | 'enviada' | 'erro' | 'revisao';
-export type MatchSource = 'filename' | 'pdf_text' | 'ocr' | 'multiple' | 'none';
+export type GuiaStatus = 'aguardando' | 'lendo' | 'identificada' | 'enviando' | 'enviada' | 'erro' | 'revisao';
+export type MatchSource = 'filename' | 'pdf_text' | 'pdf_native' | 'multiple' | 'none';
 export type DispatchStatus = 'pendente' | 'aceito' | 'entregue' | 'falhou';
-export type IntegrationProvider = 'google_drive' | 'gmail' | 'twilio_whatsapp' | 'google_vision';
+export type IntegrationProvider = 'google_drive' | 'gmail' | 'twilio_whatsapp' | 'pdf_native_reader';
 export type IntegrationHealth = 'desconectado' | 'configurado' | 'ativo' | 'erro';
 export type GuideExceptionType =
   | 'unsupported_file'
   | 'cnpj_ambiguous'
-  | 'source_conflict'
-  | 'low_ocr_confidence'
+  | 'filename_content_conflict'
+  | 'pdf_without_text_layer'
+  | 'pdf_text_extraction_failed'
+  | 'insufficient_pdf_signals'
   | 'company_not_found'
-  | 'channel_missing'
-  | 'invalid_email'
+  | 'company_inactive'
+  | 'missing_email'
+  | 'invalid_channel'
   | 'whatsapp_consent_missing'
   | 'integration_inactive'
   | 'dispatch_failed'
   | 'delivery_failed'
-  | 'ocr_unavailable'
-  | 'ocr_failed'
   | 'drive_download_failed'
   | 'drive_move_failed';
 
@@ -180,7 +181,9 @@ export interface Guia {
   vencimento: string | null;
   valor: number | null;
   textoExtraidoPreview: string | null;
-  ocrConfidence: number | null;
+  paginaCount: number | null;
+  extractionMethod: string | null;
+  hasTextLayer: boolean | null;
   pastaAtual: 'a_enviar' | 'enviados';
   providerError: string | null;
   receivedAt: string;

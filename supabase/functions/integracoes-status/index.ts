@@ -14,7 +14,8 @@ serve((req) => {
     google_drive: Boolean(Deno.env.get("GOOGLE_DRIVE_API_KEY")),
     gmail: Boolean(Deno.env.get("GOOGLE_MAIL_API_KEY")),
     twilio_whatsapp: Boolean(Deno.env.get("TWILIO_API_KEY")),
-    google_vision: Boolean(Deno.env.get("GOOGLE_VISION_API_KEY")),
+    // Leitura nativa de PDF: módulo interno, sempre disponível.
+    pdf_native_reader: true,
   };
   return new Response(JSON.stringify(status), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },

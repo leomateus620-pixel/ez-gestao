@@ -163,11 +163,11 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: "guide_not_ready" }), { status: 409, headers });
   }
   if (!company.comunicacao_ativa || !company.canal_preferido) {
-    return block(db, guide, "channel_missing", "Empresa sem canal ativo para recebimento.", "Escolha email ou WhatsApp no cadastro.");
+    return block(db, guide, "invalid_channel", "Empresa sem canal ativo para recebimento.", "Escolha email ou WhatsApp no cadastro.");
   }
   const channel = company.canal_preferido;
   if (channel === "email" && (!company.email_validado || !emailValid(company.email))) {
-    return block(db, guide, "invalid_email", "Email preferido nao foi validado.", "Valide o endereco de email da empresa.");
+    return block(db, guide, "missing_email", "Email preferido nao foi validado.", "Valide o endereco de email da empresa.");
   }
   if (channel === "whatsapp" && (!company.whatsapp_opt_in_at || !phoneValid(company.whatsapp))) {
     return block(db, guide, "whatsapp_consent_missing", "WhatsApp sem telefone E.164 ou consentimento registrado.", "Registre opt-in e telefone valido.");
