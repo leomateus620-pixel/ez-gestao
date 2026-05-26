@@ -1,0 +1,174 @@
+import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { AlertTriangle, ArrowRight, FileText, Loader2, Play, Send, ShieldAlert } from 'lucide-react';
+import { useGuides } from '@/features/guias/GuideProvider';
+import { PageHeader } from '@/components/PageHeader';
+import { GlassCard } from '@/components/GlassCard';
+import { EmptyState } from '@/components/EmptyState';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatCNPJ, formatDate, formatDateTime } from '@/lib/formatters';
+import type { Guia, GuiaStatus } from '@/data/types';
+import { cn } from '@/lib/utils';
+
+type GuideView = 'fila' | 'enviadas' | 'excecoes';
+
+const guideLabels: Record<GuiaStatus, string> = {
+  aguardando: 'Aguardando',
+  lendo: 'Lendo',
+  ocr: 'OCR',
+  identificada: 'Identificada',
+  enviando: 'Enviando',
+  enviada: 'Enviada',
+  erro: 'Erro',
+  revisao: 'Revisao',
+};
+
+function GuideBadge({ status }: { status: GuiaStatus }) {
+  return (
+    <Badge variant="outline" className={cn(
+      'font-medium',
+      status === 'enviada' && 'border-success/30 bg-success/10 text-success',
+      ['lendo', 'ocr', 'identificada', 'enviando'].includes(status) && 'border-primary/30 bg-primary/10 text-primary',
+      status === 'aguardando' && 'border-info/30 bg-info/10 text-info',
+      status === 'revisao' && 'border-warning/30 bg-warning/10 text-warning',
+      status === 'erro' && 'border-destructive/30 bg-destructive/10 text-destructive',
+    )}>
+      {guideLabels[status]}
+    </Badge>
+  );
+}
+
+function GuidesTable({ guides }: { guides: Guia[] }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow className="border-border/50">
+          <TableHead>Arquivo</TableHead>
+          <TableHead>Identificacao</TableHead>
+          <TableHead>Guia</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Recebida</TableHead>
+          <TableHead className="w-12" />
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {guides.map((guide) => (
+          <TableRow key={guide.id} className="border-border/40">
+            <TableCell>
+              <div className="flex items-center gap-2.5">
+                <FileText className="h-4 w-4 text-primary shrink-0" />
+                <span className="max-w-64 truncate font-medium">{guide.fileName}</span>
+              </div>
+            </TableCell>
+            <TableCell className="text-xs text-foreground/65">
+              {guide.cnpjDetectado ? formatCNPJ(guide.cnpjDetectado) : 'Pendente'}
+            </TableCell>
+            <TableCell className="text-xs">
+              {guide.tipoGuia || 'A extrair'}
+              {guide.competencia && <span className="block text-foreground/50">{guide.competencia}</span>}
+            </TableCell>
+            <TableCell><GuideBadge status={guide.status} /></TableCell>
+            <TableCell className="text-xs text-foreground/60">{formatDateTime(guide.receivedAt)}</TableCell>
+            <TableCell>
+              <Button asChild size="icon" variant="ghost" className="h-8 w-8">
+                <Link to={`/guias/${guide.id}`} aria-label="Abrir detalhe"><ArrowRight className="h-4 w-4" /></Link>
+              </Button>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+export default function Guias({ view }: { view: GuideView }) {
+  const { guides, exceptions, isLoading, isScanning, runScan, resolveException } = useGuides();
+  const pending = useMemo(() =>
+    guides.filter((guide) => guide.status !== 'enviada'), [guides]);
+  const sent = useMemo(() =>
+    guides.filter((guide) => guide.status === 'enviada'), [guides]);
+  const openExceptions = useMemo(() =>
+    exceptions.filter((entry) => entry.status !== 'resolved' && entry.status !== 'ignored'), [exceptions]);
+
+  const title = view === 'fila' ? 'Fila de Guias' : view === 'enviadas' ? 'Guias Enviadas' : 'Excecoes de Guias';
+  const subtitle = view === 'fila'
+    ? 'PDFs em leitura, identificacao, OCR ou aguardando despacho.'
+    : view === 'enviadas'
+      ? 'Documentos aceitos pelo canal e movidos para a pasta enviados.'
+      : 'Tudo que exige revisao humana permanece rastreavel aqui.';
+
+  return (
+    <div className="space-y-6 animate-slide-in">
+      <PageHeader title={title} subtitle={subtitle}>
+        <Button onClick={runScan} disabled={isScanning} className="gap-2">
+          {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          Processar agora
+        </Button>
+      </PageHeader>
+
+      <div className="flex flex-wrap gap-2">
+        <Button asChild size="sm" variant={view === 'fila' ? 'default' : 'outline'}>
+          <Link to="/guias/fila">Fila ({pending.length})</Link>
+        </Button>
+        <Button asChild size="sm" variant={view === 'enviadas' ? 'default' : 'outline'}>
+          <Link to="/guias/enviadas">Enviadas ({sent.length})</Link>
+        </Button>
+        <Button asChild size="sm" variant={view === 'excecoes' ? 'default' : 'outline'}>
+          <Link to="/guias/excecoes">Excecoes ({openExceptions.length})</Link>
+        </Button>
+      </div>
+
+      {view !== 'excecoes' && (
+        <GlassCard variant="elevated" className="overflow-hidden p-0">
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-2 p-16 text-sm text-foreground/60">
+              <Loader2 className="h-4 w-4 animate-spin" /> Carregando guias
+            </div>
+          ) : (view === 'fila' ? pending : sent).length ? (
+            <GuidesTable guides={view === 'fila' ? pending : sent} />
+          ) : (
+            <EmptyState
+              icon={view === 'fila' ? FileText : Send}
+              title={view === 'fila' ? 'Nenhuma guia aguardando processamento' : 'Nenhuma guia enviada ainda'}
+              description={view === 'fila' ? 'Arquivos PDF da pasta a enviar aparecerao aqui.' : 'Os envios confirmados serao organizados nesta lista.'}
+              className="border-0 shadow-none bg-transparent"
+            />
+          )}
+        </GlassCard>
+      )}
+
+      {view === 'excecoes' && (
+        <div className="space-y-3">
+          {openExceptions.length === 0 ? (
+            <EmptyState icon={ShieldAlert} title="Nenhuma excecao aberta" description="Falhas de OCR, cadastro, consentimento ou conector serao exibidas aqui." />
+          ) : openExceptions.map((entry) => (
+            <GlassCard key={entry.id} variant={entry.severity === 'critical' || entry.severity === 'error' ? 'critical' : 'default'}>
+              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                <div className="flex gap-3">
+                  <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold">{entry.exceptionType.replace(/_/g, ' ')}</p>
+                      <Badge variant="outline">{entry.severity}</Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-foreground/70">{entry.reason}</p>
+                    <p className="mt-2 text-xs text-foreground/55">Acao recomendada: {entry.actionRecommended || 'Analise manual.'}</p>
+                    <p className="mt-1 text-[11px] text-foreground/45">{formatDate(entry.createdAt)}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {entry.guiaId && (
+                    <Button variant="outline" size="sm" asChild><Link to={`/guias/${entry.guiaId}`}>Abrir guia</Link></Button>
+                  )}
+                  <Button size="sm" onClick={() => resolveException(entry.id)}>Resolver</Button>
+                </div>
+              </div>
+            </GlassCard>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

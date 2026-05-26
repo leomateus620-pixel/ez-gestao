@@ -956,8 +956,11 @@ export type Database = {
       }
       empresas: {
         Row: {
+          canal_preferido: Database["public"]["Enums"]["canal_envio"] | null
           cnpj: string
+          comunicacao_ativa: boolean
           created_at: string
+          email_validado: boolean
           email_principal: string
           estado: string
           id: string
@@ -969,12 +972,17 @@ export type Database = {
           responsavel_cliente: string
           responsavel_interno: string
           status: Database["public"]["Enums"]["empresa_status"]
+          saudacao_guia: string
           updated_at: string
+          whatsapp_opt_in_at: string | null
           whatsapp_principal: string
         }
         Insert: {
+          canal_preferido?: Database["public"]["Enums"]["canal_envio"] | null
           cnpj: string
+          comunicacao_ativa?: boolean
           created_at?: string
+          email_validado?: boolean
           email_principal?: string
           estado?: string
           id?: string
@@ -986,12 +994,17 @@ export type Database = {
           responsavel_cliente?: string
           responsavel_interno?: string
           status?: Database["public"]["Enums"]["empresa_status"]
+          saudacao_guia?: string
           updated_at?: string
+          whatsapp_opt_in_at?: string | null
           whatsapp_principal?: string
         }
         Update: {
+          canal_preferido?: Database["public"]["Enums"]["canal_envio"] | null
           cnpj?: string
+          comunicacao_ativa?: boolean
           created_at?: string
+          email_validado?: boolean
           email_principal?: string
           estado?: string
           id?: string
@@ -1003,7 +1016,9 @@ export type Database = {
           responsavel_cliente?: string
           responsavel_interno?: string
           status?: Database["public"]["Enums"]["empresa_status"]
+          saudacao_guia?: string
           updated_at?: string
+          whatsapp_opt_in_at?: string | null
           whatsapp_principal?: string
         }
         Relationships: []
