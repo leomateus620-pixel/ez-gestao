@@ -1182,6 +1182,255 @@ export type Database = {
         }
         Relationships: []
       }
+      guia_envios: {
+        Row: {
+          assunto: string | null
+          canal: Database["public"]["Enums"]["guia_canal"]
+          created_at: string
+          delivered_at: string | null
+          destinatario: string
+          empresa_id: string | null
+          failed_at: string | null
+          guia_id: string
+          id: string
+          idempotency_key: string
+          mensagem_preview: string | null
+          provider_message_id: string | null
+          sanitized_payload: Json
+          status: Database["public"]["Enums"]["guia_envio_status"]
+          submitted_at: string
+          template_sid: string | null
+        }
+        Insert: {
+          assunto?: string | null
+          canal: Database["public"]["Enums"]["guia_canal"]
+          created_at?: string
+          delivered_at?: string | null
+          destinatario: string
+          empresa_id?: string | null
+          failed_at?: string | null
+          guia_id: string
+          id?: string
+          idempotency_key: string
+          mensagem_preview?: string | null
+          provider_message_id?: string | null
+          sanitized_payload?: Json
+          status?: Database["public"]["Enums"]["guia_envio_status"]
+          submitted_at?: string
+          template_sid?: string | null
+        }
+        Update: {
+          assunto?: string | null
+          canal?: Database["public"]["Enums"]["guia_canal"]
+          created_at?: string
+          delivered_at?: string | null
+          destinatario?: string
+          empresa_id?: string | null
+          failed_at?: string | null
+          guia_id?: string
+          id?: string
+          idempotency_key?: string
+          mensagem_preview?: string | null
+          provider_message_id?: string | null
+          sanitized_payload?: Json
+          status?: Database["public"]["Enums"]["guia_envio_status"]
+          submitted_at?: string
+          template_sid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guia_envios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guia_envios_guia_id_fkey"
+            columns: ["guia_id"]
+            isOneToOne: false
+            referencedRelation: "guias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guia_eventos: {
+        Row: {
+          created_at: string
+          event_type: string
+          guia_id: string | null
+          id: string
+          level: string
+          message: string
+          metadata_json: Json
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          guia_id?: string | null
+          id?: string
+          level?: string
+          message?: string
+          metadata_json?: Json
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          guia_id?: string | null
+          id?: string
+          level?: string
+          message?: string
+          metadata_json?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guia_eventos_guia_id_fkey"
+            columns: ["guia_id"]
+            isOneToOne: false
+            referencedRelation: "guias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guia_excecoes: {
+        Row: {
+          action_recommended: string | null
+          created_at: string
+          exception_type: string
+          guia_id: string | null
+          id: string
+          reason: string
+          resolved_at: string | null
+          severity: string
+          status: Database["public"]["Enums"]["guia_excecao_status"]
+        }
+        Insert: {
+          action_recommended?: string | null
+          created_at?: string
+          exception_type: string
+          guia_id?: string | null
+          id?: string
+          reason: string
+          resolved_at?: string | null
+          severity?: string
+          status?: Database["public"]["Enums"]["guia_excecao_status"]
+        }
+        Update: {
+          action_recommended?: string | null
+          created_at?: string
+          exception_type?: string
+          guia_id?: string | null
+          id?: string
+          reason?: string
+          resolved_at?: string | null
+          severity?: string
+          status?: Database["public"]["Enums"]["guia_excecao_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guia_excecoes_guia_id_fkey"
+            columns: ["guia_id"]
+            isOneToOne: false
+            referencedRelation: "guias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guias: {
+        Row: {
+          cnpj_detectado: string | null
+          competencia: string | null
+          created_at: string
+          drive_file_id: string
+          empresa_id: string | null
+          extraction_method: string | null
+          file_name: string
+          has_text_layer: boolean | null
+          id: string
+          match_source: Database["public"]["Enums"]["guia_match_source"] | null
+          mime_type: string
+          pagina_count: number | null
+          pasta_atual: string
+          processed_at: string | null
+          provider_error: string | null
+          received_at: string
+          sent_at: string | null
+          sent_folder_id: string | null
+          sha256: string | null
+          source_folder_id: string | null
+          status: Database["public"]["Enums"]["guia_status"]
+          texto_extraido_preview: string | null
+          tipo_guia: string | null
+          updated_at: string
+          valor: number | null
+          vencimento: string | null
+        }
+        Insert: {
+          cnpj_detectado?: string | null
+          competencia?: string | null
+          created_at?: string
+          drive_file_id: string
+          empresa_id?: string | null
+          extraction_method?: string | null
+          file_name: string
+          has_text_layer?: boolean | null
+          id?: string
+          match_source?: Database["public"]["Enums"]["guia_match_source"] | null
+          mime_type?: string
+          pagina_count?: number | null
+          pasta_atual?: string
+          processed_at?: string | null
+          provider_error?: string | null
+          received_at?: string
+          sent_at?: string | null
+          sent_folder_id?: string | null
+          sha256?: string | null
+          source_folder_id?: string | null
+          status?: Database["public"]["Enums"]["guia_status"]
+          texto_extraido_preview?: string | null
+          tipo_guia?: string | null
+          updated_at?: string
+          valor?: number | null
+          vencimento?: string | null
+        }
+        Update: {
+          cnpj_detectado?: string | null
+          competencia?: string | null
+          created_at?: string
+          drive_file_id?: string
+          empresa_id?: string | null
+          extraction_method?: string | null
+          file_name?: string
+          has_text_layer?: boolean | null
+          id?: string
+          match_source?: Database["public"]["Enums"]["guia_match_source"] | null
+          mime_type?: string
+          pagina_count?: number | null
+          pasta_atual?: string
+          processed_at?: string | null
+          provider_error?: string | null
+          received_at?: string
+          sent_at?: string | null
+          sent_folder_id?: string | null
+          sha256?: string | null
+          source_folder_id?: string | null
+          status?: Database["public"]["Enums"]["guia_status"]
+          texto_extraido_preview?: string | null
+          tipo_guia?: string | null
+          updated_at?: string
+          valor?: number | null
+          vencimento?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       health_logs: {
         Row: {
           connector_id: string
@@ -1232,6 +1481,48 @@ export type Database = {
           direction?: string
           expires_at?: string
           nonce?: string
+        }
+        Relationships: []
+      }
+      integracoes_guias: {
+        Row: {
+          created_at: string
+          display_name: string
+          last_check_at: string | null
+          last_error: string | null
+          provider: string
+          schedule_minutes: number
+          sender_identity: string | null
+          sent_folder_id: string | null
+          source_folder_id: string | null
+          status: Database["public"]["Enums"]["guia_integracao_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          last_check_at?: string | null
+          last_error?: string | null
+          provider: string
+          schedule_minutes?: number
+          sender_identity?: string | null
+          sent_folder_id?: string | null
+          source_folder_id?: string | null
+          status?: Database["public"]["Enums"]["guia_integracao_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          last_check_at?: string | null
+          last_error?: string | null
+          provider?: string
+          schedule_minutes?: number
+          sender_identity?: string | null
+          sent_folder_id?: string | null
+          source_folder_id?: string | null
+          status?: Database["public"]["Enums"]["guia_integracao_status"]
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1489,6 +1780,20 @@ export type Database = {
         | "dado_cadastral_insuficiente"
         | "certidao_positiva"
         | "retorno_inesperado"
+      guia_canal: "email" | "whatsapp"
+      guia_envio_status: "aceito" | "simulado" | "entregue" | "falhou"
+      guia_excecao_status: "open" | "investigating" | "resolved"
+      guia_integracao_status: "inativo" | "ativo" | "erro"
+      guia_match_source: "cnpj_pdf" | "filename" | "manual"
+      guia_status:
+        | "aguardando"
+        | "lendo"
+        | "ocr"
+        | "identificada"
+        | "enviando"
+        | "enviada"
+        | "revisao"
+        | "erro"
       health_status: "ok" | "degradado" | "indisponivel"
       job_status:
         | "queued"
@@ -1729,6 +2034,21 @@ export const Constants = {
         "dado_cadastral_insuficiente",
         "certidao_positiva",
         "retorno_inesperado",
+      ],
+      guia_canal: ["email", "whatsapp"],
+      guia_envio_status: ["aceito", "simulado", "entregue", "falhou"],
+      guia_excecao_status: ["open", "investigating", "resolved"],
+      guia_integracao_status: ["inativo", "ativo", "erro"],
+      guia_match_source: ["cnpj_pdf", "filename", "manual"],
+      guia_status: [
+        "aguardando",
+        "lendo",
+        "ocr",
+        "identificada",
+        "enviando",
+        "enviada",
+        "revisao",
+        "erro",
       ],
       health_status: ["ok", "degradado", "indisponivel"],
       job_status: [
