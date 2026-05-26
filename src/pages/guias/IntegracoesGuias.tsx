@@ -37,7 +37,7 @@ const providerLabels: Record<IntegrationProvider, string> = {
 function ConnectorCard({ integration }: { integration: IntegracaoGuia }) {
   const Icon = icons[integration.provider];
   const logo = logos[integration.provider];
-  const isConnected = integration.status === 'conectado' || integration.status === 'configurado';
+  const isConnected = integration.status === 'ativo' || integration.status === 'configurado';
   return (
     <GlassCard variant="elevated" className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
@@ -90,7 +90,7 @@ export default function IntegracoesGuias() {
     return {
       provider,
       displayName: providerLabels[provider],
-      status: connected ? 'conectado' : existing?.status ?? 'desconectado',
+      status: connected ? 'ativo' : existing?.status ?? 'desconectado',
       sourceFolderId: existing?.sourceFolderId ?? null,
       sentFolderId: existing?.sentFolderId ?? null,
       senderIdentity: existing?.senderIdentity ?? null,
