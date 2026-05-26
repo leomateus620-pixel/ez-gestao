@@ -12,12 +12,12 @@ const controls = [
   {
     icon: KeyRound,
     title: 'Segredos e OAuth',
-    description: 'Tokens Google criptografados, chaves Twilio e Vision apenas em secrets ou Vault server-side.',
+    description: 'Tokens Google criptografados e chaves Twilio mantidos apenas em secrets ou Vault server-side.',
   },
   {
     icon: Database,
     title: 'Retencao LGPD',
-    description: 'Bucket privado para entrega e OCR temporario com expiracao configurada no Google Cloud Storage.',
+    description: 'Bucket privado para entrega temporaria de anexos, com expiracao curta e logs de auditoria.',
   },
   {
     icon: Palette,

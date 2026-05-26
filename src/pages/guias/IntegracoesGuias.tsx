@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Cloud, Database, FolderInput, Mail, MessageCircle, ShieldCheck } from 'lucide-react';
+import { Database, FileText, FolderInput, Mail, MessageCircle, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { GlassCard } from '@/components/GlassCard';
 import { Badge } from '@/components/ui/badge';
@@ -11,27 +11,31 @@ import { supabase } from '@/integrations/supabase/client';
 import googleDriveLogo from '@/assets/connectors/google-drive.svg';
 import gmailLogo from '@/assets/connectors/gmail.svg';
 import twilioLogo from '@/assets/connectors/twilio.svg';
-import googleVisionLogo from '@/assets/connectors/google-vision.svg';
 
-const icons: Record<IntegrationProvider, typeof Cloud> = {
+const icons: Record<IntegrationProvider, typeof FileText> = {
   google_drive: FolderInput,
   gmail: Mail,
   twilio_whatsapp: MessageCircle,
-  google_vision: Cloud,
+  pdf_native_reader: FileText,
 };
 
-const logos: Record<IntegrationProvider, string> = {
+const logos: Record<IntegrationProvider, string | null> = {
   google_drive: googleDriveLogo,
   gmail: gmailLogo,
   twilio_whatsapp: twilioLogo,
-  google_vision: googleVisionLogo,
+  pdf_native_reader: null,
 };
 
 const providerLabels: Record<IntegrationProvider, string> = {
   google_drive: 'Google Drive',
   gmail: 'Gmail',
   twilio_whatsapp: 'Twilio WhatsApp',
-  google_vision: 'Google Vision',
+  pdf_native_reader: 'Leitura PDF nativa',
+};
+
+const providerDescriptions: Partial<Record<IntegrationProvider, string>> = {
+  pdf_native_reader:
+    'Extração direta de texto em PDFs digitais, sem OCR externo. PDFs escaneados são enviados para Exceções.',
 };
 
 function ConnectorCard({ integration }: { integration: IntegracaoGuia }) {
@@ -44,15 +48,19 @@ function ConnectorCard({ integration }: { integration: IntegracaoGuia }) {
         <div className="flex items-center gap-3">
           <div className="relative rounded-xl bg-primary/10 p-3 text-primary">
             <Icon className="h-5 w-5" />
-            <img
-              src={logo}
-              alt={`${providerLabels[integration.provider]} logo`}
-              className="absolute -bottom-1.5 -right-1.5 h-5 w-5 rounded-full bg-background p-0.5 shadow-md ring-1 ring-border"
-            />
+            {logo && (
+              <img
+                src={logo}
+                alt={`${providerLabels[integration.provider]} logo`}
+                className="absolute -bottom-1.5 -right-1.5 h-5 w-5 rounded-full bg-background p-0.5 shadow-md ring-1 ring-border"
+              />
+            )}
           </div>
           <div>
             <p className="text-sm font-semibold">{providerLabels[integration.provider]}</p>
-            <p className="text-xs text-foreground/50">{integration.provider.replace(/_/g, ' ')}</p>
+            <p className="text-xs text-foreground/50">
+              {providerDescriptions[integration.provider] ?? integration.provider.replace(/_/g, ' ')}
+            </p>
           </div>
         </div>
         <Badge variant={isConnected ? 'default' : 'outline'} className="capitalize">
@@ -85,8 +93,8 @@ export default function IntegracoesGuias() {
 
   const buildIntegration = (provider: IntegrationProvider): IntegracaoGuia => {
     const existing = integrations.find((i) => i.provider === provider);
-    const statusKey = provider === 'gmail' ? 'gmail' : provider;
-    const connected = liveStatus[statusKey];
+    // Native PDF reader is internal — always active and never depends on a secret.
+    const connected = provider === 'pdf_native_reader' ? true : liveStatus[provider];
     return {
       provider,
       displayName: providerLabels[provider],
@@ -100,7 +108,7 @@ export default function IntegracoesGuias() {
     };
   };
 
-  const providers: IntegrationProvider[] = ['google_drive', 'gmail', 'twilio_whatsapp', 'google_vision'];
+  const providers: IntegrationProvider[] = ['google_drive', 'gmail', 'twilio_whatsapp', 'pdf_native_reader'];
 
   return (
     <div className="space-y-6 animate-slide-in">
