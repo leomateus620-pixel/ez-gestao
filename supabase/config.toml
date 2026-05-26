@@ -47,3 +47,6 @@ verify_jwt = true
 
 [functions.run-guide-scan-now]
 verify_jwt = true
+
+[functions.integracoes-status]
+verify_jwt = false
