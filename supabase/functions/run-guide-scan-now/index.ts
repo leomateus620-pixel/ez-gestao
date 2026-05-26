@@ -36,9 +36,11 @@ function validCnpj(value: string) {
   const d2 = dig(c.slice(0, 12) + d1, [6,5,4,3,2,9,8,7,6,5,4,3,2]);
   return c.endsWith(`${d1}${d2}`);
 }
-function cnpjCandidates(text: string) {
+function cnpjCandidates(text: string, relax = false) {
   const m = text.match(/\d{2}[.\s-]?\d{3}[.\s-]?\d{3}[\/\s-]?\d{4}[-\s]?\d{2}/g) || [];
-  return [...new Set(m.map(normalizeCnpj).filter(validCnpj))];
+  const all = [...new Set(m.map(normalizeCnpj))]
+    .filter((c) => c.length === 14 && !/^(\d)\1+$/.test(c));
+  return relax ? all : all.filter(validCnpj);
 }
 function fiscalSignals(text: string) {
   const due = /(?:vencimento|venc\.)\s*[:\-]?\s*\d{2}\/\d{2}\/\d{4}/i.test(text);
@@ -101,7 +103,7 @@ async function logEvent(db: any, guideId: string, eventType: string, message: st
   });
 }
 
-async function processOneGuide(db: any, guide: any, driveKey: string, gmailKey: string, mode: "simulate" | "live") {
+async function processOneGuide(db: any, guide: any, driveKey: string, gmailKey: string, mode: "simulate" | "live", relaxCnpj = false) {
   // 1. Download
   await db.from("guias").update({ status: "lendo" }).eq("id", guide.id);
   const dl = await fetch(`${DRIVE_GW}/files/${guide.drive_file_id}?alt=media`, {
@@ -132,8 +134,8 @@ async function processOneGuide(db: any, guide: any, driveKey: string, gmailKey: 
   });
 
   // 3. CNPJ identification
-  const filenameCands = cnpjCandidates(guide.file_name);
-  const contentCands = cnpjCandidates(extraction.text);
+  const filenameCands = cnpjCandidates(guide.file_name, relaxCnpj);
+  const contentCands = cnpjCandidates(extraction.text, relaxCnpj);
   if (!extraction.hasTextLayer && filenameCands.length === 0) {
     await logException(db, guide.id, "pdf_without_text_layer",
       "O PDF parece ser escaneado ou imagem (sem camada de texto).",
@@ -148,7 +150,8 @@ async function processOneGuide(db: any, guide: any, driveKey: string, gmailKey: 
       "Vincule a empresa manualmente.", { candidates });
     return { status: "revisao", reason: "cnpj_ambiguous" };
   }
-  if (contentCands.length === 0 && fiscalSignals(extraction.text) < 1) {
+  const minSignals = relaxCnpj ? 0 : 1;
+  if (contentCands.length === 0 && fiscalSignals(extraction.text) < minSignals) {
     await logException(db, guide.id, "insufficient_pdf_signals",
       "O PDF nao tem indicios fiscais suficientes para envio automatico.",
       "Revise manualmente antes de enviar.", { text_length: extraction.text.length });
@@ -336,6 +339,7 @@ serve(async (req) => {
 
   const body = await req.json().catch(() => ({}));
   const mode: "simulate" | "live" = body?.mode === "live" ? "live" : "simulate";
+  const relaxCnpj = body?.relax_cnpj === true;
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
   const { data: drive } = await db.from("integracoes_guias").select("*")
@@ -393,7 +397,7 @@ serve(async (req) => {
       continue;
     }
     try {
-      const r = await processOneGuide(db, guide, driveKey, gmailKey, mode);
+      const r = await processOneGuide(db, guide, driveKey, gmailKey, mode, relaxCnpj);
       results.push({ file: file.name, guia_id: guide.id, ...r });
     } catch (err) {
       results.push({ file: file.name, error: String(err).slice(0, 500) });
