@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Cloud, Database, FolderInput, Mail, MessageCircle, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { GlassCard } from '@/components/GlassCard';
@@ -6,6 +7,11 @@ import { Button } from '@/components/ui/button';
 import { useGuides } from '@/features/guias/GuideProvider';
 import type { IntegracaoGuia, IntegrationProvider } from '@/data/types';
 import { formatDateTime } from '@/lib/formatters';
+import { supabase } from '@/integrations/supabase/client';
+import googleDriveLogo from '@/assets/connectors/google-drive.svg';
+import gmailLogo from '@/assets/connectors/gmail.svg';
+import twilioLogo from '@/assets/connectors/twilio.svg';
+import googleVisionLogo from '@/assets/connectors/google-vision.svg';
 
 const icons: Record<IntegrationProvider, typeof Cloud> = {
   google_drive: FolderInput,
@@ -14,19 +20,44 @@ const icons: Record<IntegrationProvider, typeof Cloud> = {
   google_vision: Cloud,
 };
 
+const logos: Record<IntegrationProvider, string> = {
+  google_drive: googleDriveLogo,
+  gmail: gmailLogo,
+  twilio_whatsapp: twilioLogo,
+  google_vision: googleVisionLogo,
+};
+
+const providerLabels: Record<IntegrationProvider, string> = {
+  google_drive: 'Google Drive',
+  gmail: 'Gmail',
+  twilio_whatsapp: 'Twilio WhatsApp',
+  google_vision: 'Google Vision',
+};
+
 function ConnectorCard({ integration }: { integration: IntegracaoGuia }) {
   const Icon = icons[integration.provider];
+  const logo = logos[integration.provider];
+  const isConnected = integration.status === 'conectado' || integration.status === 'configurado';
   return (
     <GlassCard variant="elevated" className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="rounded-xl bg-primary/10 p-3 text-primary"><Icon className="h-5 w-5" /></div>
+          <div className="relative rounded-xl bg-primary/10 p-3 text-primary">
+            <Icon className="h-5 w-5" />
+            <img
+              src={logo}
+              alt={`${providerLabels[integration.provider]} logo`}
+              className="absolute -bottom-1.5 -right-1.5 h-5 w-5 rounded-full bg-background p-0.5 shadow-md ring-1 ring-border"
+            />
+          </div>
           <div>
-            <p className="text-sm font-semibold">{integration.displayName}</p>
+            <p className="text-sm font-semibold">{providerLabels[integration.provider]}</p>
             <p className="text-xs text-foreground/50">{integration.provider.replace(/_/g, ' ')}</p>
           </div>
         </div>
-        <Badge variant="outline" className="capitalize">{integration.status}</Badge>
+        <Badge variant={isConnected ? 'default' : 'outline'} className="capitalize">
+          {isConnected ? 'Conectado' : integration.status}
+        </Badge>
       </div>
       {integration.provider === 'google_drive' && (
         <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-xs text-foreground/65">
@@ -44,10 +75,37 @@ function ConnectorCard({ integration }: { integration: IntegracaoGuia }) {
 
 export default function IntegracoesGuias() {
   const { integrations } = useGuides();
+  const [liveStatus, setLiveStatus] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    supabase.functions.invoke('integracoes-status').then(({ data }) => {
+      if (data) setLiveStatus(data as Record<string, boolean>);
+    }).catch(() => {});
+  }, []);
+
+  const buildIntegration = (provider: IntegrationProvider): IntegracaoGuia => {
+    const existing = integrations.find((i) => i.provider === provider);
+    const statusKey = provider === 'gmail' ? 'gmail' : provider;
+    const connected = liveStatus[statusKey];
+    return {
+      provider,
+      displayName: providerLabels[provider],
+      status: connected ? 'conectado' : existing?.status ?? 'desconectado',
+      sourceFolderId: existing?.sourceFolderId ?? null,
+      sentFolderId: existing?.sentFolderId ?? null,
+      senderIdentity: existing?.senderIdentity ?? null,
+      scheduleMinutes: existing?.scheduleMinutes ?? 5,
+      lastCheckAt: existing?.lastCheckAt ?? null,
+      lastError: existing?.lastError ?? null,
+    };
+  };
+
+  const providers: IntegrationProvider[] = ['google_drive', 'gmail', 'twilio_whatsapp', 'google_vision'];
+
   return (
     <div className="space-y-6 animate-slide-in">
       <PageHeader title="Integracoes" subtitle="Conectores e seguranca do envio automatico de guias.">
-        <Button disabled variant="outline">Conectar Google OAuth</Button>
+        <Button disabled variant="outline">Gerenciar conexões</Button>
       </PageHeader>
 
       <GlassCard variant="elevated" className="overflow-hidden">
@@ -70,21 +128,9 @@ export default function IntegracoesGuias() {
       </GlassCard>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {integrations.length === 0
-          ? (['google_drive', 'gmail', 'twilio_whatsapp', 'google_vision'] as IntegrationProvider[]).map((provider) => (
-              <ConnectorCard key={provider} integration={{
-                provider,
-                displayName: provider.replace(/_/g, ' '),
-                status: 'desconectado',
-                sourceFolderId: null,
-                sentFolderId: null,
-                senderIdentity: null,
-                scheduleMinutes: 5,
-                lastCheckAt: null,
-                lastError: null,
-              }} />
-            ))
-          : integrations.map((integration) => <ConnectorCard key={integration.provider} integration={integration} />)}
+        {providers.map((provider) => (
+          <ConnectorCard key={provider} integration={buildIntegration(provider)} />
+        ))}
       </div>
     </div>
   );
