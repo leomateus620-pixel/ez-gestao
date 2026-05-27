@@ -146,7 +146,7 @@ export interface EmpresaResumo {
 export type GuiaStatus = 'aguardando' | 'lendo' | 'identificada' | 'enviando' | 'enviada' | 'erro' | 'revisao';
 export type MatchSource = 'filename' | 'pdf_text' | 'pdf_native' | 'multiple' | 'none';
 export type DispatchStatus = 'pendente' | 'aceito' | 'entregue' | 'falhou';
-export type IntegrationProvider = 'google_drive' | 'gmail' | 'twilio_whatsapp' | 'pdf_native_reader';
+export type IntegrationProvider = 'google_drive' | 'gmail' | 'whatsapp_webjs' | 'pdf_native_reader';
 export type IntegrationHealth = 'desconectado' | 'configurado' | 'ativo' | 'erro';
 export type GuideExceptionType =
   | 'unsupported_file'

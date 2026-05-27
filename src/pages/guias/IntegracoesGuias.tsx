@@ -10,26 +10,25 @@ import { formatDateTime } from '@/lib/formatters';
 import { supabase } from '@/integrations/supabase/client';
 import googleDriveLogo from '@/assets/connectors/google-drive.svg';
 import gmailLogo from '@/assets/connectors/gmail.svg';
-import twilioLogo from '@/assets/connectors/twilio.svg';
 
 const icons: Record<IntegrationProvider, typeof FileText> = {
   google_drive: FolderInput,
   gmail: Mail,
-  twilio_whatsapp: MessageCircle,
+  whatsapp_webjs: MessageCircle,
   pdf_native_reader: FileText,
 };
 
 const logos: Record<IntegrationProvider, string | null> = {
   google_drive: googleDriveLogo,
   gmail: gmailLogo,
-  twilio_whatsapp: twilioLogo,
+  whatsapp_webjs: null,
   pdf_native_reader: null,
 };
 
 const providerLabels: Record<IntegrationProvider, string> = {
   google_drive: 'Google Drive',
   gmail: 'Gmail',
-  twilio_whatsapp: 'Twilio WhatsApp',
+  whatsapp_webjs: 'WhatsApp WebJS',
   pdf_native_reader: 'Leitura PDF nativa',
 };
 
@@ -108,7 +107,7 @@ export default function IntegracoesGuias() {
     };
   };
 
-  const providers: IntegrationProvider[] = ['google_drive', 'gmail', 'twilio_whatsapp', 'pdf_native_reader'];
+  const providers: IntegrationProvider[] = ['google_drive', 'gmail', 'whatsapp_webjs', 'pdf_native_reader'];
 
   return (
     <div className="space-y-6 animate-slide-in">
@@ -123,7 +122,7 @@ export default function IntegracoesGuias() {
             <div>
               <p className="text-sm font-semibold">Segredos protegidos no servidor</p>
               <p className="mt-1 max-w-2xl text-xs leading-relaxed text-foreground/60">
-                OAuth refresh token, credenciais Vision e token Twilio nunca sao enviados ao frontend.
+                OAuth refresh token, credenciais Vision e credencial WhatsApp serviço externo nunca sao enviados ao frontend.
                 URLs de documento para WhatsApp expiram e o webhook exige assinatura Twilio valida.
               </p>
             </div>

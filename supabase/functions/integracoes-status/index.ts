@@ -13,7 +13,7 @@ serve((req) => {
   const status = {
     google_drive: Boolean(Deno.env.get("GOOGLE_DRIVE_API_KEY")),
     gmail: Boolean(Deno.env.get("GOOGLE_MAIL_API_KEY")),
-    twilio_whatsapp: Boolean(Deno.env.get("TWILIO_API_KEY")),
+    whatsapp_webjs: Boolean(Deno.env.get("WHATSAPP_SERVICE_URL")) && Boolean(Deno.env.get("WHATSAPP_SERVICE_SECRET")),
     // Leitura nativa de PDF: módulo interno, sempre disponível.
     pdf_native_reader: true,
   };
