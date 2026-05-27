@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Suspense, useEffect, useState } from 'react';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Toaster as Sonner } from '@/components/ui/sonner';
 import { Toaster } from '@/components/ui/toaster';
@@ -10,51 +10,85 @@ import { AutomationProvider } from '@/data/AutomationProvider';
 import { GuideProvider } from '@/features/guias/GuideProvider';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { lazyRetry } from '@/lib/lazy-retry';
+import { Button } from '@/components/ui/button';
+import { RefreshCw } from 'lucide-react';
 import Login from './pages/Login';
 
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Empresas = lazy(() => import('./pages/Empresas'));
-const EmpresaDetalhe = lazy(() => import('./pages/EmpresaDetalhe'));
-const Agenda = lazy(() => import('./pages/Agenda'));
-const Certidoes = lazy(() => import('./pages/Certidoes'));
-const Documentos = lazy(() => import('./pages/Documentos'));
-const Envios = lazy(() => import('./pages/Envios'));
-const Alertas = lazy(() => import('./pages/Alertas'));
-const Logs = lazy(() => import('./pages/Logs'));
-const Configuracoes = lazy(() => import('./pages/Configuracoes'));
-const Automacao = lazy(() => import('./pages/Automacao'));
-const Execucoes = lazy(() => import('./pages/Execucoes'));
-const ExecucaoDetalhe = lazy(() => import('./pages/ExecucaoDetalhe'));
-const Integracoes = lazy(() => import('./pages/Integracoes'));
-const Excecoes = lazy(() => import('./pages/Excecoes'));
-const Guias = lazy(() => import('./pages/guias/Guias'));
-const GuiaDetalhe = lazy(() => import('./pages/guias/GuiaDetalhe'));
-const IntegracoesGuias = lazy(() => import('./pages/guias/IntegracoesGuias'));
-const ConsultaIndex = lazy(() => import('./pages/consulta/ConsultaIndex'));
-const ConsultaHistorico = lazy(() => import('./pages/consulta/ConsultaHistorico'));
-const ConsultaExcecoes = lazy(() => import('./pages/consulta/ConsultaExcecoes'));
-const ConsultaSaude = lazy(() => import('./pages/consulta/ConsultaSaude'));
-const ConsultaRelatorio = lazy(() => import('./pages/consulta/ConsultaRelatorio'));
-const NotFound = lazy(() => import('./pages/NotFound'));
+const Dashboard = lazyRetry(() => import('./pages/Dashboard'));
+const Empresas = lazyRetry(() => import('./pages/Empresas'));
+const EmpresaDetalhe = lazyRetry(() => import('./pages/EmpresaDetalhe'));
+const Agenda = lazyRetry(() => import('./pages/Agenda'));
+const Certidoes = lazyRetry(() => import('./pages/Certidoes'));
+const Documentos = lazyRetry(() => import('./pages/Documentos'));
+const Envios = lazyRetry(() => import('./pages/Envios'));
+const Alertas = lazyRetry(() => import('./pages/Alertas'));
+const Logs = lazyRetry(() => import('./pages/Logs'));
+const Configuracoes = lazyRetry(() => import('./pages/Configuracoes'));
+const Automacao = lazyRetry(() => import('./pages/Automacao'));
+const Execucoes = lazyRetry(() => import('./pages/Execucoes'));
+const ExecucaoDetalhe = lazyRetry(() => import('./pages/ExecucaoDetalhe'));
+const Integracoes = lazyRetry(() => import('./pages/Integracoes'));
+const Excecoes = lazyRetry(() => import('./pages/Excecoes'));
+const Guias = lazyRetry(() => import('./pages/guias/Guias'));
+const GuiaDetalhe = lazyRetry(() => import('./pages/guias/GuiaDetalhe'));
+const IntegracoesGuias = lazyRetry(() => import('./pages/guias/IntegracoesGuias'));
+const ConsultaIndex = lazyRetry(() => import('./pages/consulta/ConsultaIndex'));
+const ConsultaHistorico = lazyRetry(() => import('./pages/consulta/ConsultaHistorico'));
+const ConsultaExcecoes = lazyRetry(() => import('./pages/consulta/ConsultaExcecoes'));
+const ConsultaSaude = lazyRetry(() => import('./pages/consulta/ConsultaSaude'));
+const ConsultaRelatorio = lazyRetry(() => import('./pages/consulta/ConsultaRelatorio'));
+const NotFound = lazyRetry(() => import('./pages/NotFound'));
 
 const queryClient = new QueryClient();
+
+function LoadingFallback({ message = 'Carregando modulo...' }: { message?: string }) {
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => setStuck(true), 8000);
+    return () => window.clearTimeout(t);
+  }, []);
+  return (
+    <div className="liquid-stage flex min-h-[60vh] flex-col items-center justify-center gap-3 p-6 text-center">
+      <p className="text-sm text-foreground/60">{message}</p>
+      {stuck && (
+        <Button variant="outline" size="sm" className="gap-2" onClick={() => window.location.reload()}>
+          <RefreshCw className="h-3.5 w-3.5" /> Recarregar
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function ProvidersBoundary({ children }: { children: React.ReactNode }) {
+  const client = useQueryClient();
+  return (
+    <ErrorBoundary
+      label="providers"
+      onReset={() => client.resetQueries()}
+    >
+      {children}
+    </ErrorBoundary>
+  );
+}
 
 function AuthenticatedApp() {
   const { session, isLoading } = useAuth();
   if (isLoading) {
-    return <div className="liquid-stage flex min-h-screen items-center justify-center text-sm text-foreground/60">Verificando sessao...</div>;
+    return <LoadingFallback message="Verificando sessao..." />;
   }
   if (!session) {
     return <Routes><Route path="*" element={<Login />} /></Routes>;
   }
 
   return (
-    <DataProvider>
-      <AutomationProvider>
-        <GuideProvider>
-          <AppLayout>
-            <ErrorBoundary>
-              <Suspense fallback={<div className="py-20 text-center text-sm text-foreground/55">Carregando modulo...</div>}>
+    <ProvidersBoundary>
+      <DataProvider>
+        <AutomationProvider>
+          <GuideProvider>
+            <AppLayout>
+              <ErrorBoundary label="route">
+                <Suspense fallback={<LoadingFallback />}>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/guias" element={<Guias view="fila" />} />
@@ -84,12 +118,13 @@ function AuthenticatedApp() {
                   <Route path="/consulta/relatorios/:id" element={<ConsultaRelatorio />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
-              </Suspense>
-            </ErrorBoundary>
-          </AppLayout>
-        </GuideProvider>
-      </AutomationProvider>
-    </DataProvider>
+                </Suspense>
+              </ErrorBoundary>
+            </AppLayout>
+          </GuideProvider>
+        </AutomationProvider>
+      </DataProvider>
+    </ProvidersBoundary>
   );
 }
 
@@ -99,9 +134,11 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AuthProvider>
-          <AuthenticatedApp />
-        </AuthProvider>
+        <ErrorBoundary label="root" fullScreen>
+          <AuthProvider>
+            <AuthenticatedApp />
+          </AuthProvider>
+        </ErrorBoundary>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
