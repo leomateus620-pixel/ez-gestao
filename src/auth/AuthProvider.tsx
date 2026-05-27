@@ -5,6 +5,8 @@ import { supabase } from '@/integrations/supabase/client';
 interface AuthContextValue {
   session: Session | null;
   isLoading: boolean;
+  error: string | null;
+  retry: () => void;
   signIn: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
 }
@@ -14,54 +16,65 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [bootAttempt, setBootAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setIsLoading(true);
+    setError(null);
 
-    // Safety timeout: if getSession() never settles (network stalled, Cloud
-    // still booting), release the loading state so the user lands on Login
-    // instead of staring at a blank screen.
-    const timeout = window.setTimeout(() => {
-      if (cancelled) return;
-      console.error('[auth] getSession timed out, falling back to logged-out state');
-      setSession(null);
-      setIsLoading(false);
-    }, 6000);
+    const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
+      window.setTimeout(() => resolve({ timedOut: true }), 6000);
+    });
 
-    supabase.auth
-      .getSession()
-      .then(({ data, error }) => {
+    Promise.race([
+      supabase.auth.getSession().then((res) => ({ timedOut: false as const, res })),
+      timeoutPromise,
+    ])
+      .then((outcome) => {
         if (cancelled) return;
-        if (error) console.error('[auth] getSession error', error);
-        setSession(data?.session ?? null);
+        if ('timedOut' in outcome && outcome.timedOut === true && !('res' in outcome)) {
+          console.error('[auth] getSession timed out');
+          setError('Tempo esgotado ao verificar a sessao. Verifique sua conexao.');
+          setSession(null);
+          setIsLoading(false);
+          return;
+        }
+        const { res } = outcome as { res: Awaited<ReturnType<typeof supabase.auth.getSession>> };
+        if (res.error) {
+          console.error('[auth] getSession error', res.error);
+          setError(res.error.message);
+        }
+        setSession(res.data?.session ?? null);
         setIsLoading(false);
-        window.clearTimeout(timeout);
       })
-      .catch((error) => {
+      .catch((err) => {
         if (cancelled) return;
-        console.error('[auth] getSession threw', error);
+        console.error('[auth] getSession threw', err);
+        setError(err?.message ?? 'Falha ao inicializar autenticacao');
         setSession(null);
         setIsLoading(false);
-        window.clearTimeout(timeout);
       });
 
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (cancelled) return;
       setSession(nextSession);
       setIsLoading(false);
-      window.clearTimeout(timeout);
+      setError(null);
     });
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timeout);
       data.subscription.unsubscribe();
     };
-  }, []);
+  }, [bootAttempt]);
 
   const value = useMemo<AuthContextValue>(() => ({
     session,
     isLoading,
+    error,
+    retry: () => setBootAttempt((n) => n + 1),
     signIn: async (email: string, password: string) => {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       return error ? error.message : null;
@@ -69,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut: async () => {
       await supabase.auth.signOut();
     },
-  }), [session, isLoading]);
+  }), [session, isLoading, error]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
