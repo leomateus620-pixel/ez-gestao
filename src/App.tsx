@@ -39,6 +39,7 @@ const ConsultaExcecoes = lazyRetry(() => import('./pages/consulta/ConsultaExceco
 const ConsultaSaude = lazyRetry(() => import('./pages/consulta/ConsultaSaude'));
 const ConsultaRelatorio = lazyRetry(() => import('./pages/consulta/ConsultaRelatorio'));
 const NotFound = lazyRetry(() => import('./pages/NotFound'));
+const WhatsAppPage = lazyRetry(() => import('./pages/admin/WhatsApp'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
