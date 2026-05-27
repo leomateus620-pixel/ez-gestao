@@ -40,7 +40,17 @@ const ConsultaSaude = lazyRetry(() => import('./pages/consulta/ConsultaSaude'));
 const ConsultaRelatorio = lazyRetry(() => import('./pages/consulta/ConsultaRelatorio'));
 const NotFound = lazyRetry(() => import('./pages/NotFound'));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 2,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    },
+    mutations: { retry: 1 },
+  },
+});
 
 function LoadingFallback({ message = 'Carregando modulo...' }: { message?: string }) {
   const [stuck, setStuck] = useState(false);
@@ -50,11 +60,15 @@ function LoadingFallback({ message = 'Carregando modulo...' }: { message?: strin
   }, []);
   return (
     <div className="liquid-stage flex min-h-[60vh] flex-col items-center justify-center gap-3 p-6 text-center">
+      <div className="h-10 w-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
       <p className="text-sm text-foreground/60">{message}</p>
       {stuck && (
-        <Button variant="outline" size="sm" className="gap-2" onClick={() => window.location.reload()}>
-          <RefreshCw className="h-3.5 w-3.5" /> Recarregar
-        </Button>
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-xs text-foreground/50">Esta demorando mais que o normal.</p>
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => window.location.reload()}>
+            <RefreshCw className="h-3.5 w-3.5" /> Recarregar
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -73,9 +87,24 @@ function ProvidersBoundary({ children }: { children: React.ReactNode }) {
 }
 
 function AuthenticatedApp() {
-  const { session, isLoading } = useAuth();
+  const { session, isLoading, error, retry } = useAuth();
   if (isLoading) {
     return <LoadingFallback message="Verificando sessao..." />;
+  }
+  if (error && !session) {
+    return (
+      <div className="liquid-stage flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10">
+          <RefreshCw className="h-6 w-6 text-destructive" />
+        </div>
+        <h2 className="text-base font-semibold">Nao conseguimos iniciar o app</h2>
+        <p className="max-w-md text-sm text-foreground/60">{error}</p>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={retry}>Tentar novamente</Button>
+          <Button size="sm" onClick={() => window.location.reload()}>Recarregar</Button>
+        </div>
+      </div>
+    );
   }
   if (!session) {
     return <Routes><Route path="*" element={<Login />} /></Routes>;
