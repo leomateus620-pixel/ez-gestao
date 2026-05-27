@@ -16,15 +16,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+    let cancelled = false;
+
+    // Safety timeout: if getSession() never settles (network stalled, Cloud
+    // still booting), release the loading state so the user lands on Login
+    // instead of staring at a blank screen.
+    const timeout = window.setTimeout(() => {
+      if (cancelled) return;
+      console.error('[auth] getSession timed out, falling back to logged-out state');
+      setSession(null);
       setIsLoading(false);
-    });
+    }, 6000);
+
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) console.error('[auth] getSession error', error);
+        setSession(data?.session ?? null);
+        setIsLoading(false);
+        window.clearTimeout(timeout);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error('[auth] getSession threw', error);
+        setSession(null);
+        setIsLoading(false);
+        window.clearTimeout(timeout);
+      });
+
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (cancelled) return;
       setSession(nextSession);
       setIsLoading(false);
+      window.clearTimeout(timeout);
     });
-    return () => data.subscription.unsubscribe();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      data.subscription.unsubscribe();
+    };
   }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
