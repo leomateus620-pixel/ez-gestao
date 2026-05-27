@@ -1,63 +1,34 @@
 ## Diagnóstico
 
-A tela branca acontece quando o app monta, mas algo entre o `AuthProvider` e o conteúdo da página renderiza nada visível. Hoje a árvore é assim:
+No preview que consegui abrir agora, a aplicação não está totalmente branca: ela cai na tela de login. Porém, os sinais indicam um problema real de disponibilidade no fluxo de entrada: não há requisições `fetch/xhr` de autenticação visíveis e, se a sessão não for restaurada ou expirar, o app libera o usuário para o login em vez de manter/recuperar a sessão. Além disso, a proteção atual ainda pode ser fortalecida porque erros assíncronos de carregamento de dados não necessariamente acionam o `ErrorBoundary`.
 
-```text
-QueryClientProvider
-  TooltipProvider
-    BrowserRouter
-      AuthProvider        ← sem try/catch em getSession()
-        AuthenticatedApp  ← se session, monta:
-          DataProvider     ┐
-          AutomationProvider│  ← TODOS fora do ErrorBoundary
-          GuideProvider    ┘
-            AppLayout
-              ErrorBoundary   ← só protege as <Routes/>
-                Suspense (lazy pages)
-```
+## Plano de correção
 
-Três pontos podem deixar a tela em branco sem mostrar nada ao usuário:
+1. **Adicionar estado de bootstrap robusto de autenticação**
+   - Trocar o timeout simples por uma estratégia com `Promise.race`, estado explícito de erro/timeout e mensagem visual clara.
+   - Não deixar o sistema parecer “branco” quando a sessão estiver demorando: mostrar uma tela de carregamento com ação de tentar novamente/recarregar.
+   - Registrar logs estruturados para falhas de sessão.
 
-1. **`AuthProvider.useEffect`**: `supabase.auth.getSession()` está sem `.catch`. Se a chamada rejeita (rede instável, token corrompido, Cloud em `COMING_UP`), `isLoading` nunca vira `false` e fica só o texto cinza "Verificando sessao..." — visualmente parece tela branca.
-2. **Providers fora do ErrorBoundary**: `DataProvider`, `AutomationProvider` e `GuideProvider` executam várias `useQuery` no mount. Se qualquer `queryFn` lança de forma síncrona (ex.: import quebrado, mapper batendo em `null`), o erro sobe até o root sem fallback — tela 100% branca.
-3. **`React.lazy` sem retry**: se um chunk falha (deploy novo, rede caiu no meio), `Suspense` exibe o fallback e o erro de import quebra a árvore até o ErrorBoundary, sem oferecer recarregamento.
+2. **Evitar queda silenciosa nos providers de dados**
+   - Configurar `QueryClient` com `retry`, `staleTime` e tratamento global de erros para evitar que falhas transitórias derrubem a experiência.
+   - Nos providers principais, expor estado de erro/indisponibilidade em vez de apenas arrays vazios quando uma consulta falhar.
 
-A consequência conhecida: o `ErrorBoundary` atual fica abaixo dos providers, então qualquer falha de um provider ou de auth gera exatamente o sintoma reportado (branco).
+3. **Criar um fallback de disponibilidade para o app autenticado**
+   - Se dados críticos falharem, mostrar card Liquid Glass com “Tentar novamente” e “Recarregar app”, mantendo a navegação protegida quando possível.
+   - Evitar que Dashboard/menus dependam de dados ainda indefinidos para renderizar.
 
-## Mudanças
+4. **Aprimorar `ErrorBoundary` para erros de import/chunk e providers**
+   - Melhorar a tela de erro para incluir botão de voltar ao login/início quando aplicável.
+   - Manter `lazyRetry`, mas limpar caches/forçar reload em caso de falha persistente de chunk.
 
-### 1. `AuthProvider` resiliente (`src/auth/AuthProvider.tsx`)
-- Envolver `getSession()` em `try/catch`; em qualquer erro, setar `session = null` e `isLoading = false` para cair na tela de login.
-- Adicionar timeout de segurança (ex.: 6 s): se `getSession()` não responde, libera o loading e mostra Login. Evita "verificando sessao" infinito.
-- Logar o erro no console para diagnóstico.
+5. **Validar no preview**
+   - Abrir `/` deslogado e confirmar que a tela de login aparece.
+   - Simular carregamento lento/falha de sessão e confirmar que aparece fallback visível.
+   - Conferir console/rede depois da alteração para garantir que não há erro de runtime causando tela branca.
 
-### 2. ErrorBoundary global (`src/App.tsx`)
-- Mover `ErrorBoundary` para englobar `AuthProvider` + providers (envolver `AuthenticatedApp`).
-- Aceitar `fallback` opcional com botão "Recarregar" e "Voltar ao início" (estilo Liquid Glass) — usa apenas Tailwind, sem dependências adicionais.
-- Manter o `ErrorBoundary` interno (dentro do `AppLayout`) para isolar falhas de rota sem derrubar o shell.
+## Arquivos previstos
 
-### 3. ErrorBoundary específico para providers
-- Criar `ProvidersErrorBoundary` reaproveitando o componente atual, encapsulando `DataProvider / AutomationProvider / GuideProvider`. Em caso de erro, mostra um card explicando "Não foi possível carregar seus dados" + botão "Tentar novamente" (chama `queryClient.resetQueries()` e força re-render).
-
-### 4. Lazy import com retry (`src/lib/lazy-retry.ts` novo)
-- Helper `lazyRetry(factory, retries=2, delay=500)` que tenta reimportar o chunk se o primeiro falhar (cobre o caso clássico de deploy novo). Trocar todos os `lazy(() => import(...))` em `App.tsx` por `lazyRetry(() => import(...))`.
-- Fallback do `Suspense` ganha estado "carregando há muito tempo" com botão de recarregar após ~8 s.
-
-### 5. Fallback visual em vez de tela branca
-- Atualizar o `ErrorBoundary` para sempre ter UI mínima visível (logo + mensagem + botões) — nunca renderizar `null`.
-- Atualizar o estado "Verificando sessao" do `AuthenticatedApp` para o mesmo layout glass, evitando aparência de página vazia.
-
-### 6. Logs e observabilidade leve
-- `console.error` estruturado em todos os catches (`[auth]`, `[providers]`, `[lazy]`) para facilitar debug futuro pelos logs do navegador.
-- Sem mudanças em backend / edge functions / banco.
-
-## Escopo / Não-escopo
-- Mudanças apenas no frontend (`src/auth`, `src/App.tsx`, `src/components/ErrorBoundary.tsx`, novo `src/lib/lazy-retry.ts`).
-- Nenhuma alteração nas edge functions, migrations ou no fluxo de automação de guias já implementado.
-- Não altera estilos globais; reaproveita tokens `liquid-stage` / `glass-card` existentes.
-
-## Validação
-- Abrir `/` deslogado → tela de Login renderiza normalmente.
-- Forçar erro em `DataProvider` (mock temporário) → aparece card "Tentar novamente" em vez de branco.
-- Simular falha de `getSession` → cai para Login em ≤6 s, sem branco.
-- Conferir console: nenhum erro novo, mensagens `[auth] ...` quando aplicável.
+- `src/App.tsx`
+- `src/auth/AuthProvider.tsx`
+- `src/components/ErrorBoundary.tsx`
+- Possível ajuste pequeno em `src/data/DataProvider.tsx`, `src/data/AutomationProvider.tsx` e/ou `src/features/guias/GuideProvider.tsx` para expor erros sem derrubar a renderização.
