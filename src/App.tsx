@@ -145,6 +145,7 @@ function AuthenticatedApp() {
                   <Route path="/consulta/excecoes" element={<ConsultaExcecoes />} />
                   <Route path="/consulta/saude" element={<ConsultaSaude />} />
                   <Route path="/consulta/relatorios/:id" element={<ConsultaRelatorio />} />
+                  <Route path="/whatsapp" element={<WhatsAppPage />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
                 </Suspense>
