@@ -2,6 +2,8 @@ import React, { Component, type ErrorInfo } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
+const CHUNK_ERROR_RE = /(Loading chunk|Failed to fetch dynamically imported|ChunkLoadError|importing a module script failed)/i;
+
 interface Props {
   children: React.ReactNode;
   fallback?: React.ReactNode;
@@ -30,6 +32,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error(`[ErrorBoundary${this.props.label ? `:${this.props.label}` : ''}]`, error, errorInfo);
+    if (error?.message && CHUNK_ERROR_RE.test(error.message)) {
+      // Stale bundle after a deploy — force a hard reload once.
+      const key = '__lov_chunk_reload__';
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1');
+        window.location.reload();
+      }
+    }
   }
 
   handleRetry = () => {
