@@ -1,34 +1,46 @@
-## Diagnóstico
+## Objetivo
 
-No preview que consegui abrir agora, a aplicação não está totalmente branca: ela cai na tela de login. Porém, os sinais indicam um problema real de disponibilidade no fluxo de entrada: não há requisições `fetch/xhr` de autenticação visíveis e, se a sessão não for restaurada ou expirar, o app libera o usuário para o login em vez de manter/recuperar a sessão. Além disso, a proteção atual ainda pode ser fortalecida porque erros assíncronos de carregamento de dados não necessariamente acionam o `ErrorBoundary`.
+Espelhar o fluxo atual de envio de guias por Gmail, adicionando WhatsApp via Twilio: mesma extração de PDF, mesma descrição (tipo, competência, vencimento, valor) e mesmo card de disparo, agora com escolha de canal (E-mail / WhatsApp / Ambos). Validar enviando as guias do Escritório Contábil Zimmermann para o número informado.
 
-## Plano de correção
+## O que será feito
 
-1. **Adicionar estado de bootstrap robusto de autenticação**
-   - Trocar o timeout simples por uma estratégia com `Promise.race`, estado explícito de erro/timeout e mensagem visual clara.
-   - Não deixar o sistema parecer “branco” quando a sessão estiver demorando: mostrar uma tela de carregamento com ação de tentar novamente/recarregar.
-   - Registrar logs estruturados para falhas de sessão.
+1. **Conectar Twilio** (connector com gateway). Sem isso, o WhatsApp não envia.
+2. **Pedir 2 dados de configuração** (segredos):
+   - `TWILIO_WHATSAPP_FROM` — número WhatsApp habilitado no Twilio no formato `whatsapp:+E164` (ex.: `whatsapp:+14155238886` no sandbox, ou seu número aprovado em produção).
+   - `TWILIO_WHATSAPP_CONTENT_SID` — *opcional*. SID de um Content Template aprovado para envio fora da janela de 24h. Sem ele, só funciona se o destinatário tiver respondido nas últimas 24h (ou estiver no sandbox).
+3. **Nova edge function `dispatch-empresa-guias-whatsapp`** — espelha a do Gmail:
+   - Baixa cada PDF da pasta da empresa no Drive.
+   - Extrai metadados nativamente (tipo, competência, vencimento, valor) — mesma lógica do `dispatch-empresa-guias`.
+   - Faz upload temporário de cada PDF para o bucket `automation-artifacts` e gera URL assinada de curta duração (24h) para `MediaUrl`.
+   - Envia 1 mensagem WhatsApp por guia com o resumo no `Body` e o PDF como `MediaUrl`. Se `TWILIO_WHATSAPP_CONTENT_SID` estiver setado, usa `ContentSid` + `ContentVariables` (necessário para iniciar conversa fora da janela de 24h).
+   - Aceita `mode: 'simulate' | 'live'` (mesma semântica do e-mail).
+   - Grava em `guia_envios` (`canal='whatsapp'`, `provider_message_id`, `idempotency_key`) e em `guia_eventos`, e marca `guias.status='enviada'` no modo live — exatamente como o fluxo Gmail.
+4. **UI — `EmpresaAutomacaoCards`** (card "Disparar guias"):
+   - Adicionar seletor de canal: **E-mail** / **WhatsApp** / **Ambos**.
+   - Quando WhatsApp, o input vira "WhatsApp (E.164)" e usa `whatsapp_principal` da empresa como default.
+   - "Simular" e "Enviar" passam a invocar a edge function correta conforme o canal. Em "Ambos", dispara as duas.
+5. **Página de Integrações** (`/integracoes`): card do Twilio passa a refletir o status real (já existe `integracoes-status` — só ajustar para considerar `TWILIO_API_KEY` do connector).
+6. **Teste com Escritório Contábil Zimmermann**:
+   - Normalizo o número informado `55 55 8148-8385` para E.164 e disparo "Simular" (mostra preview) e "Enviar" (real).
+   - Mostro o `provider_message_id` retornado pelo Twilio para conferência.
 
-2. **Evitar queda silenciosa nos providers de dados**
-   - Configurar `QueryClient` com `retry`, `staleTime` e tratamento global de erros para evitar que falhas transitórias derrubem a experiência.
-   - Nos providers principais, expor estado de erro/indisponibilidade em vez de apenas arrays vazios quando uma consulta falhar.
+## Perguntas antes de implementar
 
-3. **Criar um fallback de disponibilidade para o app autenticado**
-   - Se dados críticos falharem, mostrar card Liquid Glass com “Tentar novamente” e “Recarregar app”, mantendo a navegação protegida quando possível.
-   - Evitar que Dashboard/menus dependam de dados ainda indefinidos para renderizar.
+Preciso confirmar dois pontos rapidamente:
 
-4. **Aprimorar `ErrorBoundary` para erros de import/chunk e providers**
-   - Melhorar a tela de erro para incluir botão de voltar ao login/início quando aplicável.
-   - Manter `lazyRetry`, mas limpar caches/forçar reload em caso de falha persistente de chunk.
+**A) Número do destinatário em E.164.** O texto "55 55 8148-8385" tem 8 dígitos após o DDD 55. Celulares brasileiros têm 9 dígitos começando com 9. Provavelmente o número correto é `+55 55 98148-8385` → `+5555981488385`. Posso seguir com esse?
 
-5. **Validar no preview**
-   - Abrir `/` deslogado e confirmar que a tela de login aparece.
-   - Simular carregamento lento/falha de sessão e confirmar que aparece fallback visível.
-   - Conferir console/rede depois da alteração para garantir que não há erro de runtime causando tela branca.
+**B) Conta Twilio.** Você já tem:
+   - Um número WhatsApp Business aprovado e ativo no Twilio (produção), **ou**
+   - Vai usar o sandbox `whatsapp:+14155238886` (precisa que o destinatário envie a frase de opt-in para o sandbox antes do primeiro envio)?
+   - E você tem um **Content Template** aprovado para enviar guias fiscais (ContentSid)? Sem template aprovado, só dá pra enviar se o destinatário tiver mandado mensagem nas últimas 24h.
+
+Posso seguir assumindo: número = `+5555981488385`, sandbox Twilio sem ContentSid (você manda o opt-in do sandbox antes). Se preferir outra combinação, me diga ao aprovar.
 
 ## Arquivos previstos
 
-- `src/App.tsx`
-- `src/auth/AuthProvider.tsx`
-- `src/components/ErrorBoundary.tsx`
-- Possível ajuste pequeno em `src/data/DataProvider.tsx`, `src/data/AutomationProvider.tsx` e/ou `src/features/guias/GuideProvider.tsx` para expor erros sem derrubar a renderização.
+- `supabase/functions/dispatch-empresa-guias-whatsapp/index.ts` (novo)
+- `supabase/config.toml` (registrar a função com `verify_jwt = false`)
+- `supabase/functions/integracoes-status/index.ts` (ajustar nome do secret do Twilio)
+- `src/components/EmpresaAutomacaoCards.tsx` (seletor de canal + chamada da nova função)
+- `src/pages/guias/IntegracoesGuias.tsx` (já existe, sem mudança de UI relevante)
