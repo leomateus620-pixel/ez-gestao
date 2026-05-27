@@ -23,6 +23,7 @@ const hmacHex = async (secret: string, payload: string) => {
 };
 
 serve(async (req) => {
+  let insertedId: string | null = null;
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return new Response(JSON.stringify({ error: "method_not_allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
@@ -36,7 +37,6 @@ serve(async (req) => {
     if (!userData?.user) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const body = await req.json();
-    let insertedId: string | null = null;
     const phone = String(body.phone || "").trim();
     const message = String(body.message || "").trim();
     if (!phone) return new Response(JSON.stringify({ error: "phone_required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
