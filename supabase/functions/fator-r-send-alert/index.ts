@@ -3,10 +3,9 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
-  const { to, subject, html } = await req.json();
+  const { to, subject, html, from: requestedFrom } = await req.json();
   const provider = (Deno.env.get("EMAIL_PROVIDER") ?? "resend").toLowerCase();
-  const from = Deno.env.get("FATOR_R_EMAIL_FROM");
-  if (!from) return Response.json({ ok: false, error: "FATOR_R_EMAIL_FROM não configurado." }, { status: 400 });
+  const from = requestedFrom || Deno.env.get("FATOR_R_EMAIL_FROM") || "leomateus620@gmail.com";
 
   if (provider === "resend") {
     const key = Deno.env.get("RESEND_API_KEY");

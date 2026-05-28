@@ -45,3 +45,15 @@ Parser em `src/services/fatorRParser.ts` detecta padrões de Fator R, FS12, RBT1
 ## Limitações conhecidas
 - OCR/PDF parser avançado depende da qualidade do PDF e de evoluções do parser.
 - Layouts PGDAS variados podem reduzir confiança de extração.
+
+## Teste manual sem Google Drive
+
+Além da rotina agendada via Drive, a tela **Monitoramento de Fator R** possui a ação **Anexar PDFs para teste**. Esse fluxo foi criado para validação pontual com PDFs PGDAS de clientes, sem depender da pasta do Drive:
+
+1. O usuário seleciona um ou mais PDFs no navegador.
+2. A tela envia cada arquivo para a Edge Function `fator-r-process-upload`.
+3. A função extrai o texto nativo do PDF com `unpdf`, interpreta cada documento individualmente e retorna CNPJ, período, Fator R, FS12, RBT12, confiança e recomendação.
+4. Quando o Fator R fica em faixa crítica (`<= 0,28`) ou de atenção (`<= 0,32`), a função tenta disparar e-mail de `leomateus620@gmail.com` para `ricardo@escritoriozimmermann.com.br` pela função `fator-r-send-alert`.
+5. Quando `persist` está ativo, o processamento também registra documento, resultado mensal, alerta e log nas tabelas `fator_r_*`.
+
+> Observação: o envio real depende das credenciais do provedor configurado na Supabase (`RESEND_API_KEY` ou `SENDGRID_API_KEY`). Sem essas credenciais, o sistema registra a tentativa e exibe o erro de configuração no resultado individual do PDF.
