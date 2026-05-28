@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { Play, RefreshCw, Zap, CheckCircle2, XCircle, AlertTriangle, Clock, TrendingUp, Shield, Pause, ShieldAlert } from 'lucide-react';
 import { useAutomation } from '@/data/AutomationProvider';
 import { useDataStore } from '@/data/DataProvider';
@@ -16,7 +16,8 @@ import { useNavigate } from 'react-router-dom';
 import { tipologiaLabels, type ExceptionTipologia } from '@/data/automation-types';
 
 export default function Automacao() {
-  const { state, pendingExceptions, criticalExceptions, unstableConnectors, exceptionsByTipologia } = useAutomation();
+  const { state, pendingExceptions, criticalExceptions, unstableConnectors, exceptionsByTipologia, enableHeavyData } = useAutomation();
+  useEffect(() => { enableHeavyData(); }, [enableHeavyData]);
   const { state: dataState } = useDataStore();
   const { executarLoteColeta } = useAutomationJobs();
   const { toast } = useToast();

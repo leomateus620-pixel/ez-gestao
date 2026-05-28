@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Eye, RotateCcw, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAutomation } from '@/data/AutomationProvider';
 import { useDataStore } from '@/data/DataProvider';
@@ -15,7 +15,8 @@ import { useToast } from '@/hooks/use-toast';
 const PAGE_SIZE = 15;
 
 export default function Execucoes() {
-  const { state } = useAutomation();
+  const { state, enableHeavyData } = useAutomation();
+  useEffect(() => { enableHeavyData(); }, [enableHeavyData]);
   const { state: dataState } = useDataStore();
   const navigate = useNavigate();
   const { toast } = useToast();
