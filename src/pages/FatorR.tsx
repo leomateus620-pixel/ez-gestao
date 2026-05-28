@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ExternalLink, FolderSync, Mail, Pencil, Sparkles, Upload } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ExternalLink, FolderSync, HardDrive, Mail, Pencil, Sparkles, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -18,10 +18,22 @@ type ManualPdfResult = {
   alertTo: string;
   parsed: FatorRParseResult;
   email?: { attempted: boolean; sent: boolean; error: string | null };
+  driveWebUrl?: string | null;
+  storageStatus?: 'uploaded' | 'skipped_duplicate' | 'failed' | 'pending' | 'drive_native' | null;
+  cloudStoragePath?: string | null;
+  driveFileId?: string | null;
 };
 
 const ALERT_FROM = 'leomateus620@gmail.com';
 const ALERT_TO = 'ricardo@escritoriozimmermann.com.br';
+
+const storageLabel: Record<string, string> = {
+  uploaded: 'Enviado ao Drive',
+  skipped_duplicate: 'Já existente (duplicado ignorado)',
+  failed: 'Falha no Drive',
+  pending: 'Pendente',
+  drive_native: 'Arquivo nativo do Drive',
+};
 
 const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
@@ -56,6 +68,7 @@ export default function FatorR() {
   const [results, setResults] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [syncConfig, setSyncConfig] = useState<any>(null);
+  const [storageStats, setStorageStats] = useState<{ rootReady: boolean; uploadedCount: number; lastUploadedAt: string | null }>({ rootReady: false, uploadedCount: 0, lastUploadedAt: null });
   const [loadingSync, setLoadingSync] = useState(false);
   const [processingManualPdfs, setProcessingManualPdfs] = useState(false);
   const [manualResults, setManualResults] = useState<ManualPdfResult[]>([]);
@@ -63,16 +76,24 @@ export default function FatorR() {
 
   const load = async () => {
     const db = supabase as any;
-    const [c, r, l, s] = await Promise.all([
+    const [c, r, l, s, root, lastUp, upCount] = await Promise.all([
       db.from('fator_r_companies').select('*').order('created_at', { ascending: false }).limit(20),
       db.from('fator_r_monthly_results').select('*').order('reference_year', { ascending: false }).limit(50),
       db.from('fator_r_processing_logs').select('*').order('created_at', { ascending: false }).limit(10),
       db.from('fator_r_sync_config').select('*').limit(1).maybeSingle(),
+      db.from('fator_r_drive_folders').select('id').eq('kind', 'root').limit(1).maybeSingle(),
+      db.from('fator_r_documents').select('uploaded_at').eq('storage_status', 'uploaded').order('uploaded_at', { ascending: false }).limit(1).maybeSingle(),
+      db.from('fator_r_documents').select('id', { count: 'exact', head: true }).eq('storage_status', 'uploaded'),
     ]);
     setCompanies(c.data ?? []);
     setResults(r.data ?? []);
     setLogs(l.data ?? []);
     setSyncConfig(s.data ?? null);
+    setStorageStats({
+      rootReady: Boolean(root?.data?.id),
+      uploadedCount: upCount?.count ?? 0,
+      lastUploadedAt: lastUp?.data?.uploaded_at ?? null,
+    });
   };
 
   useEffect(() => { load(); }, []);
@@ -218,6 +239,9 @@ export default function FatorR() {
         <Badge variant="secondary">E-mail: {ALERT_FROM} → {ALERT_TO}</Badge>
         <Badge variant="outline">Automação {syncConfig?.sync_enabled === false ? 'desativada' : 'ativa'}</Badge>
         {syncConfig?.last_run_at && <Badge variant="outline">Última: {new Date(syncConfig.last_run_at).toLocaleString('pt-BR')}</Badge>}
+        <Badge variant={storageStats.rootReady ? 'default' : 'outline'}>Pasta Drive {storageStats.rootReady ? 'configurada' : 'não criada'}</Badge>
+        <Badge variant="outline">Arquivos salvos no Drive: {storageStats.uploadedCount}</Badge>
+        {storageStats.lastUploadedAt && <Badge variant="outline">Último armazenamento: {new Date(storageStats.lastUploadedAt).toLocaleString('pt-BR')}</Badge>}
       </div>
     </GlassCard>
 
@@ -251,6 +275,11 @@ export default function FatorR() {
                   </div>
                 </div>
                 <Badge variant="outline" className={statusBadgeClass[result.status]}>{statusLabel[result.status]}</Badge>
+                {result.driveWebUrl && (
+                  <Button size="sm" variant="outline" className="gap-1.5" onClick={() => window.open(result.driveWebUrl!, '_blank')}>
+                    <HardDrive className="h-3.5 w-3.5" /> Abrir PDF no Drive
+                  </Button>
+                )}
               </div>
 
               <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-4 text-sm">
@@ -265,6 +294,8 @@ export default function FatorR() {
                   ['FS12', result.parsed.folhaAusente ? 'Nenhuma' : formatMoney(result.parsed.payroll12m)],
                   ['Confiança', `${Math.round(result.parsed.confidence * 100)}%`],
                   ['Alerta de e-mail', result.alert ? (result.email?.sent ? 'Enviado' : result.email?.attempted ? 'Tentativa registrada' : 'Pendente') : 'Não aplicável'],
+                  ['Armazenamento', result.storageStatus ? (storageLabel[result.storageStatus] ?? result.storageStatus) : '—'],
+                  ['Pasta no Drive', result.cloudStoragePath || '—'],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-700 p-3">
                     <div className="text-xs text-foreground/75 font-medium uppercase tracking-wide">{label}</div>
