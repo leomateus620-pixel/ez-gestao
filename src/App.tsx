@@ -43,6 +43,23 @@ const ConsultaRelatorio = lazyRetry(() => import('./pages/consulta/ConsultaRelat
 const NotFound = lazyRetry(() => import('./pages/NotFound'));
 const WhatsAppPage = lazyRetry(() => import('./pages/admin/WhatsApp'));
 
+function RoutePreloader() {
+  useEffect(() => {
+    const idle = (window as any).requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 800));
+    const handle = idle(() => {
+      import('./pages/guias/Guias');
+      import('./pages/Empresas');
+      import('./pages/Agenda');
+    });
+    return () => {
+      const cancel = (window as any).cancelIdleCallback;
+      if (cancel) cancel(handle);
+      else window.clearTimeout(handle);
+    };
+  }, []);
+  return null;
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
