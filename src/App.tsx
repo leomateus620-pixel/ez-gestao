@@ -29,6 +29,7 @@ const Automacao = lazyRetry(() => import('./pages/Automacao'));
 const Execucoes = lazyRetry(() => import('./pages/Execucoes'));
 const ExecucaoDetalhe = lazyRetry(() => import('./pages/ExecucaoDetalhe'));
 const Integracoes = lazyRetry(() => import('./pages/Integracoes'));
+const FatorR = lazyRetry(() => import('./pages/FatorR'));
 const Excecoes = lazyRetry(() => import('./pages/Excecoes'));
 const Guias = lazyRetry(() => import('./pages/guias/Guias'));
 const GuiaDetalhe = lazyRetry(() => import('./pages/guias/GuiaDetalhe'));
@@ -129,6 +130,7 @@ function AuthenticatedApp() {
                   <Route path="/empresas" element={<Empresas />} />
                   <Route path="/empresas/:id" element={<EmpresaDetalhe />} />
                   <Route path="/integracoes" element={<IntegracoesGuias />} />
+                  <Route path="/fator-r" element={<FatorR />} />
                   <Route path="/configuracoes" element={<Configuracoes />} />
                   <Route path="/agenda" element={<Agenda />} />
                   <Route path="/certidoes" element={<Certidoes />} />
