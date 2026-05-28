@@ -15,7 +15,7 @@ function company(overrides: Partial<Empresa> = {}): Empresa {
     nomeFantasia: 'Empresa Exemplo',
     cnpj: '11444777000161',
     regimeTributario: 'simples_nacional',
-    municipio: 'Sao Paulo',
+    municipio: 'São Paulo',
     estado: 'SP',
     responsavelInterno: 'Admin',
     responsavelCliente: 'Financeiro',

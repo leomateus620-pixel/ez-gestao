@@ -45,7 +45,7 @@ function GuidesTable({ guides }: { guides: Guia[] }) {
       <TableHeader>
         <TableRow className="border-border/50">
           <TableHead>Arquivo</TableHead>
-          <TableHead>Identificacao</TableHead>
+          <TableHead>Identificação</TableHead>
           <TableHead>Guia</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Recebida</TableHead>
@@ -91,12 +91,12 @@ export default function Guias({ view }: { view: GuideView }) {
   const openExceptions = useMemo(() =>
     exceptions.filter((entry) => entry.status !== 'resolved' && entry.status !== 'ignored'), [exceptions]);
 
-  const title = view === 'fila' ? 'Fila de Guias' : view === 'enviadas' ? 'Guias Enviadas' : 'Excecoes de Guias';
+  const title = view === 'fila' ? 'Fila de Guias' : view === 'enviadas' ? 'Guias Enviadas' : 'Exceções de Guias';
   const subtitle = view === 'fila'
-    ? 'PDFs em leitura, identificacao, OCR ou aguardando despacho.'
+    ? 'PDFs em leitura, identificação, OCR ou aguardando despacho.'
     : view === 'enviadas'
       ? 'Documentos aceitos pelo canal e movidos para a pasta enviados.'
-      : 'Tudo que exige revisao humana permanece rastreavel aqui.';
+      : 'Tudo que exige revisão humana permanece rastreavel aqui.';
 
   return (
     <div className="space-y-6 animate-slide-in">
@@ -141,7 +141,7 @@ export default function Guias({ view }: { view: GuideView }) {
       {view === 'excecoes' && (
         <div className="space-y-3">
           {openExceptions.length === 0 ? (
-            <EmptyState icon={ShieldAlert} title="Nenhuma excecao aberta" description="Falhas de OCR, cadastro, consentimento ou conector serao exibidas aqui." />
+            <EmptyState icon={ShieldAlert} title="Nenhuma exceção aberta" description="Falhas de OCR, cadastro, consentimento ou conector serao exibidas aqui." />
           ) : openExceptions.map((entry) => (
             <GlassCard key={entry.id} variant={entry.severity === 'critical' || entry.severity === 'error' ? 'critical' : 'default'}>
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
@@ -153,7 +153,7 @@ export default function Guias({ view }: { view: GuideView }) {
                       <Badge variant="outline">{entry.severity}</Badge>
                     </div>
                     <p className="mt-1 text-sm text-foreground/70">{entry.reason}</p>
-                    <p className="mt-2 text-xs text-foreground/55">Acao recomendada: {entry.actionRecommended || 'Analise manual.'}</p>
+                    <p className="mt-2 text-xs text-foreground/55">Acao recomendada: {entry.actionRecommended || 'Análise manual.'}</p>
                     <p className="mt-1 text-[11px] text-foreground/45">{formatDate(entry.createdAt)}</p>
                   </div>
                 </div>

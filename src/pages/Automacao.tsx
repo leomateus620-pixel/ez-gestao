@@ -289,7 +289,7 @@ export default function Automacao() {
             const empresa = dataState.empresas.find(e => e.id === run.empresaId);
             const connector = state.connectors.find(c => c.id === run.connectorId);
             return (
-              <div key={run.id} className="data-row" onClick={() => navigate(`/execucoes/${run.id}`)}>
+              <div key={run.id} className="data-row" onClick={() => navigate(`/execuções/${run.id}`)}>
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <RunStatusBadge status={run.status} />
                   <div className="min-w-0">

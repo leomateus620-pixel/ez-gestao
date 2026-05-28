@@ -41,7 +41,7 @@ const legacyItems = [
   { title: 'Envios antigos', url: '/envios', icon: Send },
   { title: 'Execucoes', url: '/execucoes', icon: ListChecks },
   { title: 'Conectores', url: '/legado/integracoes', icon: Plug },
-  { title: 'Excecoes CND', url: '/excecoes', icon: AlertTriangle },
+  { title: 'Exceções CND', url: '/excecoes', icon: AlertTriangle },
   { title: 'Alertas', url: '/alertas', icon: Bell },
   { title: 'Logs', url: '/logs', icon: ScrollText },
 ];
@@ -89,8 +89,8 @@ export function AppSidebar() {
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-accent text-xs font-bold text-white shadow-lg shadow-primary/25">EZ</div>
           {!collapsed && (
             <div className="animate-fade-in">
-              <h1 className="text-sm font-bold tracking-tight text-sidebar-foreground">EZ Gestao</h1>
-              <p className="text-[10px] text-sidebar-foreground/50">Envio automatico de guias</p>
+              <h1 className="text-sm font-bold tracking-tight text-sidebar-foreground">EZ Gestão</h1>
+              <p className="text-[10px] text-sidebar-foreground/50">Envio automático de guias</p>
             </div>
           )}
         </div>
@@ -128,11 +128,11 @@ export function AppSidebar() {
                 <SidebarMenu className="space-y-0.5">
                   {legacyItems.map((item) => renderItem(
                     item,
-                    item.title === 'Excecoes CND' ? pendingExceptions : item.title === 'Alertas' ? alertasNaoLidos : undefined,
+                    item.title === 'Exceções CND' ? pendingExceptions : item.title === 'Alertas' ? alertasNaoLidos : undefined,
                   ))}
                   {!!consultaFlag?.enabled && (
                     <>
-                      {renderItem({ title: 'Consulta publica', url: '/consulta', icon: Search })}
+                      {renderItem({ title: 'Consulta pública', url: '/consulta', icon: Search })}
                       {renderItem({ title: 'Historico', url: '/consulta/historico', icon: ListChecks })}
                     </>
                   )}

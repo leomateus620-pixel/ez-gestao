@@ -1,19 +1,19 @@
-# Automacao de Envio de Guias
+# Automação de Envio de Guias
 
 ## Fluxo
 
 1. `scan-guide-folder` lista arquivos da pasta Google Drive `a enviar`.
-2. PDFs novos sao registrados em `guias`; formatos diferentes geram excecao.
-3. `process-guide` tenta identificar CNPJ e metadados no PDF. Quando necessario,
-   tenta extrair texto **nativamente** do PDF (sem OCR externo). Se o PDF nao tiver
-   camada de texto extraivel (PDF escaneado/imagem), a guia e marcada como excecao
+2. PDFs novos são registrados em `guias`; formatos diferentes geram exceção.
+3. `process-guide` tenta identificar CNPJ e metadados no PDF. Quando necessário,
+   tenta extrair texto **nativamente** do PDF (sem OCR externo). Se o PDF não tiver
+   camada de texto extraível (PDF escaneado/imagem), a guia e marcada como exceção
    com motivo `pdf_without_text_layer`.
-4. Somente uma correspondencia segura com empresa ativa avanca para
+4. Somente uma correspondência segura com empresa ativa avança para
    `dispatch-guide`.
 5. O canal vem exclusivamente de `empresas.canal_preferido`.
-6. Gmail anexa o PDF; Twilio envia template aprovado com URL assinada temporaria.
-7. Depois da aceitacao do provedor, o Drive move a guia para `enviados`.
-8. `twilio-status-webhook` registra entrega ou falha posterior sem reenvio automatico.
+6. Gmail anexa o PDF; Twilio envia template aprovado com URL assinada temporária.
+7. Depois da aceitação do provedor, o Drive move a guia para `enviados`.
+8. `twilio-status-webhook` registra entrega ou falha posterior sem reenvio automático.
 
 ## Deploy Supabase
 
@@ -47,30 +47,30 @@ TWILIO_GUIDE_CONTENT_SID
 TWILIO_STATUS_CALLBACK_URL
 ```
 
-`GOOGLE_ACCESS_TOKEN` e aceito somente para testes operacionais temporarios.
-Em producao, usar `connect-google-oauth`, que persiste somente o refresh token
-criptografado em uma tabela sem politica de leitura para clientes.
+`GOOGLE_ACCESS_TOKEN` e aceito somente para testes operacionais temporários.
+Em produção, usar `connect-google-oauth`, que persiste somente o refresh token
+criptografado em uma tabela sem política de leitura para clientes.
 
 ## Google e Twilio
 
 - Autorizar Google Drive para ler e mover arquivos e Gmail somente com
-  `gmail.send`; documentar a verificacao OAuth antes do uso em producao.
+  `gmail.send`; documentar a verificação OAuth antes do uso em produção.
 - Configurar as pastas em `integracoes_guias` e mudar Drive/Gmail para `ativo`
-  apenas apos teste de conexao.
+  apenas após teste de conexão.
 - Configurar no bucket GCS privado uma regra de lifecycle para remover entradas
-  `pending/` e `results/` automaticamente, conforme a retencao aprovada.
-- Criar template utilitario Twilio aprovado para documento e descricao previa;
+  `pending/` e `results/` automaticamente, conforme a retenção aprovada.
+- Criar template utilitário Twilio aprovado para documento e descrição prévia;
   registrar opt-in e telefone E.164 no cadastro da empresa.
-- Apontar callback Twilio para `twilio-status-webhook`; a funcao rejeita
-  requisicoes sem assinatura valida.
+- Apontar callback Twilio para `twilio-status-webhook`; a função rejeita
+  requisições sem assinatura válida.
 
 ## Garantias
 
-- Nenhum envio automatico ocorre sem CNPJ unico valido, empresa ativa, canal
-  escolhido, contato valido, consentimento WhatsApp quando aplicavel e conector ativo.
-- Identificacao por nome do arquivo exige sinais fiscais (valor, vencimento, tipo)
-  no texto extraido; do contrario a guia vai para Excecoes com motivo
+- Nenhum envio automático ocorre sem CNPJ único válido, empresa ativa, canal
+  escolhido, contato válido, consentimento WhatsApp quando aplicável e conector ativo.
+- Identificação por nome do arquivo exige sinais fiscais (valor, vencimento, tipo)
+  no texto extraído; do contrário a guia vai para Exceções com motivo
   `insufficient_pdf_signals`.
 - `guia_envios.idempotency_key` evita envio duplicado.
-- Segredos nao sao expostos ao frontend; logs guardam somente payload sanitizado.
-- As telas e funcoes CND permanecem separadas no grupo `Consulta CND (legado)`.
+- Segredos não são expostos ao frontend; logs guardam somente payload sanitizado.
+- As telas e funções CND permanecem separadas no grupo `Consulta CND (legado)`.

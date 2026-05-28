@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         if ('timedOut' in outcome && outcome.timedOut === true && !('res' in outcome)) {
           console.error('[auth] getSession timed out');
-          setError('Tempo esgotado ao verificar a sessao. Verifique sua conexao.');
+          setError('Tempo esgotado ao verificar a sessão. Verifique sua conexão.');
           setSession(null);
           setIsLoading(false);
           return;
@@ -52,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .catch((err) => {
         if (cancelled) return;
         console.error('[auth] getSession threw', err);
-        setError(err?.message ?? 'Falha ao inicializar autenticacao');
+        setError(err?.message ?? 'Falha ao inicializar autenticação');
         setSession(null);
         setIsLoading(false);
       });
