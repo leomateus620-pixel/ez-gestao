@@ -139,7 +139,7 @@ export default function Integracoes() {
                         <span className={`h-2 w-2 rounded-full ${
                           connector.status === 'ativo' ? 'bg-success' :
                           connector.status === 'erro' ? 'bg-destructive' :
-                          connector.status === 'manutencao' ? 'bg-warning' : 'bg-muted-foreground'
+                          connector.status === 'manutenção' ? 'bg-warning' : 'bg-muted-foreground'
                         }`} />
                         <span className="font-medium text-foreground">{connector.nome}</span>
                         {connector.status === 'manutencao' && (

@@ -23,9 +23,9 @@ export function validarCaptura(
     erros.push(`CNPJ divergente: esperado ${empresaCnpj}, obtido ${capture.cnpjConsultado}`);
   }
 
-  // 2. Tipo certidão matches connector orgao
+  // 2. Tipo certidão matches connector órgão
   if (capture.tipoCertidao !== connector.orgao) {
-    erros.push(`Tipo certidão incompatível: conector ${connector.orgao}, captura ${capture.tipoCertidao}`);
+    erros.push(`Tipo certidão incompatível: conector ${connector.órgão}, captura ${capture.tipoCertidao}`);
   }
 
   // 3. Coerência de datas

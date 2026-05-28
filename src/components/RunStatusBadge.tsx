@@ -24,7 +24,7 @@ export function RunStatusBadge({ status, className = '' }: RunStatusBadgeProps) 
         status === 'sucesso' ? 'bg-success' :
         status === 'falha' || status === 'timeout' ? 'bg-destructive' :
         status === 'executando' ? 'bg-primary' :
-        status === 'revisao' ? 'bg-warning' : 'bg-info'
+        status === 'revisão' ? 'bg-warning' : 'bg-info'
       }`} />
       {c.label}
     </span>

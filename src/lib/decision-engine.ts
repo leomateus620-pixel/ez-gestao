@@ -41,7 +41,7 @@ export function avaliarResultadoSeguro(
   if (!validacao.valido) {
     return {
       acao: 'criar_excecao',
-      motivo: `Validação falhou: ${validacao.erros[0]}`,
+      motivo: `Validação falhou: ${validação.erros[0]}`,
       confianca: 'baixa',
     };
   }

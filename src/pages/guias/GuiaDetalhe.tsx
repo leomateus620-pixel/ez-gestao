@@ -21,7 +21,7 @@ export default function GuiaDetalhe() {
   const timeline = useMemo(() => events.filter((item) => item.guiaId === id), [events, id]);
 
   if (!guide) {
-    return <EmptyState icon={FileSearch} title="Guia nao encontrada" actionLabel="Voltar a fila" onAction={() => history.back()} />;
+    return <EmptyState icon={FileSearch} title="Guia não encontrada" actionLabel="Voltar a fila" onAction={() => history.back()} />;
   }
 
   return (
@@ -35,18 +35,18 @@ export default function GuiaDetalhe() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <GlassCard variant="elevated" className="lg:col-span-2">
-          <h2 className="text-sm font-semibold">Identificacao e metadados</h2>
+          <h2 className="text-sm font-semibold">Identificação e metadados</h2>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <div><p className="text-xs text-foreground/50">CNPJ detectado</p><p className="mt-1 font-mono text-sm">{guide.cnpjDetectado ? formatCNPJ(guide.cnpjDetectado) : 'Nao identificado'}</p></div>
-            <div><p className="text-xs text-foreground/50">Origem da identificacao</p><p className="mt-1 text-sm capitalize">{guide.matchSource.replace('_', ' ')}</p></div>
-            <div><p className="text-xs text-foreground/50">Tipo da guia</p><p className="mt-1 text-sm">{guide.tipoGuia || 'Nao extraido'}</p></div>
-            <div><p className="text-xs text-foreground/50">Competencia</p><p className="mt-1 text-sm">{guide.competencia || 'Nao extraida'}</p></div>
+            <div><p className="text-xs text-foreground/50">CNPJ detectado</p><p className="mt-1 font-mono text-sm">{guide.cnpjDetectado ? formatCNPJ(guide.cnpjDetectado) : 'Não identificado'}</p></div>
+            <div><p className="text-xs text-foreground/50">Origem da identificação</p><p className="mt-1 text-sm capitalize">{guide.matchSource.replace('_', ' ')}</p></div>
+            <div><p className="text-xs text-foreground/50">Tipo da guia</p><p className="mt-1 text-sm">{guide.tipoGuia || 'Não extraído'}</p></div>
+            <div><p className="text-xs text-foreground/50">Competencia</p><p className="mt-1 text-sm">{guide.competencia || 'Não extraida'}</p></div>
             <div><p className="text-xs text-foreground/50">Vencimento</p><p className="mt-1 text-sm">{formatDate(guide.vencimento)}</p></div>
-            <div><p className="text-xs text-foreground/50">Valor</p><p className="mt-1 text-sm">{guide.valor == null ? 'Nao extraido' : `R$ ${guide.valor.toFixed(2).replace('.', ',')}`}</p></div>
+            <div><p className="text-xs text-foreground/50">Valor</p><p className="mt-1 text-sm">{guide.valor == null ? 'Não extraído' : `R$ ${guide.valor.toFixed(2).replace('.', ',')}`}</p></div>
           </div>
           {guide.textoExtraidoPreview && (
             <div className="mt-5 rounded-xl border border-border/50 bg-muted/30 p-4">
-              <p className="text-xs font-medium text-foreground/55">Trecho extraido para auditoria</p>
+              <p className="text-xs font-medium text-foreground/55">Trecho extraído para auditoria</p>
               <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-xs text-foreground/65">{guide.textoExtraidoPreview}</p>
             </div>
           )}
@@ -64,13 +64,13 @@ export default function GuiaDetalhe() {
               <Badge variant="outline">{company.canalPreferido || 'Sem canal preferido'}</Badge>
               {dispatch && <p className="text-xs text-foreground/55">Entrega: <span className="capitalize">{dispatch.status}</span></p>}
             </div>
-          ) : <p className="mt-4 text-sm text-foreground/55">Empresa ainda nao vinculada.</p>}
+          ) : <p className="mt-4 text-sm text-foreground/55">Empresa ainda não vinculada.</p>}
         </GlassCard>
       </div>
 
       {guideExceptions.length > 0 && (
         <GlassCard variant="critical">
-          <div className="flex items-center gap-2 text-sm font-semibold"><ShieldAlert className="h-4 w-4" /> Excecoes</div>
+          <div className="flex items-center gap-2 text-sm font-semibold"><ShieldAlert className="h-4 w-4" /> Exceções</div>
           <div className="mt-3 space-y-3">
             {guideExceptions.map((entry) => (
               <div key={entry.id} className="rounded-lg bg-background/45 p-3">

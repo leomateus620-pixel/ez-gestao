@@ -7,7 +7,7 @@ const controls = [
   {
     icon: Clock,
     title: 'Agendamento',
-    description: 'Varredura automatica da pasta a enviar a cada 5 minutos, alem da execucao manual.',
+    description: 'Varredura automática da pasta a enviar a cada 5 minutos, além da execução manual.',
   },
   {
     icon: KeyRound,
@@ -16,8 +16,8 @@ const controls = [
   },
   {
     icon: Database,
-    title: 'Retencao LGPD',
-    description: 'Bucket privado para entrega temporaria de anexos, com expiracao curta e logs de auditoria.',
+    title: 'Retenção LGPD',
+    description: 'Bucket privado para entrega temporária de anexos, com expiracao curta e logs de auditoria.',
   },
   {
     icon: Palette,
@@ -29,20 +29,20 @@ const controls = [
 export default function Configuracoes() {
   return (
     <div className="space-y-6 animate-slide-in">
-      <PageHeader title="Configuracoes" subtitle="Seguranca e operacao do envio automatico de guias." />
+      <PageHeader title="Configuracoes" subtitle="Seguranca e operação do envio automático de guias." />
 
       <GlassCard variant="elevated">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex items-start gap-3">
             <ShieldCheck className="mt-0.5 h-5 w-5 text-success" />
             <div>
-              <p className="text-sm font-semibold">Modo automatico seguro</p>
+              <p className="text-sm font-semibold">Modo automático seguro</p>
               <p className="mt-1 text-xs text-foreground/60">
-                Envio ocorre somente com CNPJ unico, empresa ativa, contato valido, consentimento aplicavel e conector ativo.
+                Envio ocorre somente com CNPJ único, empresa ativa, contato válido, consentimento aplicável e conector ativo.
               </p>
             </div>
           </div>
-          <Badge variant="outline" className="border-success/30 bg-success/10 text-success">Politica ativa</Badge>
+          <Badge variant="outline" className="border-success/30 bg-success/10 text-success">Política ativa</Badge>
         </div>
       </GlassCard>
 
@@ -66,8 +66,8 @@ export default function Configuracoes() {
         <div className="flex items-center gap-3">
           <Lock className="h-4 w-4 text-foreground/50" />
           <div>
-            <p className="text-sm font-medium">Administrador unico com Supabase Auth</p>
-            <p className="text-xs text-foreground/60">Acesso anonimo foi removido das tabelas operacionais e as acoes manuais exigem sessao autenticada.</p>
+            <p className="text-sm font-medium">Administrador único com Supabase Auth</p>
+            <p className="text-xs text-foreground/60">Acesso anonimo foi removido das tabelas operacionais e as acoes manuais exigem sessão autenticada.</p>
           </div>
         </div>
       </GlassCard>

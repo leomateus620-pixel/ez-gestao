@@ -69,12 +69,12 @@ function ConnectorCard({ integration }: { integration: IntegracaoGuia }) {
       </div>
       {integration.provider === 'google_drive' && (
         <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-xs text-foreground/65">
-          <p>`a enviar`: {integration.sourceFolderId || 'Nao configurada'}</p>
-          <p className="mt-1">`enviados`: {integration.sentFolderId || 'Nao configurada'}</p>
+          <p>`a enviar`: {integration.sourceFolderId || 'Não configurada'}</p>
+          <p className="mt-1">`enviados`: {integration.sentFolderId || 'Não configurada'}</p>
         </div>
       )}
       <p className="text-xs text-foreground/50">
-        {integration.lastCheckAt ? `Ultima verificacao: ${formatDateTime(integration.lastCheckAt)}` : 'Nenhuma verificacao executada.'}
+        {integration.lastCheckAt ? `Última verificação: ${formatDateTime(integration.lastCheckAt)}` : 'Nenhuma verificação executada.'}
       </p>
       {integration.lastError && <p className="rounded-lg bg-destructive/10 p-2 text-xs text-destructive">{integration.lastError}</p>}
     </GlassCard>
@@ -112,7 +112,7 @@ export default function IntegracoesGuias() {
 
   return (
     <div className="space-y-6 animate-slide-in">
-      <PageHeader title="Integracoes" subtitle="Conectores e seguranca do envio automatico de guias.">
+      <PageHeader title="Integracoes" subtitle="Conectores e seguranca do envio automático de guias.">
         <Button disabled variant="outline">Gerenciar conexões</Button>
       </PageHeader>
 
@@ -123,8 +123,8 @@ export default function IntegracoesGuias() {
             <div>
               <p className="text-sm font-semibold">Segredos protegidos no servidor</p>
               <p className="mt-1 max-w-2xl text-xs leading-relaxed text-foreground/60">
-                OAuth refresh token, credenciais Vision e token Twilio nunca sao enviados ao frontend.
-                URLs de documento para WhatsApp expiram e o webhook exige assinatura Twilio valida.
+                OAuth refresh token, credenciais Vision e token Twilio nunca são enviados ao frontend.
+                URLs de documento para WhatsApp expiram e o webhook exige assinatura Twilio válida.
               </p>
             </div>
           </div>

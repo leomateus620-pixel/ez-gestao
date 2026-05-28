@@ -137,9 +137,9 @@ export default function EmpresaDetalhe() {
         </div>
         <div className="flex gap-2 px-6 py-3 border-t border-border/40 bg-muted/20">
           <div className="mr-auto flex items-center gap-2 rounded-lg border border-border/50 bg-background/50 px-3 text-xs">
-            Canal de guias: <span className="font-semibold capitalize">{empresa.canalPreferido || 'nao configurado'}</span>
+            Canal de guias: <span className="font-semibold capitalize">{empresa.canalPreferido || 'não configurado'}</span>
             {empresa.canalPreferido === 'whatsapp' && !empresa.whatsappOptInAt && <span className="text-warning">sem opt-in</span>}
-            {empresa.canalPreferido === 'email' && !empresa.emailValidado && <span className="text-warning">nao validado</span>}
+            {empresa.canalPreferido === 'email' && !empresa.emailValidado && <span className="text-warning">não validado</span>}
           </div>
           <Button variant="outline" size="sm" className="text-xs gap-1.5 h-8" onClick={() => fileInputRef.current?.click()}>
             <Upload className="h-3.5 w-3.5" /> Upload PDF
@@ -199,7 +199,7 @@ export default function EmpresaDetalhe() {
             <>
               <HealthBar validas={validas} vencendo={vencendo} vencidas={vencidas} pendentes={pendentes} total={cnds.length} showLabels className="px-1" />
               {Object.entries(cndsByType).map(([tipo, items]) => {
-                const tipoValidas = items.filter(c => c.status === 'valida').length;
+                const tipoValidas = items.filter(c => c.status === 'válida').length;
                 return (
                   <div key={tipo}>
                     <div className="flex items-center justify-between mb-2 px-1">

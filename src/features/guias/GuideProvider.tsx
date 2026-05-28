@@ -161,7 +161,7 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ['guia_excecoes'] });
-      toast.success('Excecao resolvida');
+      toast.success('Exceção resolvida');
     },
   });
 

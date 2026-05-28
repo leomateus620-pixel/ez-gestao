@@ -5,7 +5,7 @@ Este projeto **não executa whatsapp-web.js em Edge Functions**. O provider roda
 ## Endpoints obrigatórios
 - `GET /health` → `{ "ok": true, "connected": true, "provider": "whatsapp-webjs" }`
 - `GET /qr` → retorna QR Code da sessão quando não autenticada (não expor publicamente)
-- `POST /send-message` → valida HMAC, envia via whatsapp-web.js e retorna `{ "ok": true, "external_message_id": "...", "status": "sent" }`
+- `POST /send-message` → válida HMAC, envia via whatsapp-web.js e retorna `{ "ok": true, "external_message_id": "...", "status": "sent" }`
 - `POST /logout` → encerra sessão do WhatsApp
 
 ## Contrato de envio

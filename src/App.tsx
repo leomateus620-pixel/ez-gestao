@@ -24,13 +24,13 @@ const Documentos = lazyRetry(() => import('./pages/Documentos'));
 const Envios = lazyRetry(() => import('./pages/Envios'));
 const Alertas = lazyRetry(() => import('./pages/Alertas'));
 const Logs = lazyRetry(() => import('./pages/Logs'));
-const Configuracoes = lazyRetry(() => import('./pages/Configuracoes'));
-const Automacao = lazyRetry(() => import('./pages/Automacao'));
-const Execucoes = lazyRetry(() => import('./pages/Execucoes'));
+const Configuracoes = lazyRetry(() => import('./pages/Configurações'));
+const Automacao = lazyRetry(() => import('./pages/Automação'));
+const Execucoes = lazyRetry(() => import('./pages/Execuções'));
 const ExecucaoDetalhe = lazyRetry(() => import('./pages/ExecucaoDetalhe'));
-const Integracoes = lazyRetry(() => import('./pages/Integracoes'));
+const Integracoes = lazyRetry(() => import('./pages/Integrações'));
 const FatorR = lazyRetry(() => import('./pages/FatorR'));
-const Excecoes = lazyRetry(() => import('./pages/Excecoes'));
+const Excecoes = lazyRetry(() => import('./pages/Exceções'));
 const Classifica = lazyRetry(() => import('./pages/Classifica'));
 const Guias = lazyRetry(() => import('./pages/guias/Guias'));
 const GuiaDetalhe = lazyRetry(() => import('./pages/guias/GuiaDetalhe'));
@@ -92,7 +92,7 @@ function ProvidersBoundary({ children }: { children: React.ReactNode }) {
 function AuthenticatedApp() {
   const { session, isLoading, error, retry } = useAuth();
   if (isLoading) {
-    return <LoadingFallback message="Verificando sessao..." />;
+    return <LoadingFallback message="Verificando sessão..." />;
   }
   if (error && !session) {
     return (
@@ -100,7 +100,7 @@ function AuthenticatedApp() {
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10">
           <RefreshCw className="h-6 w-6 text-destructive" />
         </div>
-        <h2 className="text-base font-semibold">Nao conseguimos iniciar o app</h2>
+        <h2 className="text-base font-semibold">Não conseguimos iniciar o app</h2>
         <p className="max-w-md text-sm text-foreground/60">{error}</p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={retry}>Tentar novamente</Button>
@@ -142,14 +142,14 @@ function AuthenticatedApp() {
                   <Route path="/logs" element={<Logs />} />
                   <Route path="/automacao" element={<Automacao />} />
                   <Route path="/execucoes" element={<Execucoes />} />
-                  <Route path="/execucoes/:id" element={<ExecucaoDetalhe />} />
+                  <Route path="/execuções/:id" element={<ExecucaoDetalhe />} />
                   <Route path="/legado/integracoes" element={<Integracoes />} />
                   <Route path="/excecoes" element={<Excecoes />} />
                   <Route path="/consulta" element={<ConsultaIndex />} />
                   <Route path="/consulta/historico" element={<ConsultaHistorico />} />
                   <Route path="/consulta/excecoes" element={<ConsultaExcecoes />} />
                   <Route path="/consulta/saude" element={<ConsultaSaude />} />
-                  <Route path="/consulta/relatorios/:id" element={<ConsultaRelatorio />} />
+                  <Route path="/consulta/relatórios/:id" element={<ConsultaRelatorio />} />
                   <Route path="/whatsapp" element={<WhatsAppPage />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>

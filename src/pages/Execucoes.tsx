@@ -141,7 +141,7 @@ export default function Execucoes() {
                                 {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                               </Button>
                             </CollapsibleTrigger>
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => navigate(`/execucoes/${run.id}`)}>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => navigate(`/execuções/${run.id}`)}>
                               <Eye className="h-3.5 w-3.5" />
                             </Button>
                           </div>
@@ -179,7 +179,7 @@ export default function Execucoes() {
                                     <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1" onClick={() => toast({ title: 'Enviado para exceção' })}>
                                       <AlertTriangle className="h-3 w-3" /> Criar Exceção
                                     </Button>
-                                    <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => navigate(`/execucoes/${run.id}`)}>
+                                    <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => navigate(`/execuções/${run.id}`)}>
                                       Ver detalhe →
                                     </Button>
                                   </div>

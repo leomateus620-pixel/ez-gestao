@@ -25,7 +25,7 @@ export const ERROR_LABELS: Record<string, { label: string; suggestion: string }>
   navigation_error: { label: "Erro de navegação", suggestion: "Tente reprocessar." },
   parsing_error: { label: "Erro ao extrair dados", suggestion: "Layout pode ter mudado. Reportar." },
   worker_unreachable: { label: "Worker Cloudflare inalcançável", suggestion: "Verifique deploy e secrets do Worker." },
-  worker_auth_failed: { label: "Worker rejeitou HMAC", suggestion: "Os segredos LOVABLE_HMAC_SECRET (Worker) e CLOUDFLARE_WORKER_HMAC_SECRET (Lovable) estão diferentes. Rode 'Diagnosticar HMAC' em /consulta/saude." },
+  worker_auth_failed: { label: "Worker rejeitou HMAC", suggestion: "Os segredos LOVABLE_HMAC_SECRET (Worker) e CLOUDFLARE_WORKER_HMAC_SECRET (Lovable) estão diferentes. Rode 'Diagnosticar HMAC' em /consulta/saúde." },
   worker_not_configured: { label: "Worker não configurado", suggestion: "Defina secrets de URL e HMAC." },
   runtime_incompatibility: {
     label: "Incompatibilidade de runtime",

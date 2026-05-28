@@ -29,8 +29,8 @@ export default function Login() {
           <div className="mb-8 flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent text-sm font-bold text-white shadow-lg shadow-primary/20">EZ</div>
             <div>
-              <p className="text-xl font-bold tracking-tight">EZ Gestao</p>
-              <p className="text-xs text-foreground/55">Automacao segura de guias</p>
+              <p className="text-xl font-bold tracking-tight">EZ Gestão</p>
+              <p className="text-xs text-foreground/55">Automação segura de guias</p>
             </div>
           </div>
           <h1 className="text-2xl font-bold">Acesso administrativo</h1>
@@ -51,7 +51,7 @@ export default function Login() {
                 <Input id="password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} className="pl-10" />
               </div>
             </div>
-            {error && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">Credenciais invalidas ou acesso nao autorizado.</p>}
+            {error && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">Credenciais invalidas ou acesso não autorizado.</p>}
             <Button type="submit" disabled={submitting} className="h-11 w-full">
               {submitting ? 'Autenticando...' : 'Entrar'}
             </Button>

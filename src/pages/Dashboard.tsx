@@ -27,7 +27,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-slide-in">
-      <PageHeader title="Envio de Guias" subtitle="Automacao Drive, Gmail e WhatsApp com rastreabilidade completa.">
+      <PageHeader title="Envio de Guias" subtitle="Automação Drive, Gmail e WhatsApp com rastreabilidade completa.">
         <Button onClick={runScan} disabled={isScanning} className="gap-2">
           <FileText className="h-4 w-4" /> {isScanning ? 'Processando...' : 'Processar agora'}
         </Button>
@@ -38,7 +38,7 @@ export default function Dashboard() {
         <MetricCard title="Enviadas" value={metrics.sent} icon={Send} color="success" onClick={() => navigate('/guias/enviadas')} />
         <MetricCard title="Excecoes" value={metrics.reviewing} icon={AlertTriangle} color="warning" onClick={() => navigate('/guias/excecoes')} />
         <MetricCard title="Falhas" value={metrics.failures} icon={AlertTriangle} color="destructive" onClick={() => navigate('/guias/excecoes')} />
-        <MetricCard title="Tempo medio" value={`${averageMinutes} min`} icon={Clock} color="primary" />
+        <MetricCard title="Tempo médio" value={`${averageMinutes} min`} icon={Clock} color="primary" />
         <MetricCard title="Entregues" value={delivered} icon={ShieldCheck} color="accent" />
       </div>
 
@@ -48,7 +48,7 @@ export default function Dashboard() {
             <Button variant="ghost" size="sm" asChild><Link to="/guias/fila">Abrir fila <ArrowRight className="ml-1 h-3.5 w-3.5" /></Link></Button>
           </SectionHeader>
           <div className="space-y-2">
-            {recent.length === 0 && <p className="rounded-xl border border-dashed border-border/70 p-9 text-center text-sm text-foreground/55">A pasta `a enviar` ainda nao retornou guias.</p>}
+            {recent.length === 0 && <p className="rounded-xl border border-dashed border-border/70 p-9 text-center text-sm text-foreground/55">A pasta `a enviar` ainda não retornou guias.</p>}
             {recent.map((guide) => {
               const company = state.empresas.find((entry) => entry.id === guide.empresaId);
               return (
@@ -81,7 +81,7 @@ export default function Dashboard() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <GlassCard>
-          <SectionHeader title="Excecoes abertas" icon={AlertTriangle}>
+          <SectionHeader title="Exceções abertas" icon={AlertTriangle}>
             <Button variant="ghost" size="sm" asChild><Link to="/guias/excecoes">Analisar <ArrowRight className="ml-1 h-3.5 w-3.5" /></Link></Button>
           </SectionHeader>
           <div className="space-y-2">
@@ -106,7 +106,7 @@ export default function Dashboard() {
                 <p className="mt-2 text-sm font-semibold capitalize">{integration.status}</p>
               </div>
             ))}
-            {integrations.length === 0 && <p className="col-span-2 py-8 text-center text-sm text-foreground/55">Conectores aguardando configuracao.</p>}
+            {integrations.length === 0 && <p className="col-span-2 py-8 text-center text-sm text-foreground/55">Conectores aguardando configuração.</p>}
           </div>
         </GlassCard>
       </div>
