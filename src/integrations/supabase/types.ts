@@ -1161,6 +1161,389 @@ export type Database = {
           },
         ]
       }
+      fator_r_alerts: {
+        Row: {
+          alert_type: string
+          body: string
+          company_id: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          monthly_result_id: string | null
+          recipient_email: string
+          sent_at: string | null
+          status: string
+          subject: string
+        }
+        Insert: {
+          alert_type: string
+          body?: string
+          company_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          monthly_result_id?: string | null
+          recipient_email: string
+          sent_at?: string | null
+          status?: string
+          subject: string
+        }
+        Update: {
+          alert_type?: string
+          body?: string
+          company_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          monthly_result_id?: string | null
+          recipient_email?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fator_r_alerts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "fator_r_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fator_r_alerts_monthly_result_id_fkey"
+            columns: ["monthly_result_id"]
+            isOneToOne: false
+            referencedRelation: "fator_r_monthly_results"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fator_r_audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      fator_r_companies: {
+        Row: {
+          active: boolean
+          cnpj: string | null
+          created_at: string
+          drive_folder_id: string | null
+          id: string
+          name: string
+          normalized_cnpj: string | null
+          responsible_email: string | null
+          secondary_emails: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          cnpj?: string | null
+          created_at?: string
+          drive_folder_id?: string | null
+          id?: string
+          name: string
+          normalized_cnpj?: string | null
+          responsible_email?: string | null
+          secondary_emails?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          cnpj?: string | null
+          created_at?: string
+          drive_folder_id?: string | null
+          id?: string
+          name?: string
+          normalized_cnpj?: string | null
+          responsible_email?: string | null
+          secondary_emails?: string[] | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      fator_r_documents: {
+        Row: {
+          cloud_storage_path: string | null
+          company_id: string | null
+          computed_fator_r: number | null
+          created_at: string
+          declared_fator_r: number | null
+          detected_cnpj: string | null
+          detected_company_name: string | null
+          drive_file_id: string
+          drive_file_name: string
+          drive_folder_id: string | null
+          drive_mime_type: string | null
+          drive_parent_path: string | null
+          drive_web_url: string | null
+          error_message: string | null
+          extracted_data: Json
+          extraction_confidence: number | null
+          fator_r_status: string | null
+          file_hash: string | null
+          file_month: number | null
+          file_year: number | null
+          id: string
+          not_applicable: boolean | null
+          processed_at: string | null
+          processing_status: string
+          raw_text: string | null
+          storage_status: string
+          uploaded_at: string | null
+        }
+        Insert: {
+          cloud_storage_path?: string | null
+          company_id?: string | null
+          computed_fator_r?: number | null
+          created_at?: string
+          declared_fator_r?: number | null
+          detected_cnpj?: string | null
+          detected_company_name?: string | null
+          drive_file_id: string
+          drive_file_name: string
+          drive_folder_id?: string | null
+          drive_mime_type?: string | null
+          drive_parent_path?: string | null
+          drive_web_url?: string | null
+          error_message?: string | null
+          extracted_data?: Json
+          extraction_confidence?: number | null
+          fator_r_status?: string | null
+          file_hash?: string | null
+          file_month?: number | null
+          file_year?: number | null
+          id?: string
+          not_applicable?: boolean | null
+          processed_at?: string | null
+          processing_status?: string
+          raw_text?: string | null
+          storage_status?: string
+          uploaded_at?: string | null
+        }
+        Update: {
+          cloud_storage_path?: string | null
+          company_id?: string | null
+          computed_fator_r?: number | null
+          created_at?: string
+          declared_fator_r?: number | null
+          detected_cnpj?: string | null
+          detected_company_name?: string | null
+          drive_file_id?: string
+          drive_file_name?: string
+          drive_folder_id?: string | null
+          drive_mime_type?: string | null
+          drive_parent_path?: string | null
+          drive_web_url?: string | null
+          error_message?: string | null
+          extracted_data?: Json
+          extraction_confidence?: number | null
+          fator_r_status?: string | null
+          file_hash?: string | null
+          file_month?: number | null
+          file_year?: number | null
+          id?: string
+          not_applicable?: boolean | null
+          processed_at?: string | null
+          processing_status?: string
+          raw_text?: string | null
+          storage_status?: string
+          uploaded_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fator_r_documents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "fator_r_companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fator_r_drive_folders: {
+        Row: {
+          created_at: string
+          drive_folder_id: string
+          id: string
+          kind: string
+          parent_folder_id: string | null
+          path: string
+        }
+        Insert: {
+          created_at?: string
+          drive_folder_id: string
+          id?: string
+          kind: string
+          parent_folder_id?: string | null
+          path: string
+        }
+        Update: {
+          created_at?: string
+          drive_folder_id?: string
+          id?: string
+          kind?: string
+          parent_folder_id?: string | null
+          path?: string
+        }
+        Relationships: []
+      }
+      fator_r_monthly_results: {
+        Row: {
+          company_id: string
+          computed_fator_r: number | null
+          created_at: string
+          declared_fator_r: number | null
+          document_id: string | null
+          fator_r_percent: number | null
+          fator_r_value: number | null
+          id: string
+          metadata: Json
+          not_applicable: boolean | null
+          payroll_12m: number | null
+          recommendation: string | null
+          reference_month: number
+          reference_year: number
+          revenue_12m: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          computed_fator_r?: number | null
+          created_at?: string
+          declared_fator_r?: number | null
+          document_id?: string | null
+          fator_r_percent?: number | null
+          fator_r_value?: number | null
+          id?: string
+          metadata?: Json
+          not_applicable?: boolean | null
+          payroll_12m?: number | null
+          recommendation?: string | null
+          reference_month: number
+          reference_year: number
+          revenue_12m?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          computed_fator_r?: number | null
+          created_at?: string
+          declared_fator_r?: number | null
+          document_id?: string | null
+          fator_r_percent?: number | null
+          fator_r_value?: number | null
+          id?: string
+          metadata?: Json
+          not_applicable?: boolean | null
+          payroll_12m?: number | null
+          recommendation?: string | null
+          reference_month?: number
+          reference_year?: number
+          revenue_12m?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fator_r_monthly_results_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "fator_r_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fator_r_monthly_results_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "fator_r_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fator_r_processing_logs: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          document_id: string | null
+          event_type: string
+          id: string
+          message: string
+          payload: Json
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          document_id?: string | null
+          event_type: string
+          id?: string
+          message?: string
+          payload?: Json
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          document_id?: string | null
+          event_type?: string
+          id?: string
+          message?: string
+          payload?: Json
+        }
+        Relationships: []
+      }
+      fator_r_sync_config: {
+        Row: {
+          email_alerts_enabled: boolean
+          id: string
+          last_run_at: string | null
+          sync_enabled: boolean
+          updated_at: string
+        }
+        Insert: {
+          email_alerts_enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          sync_enabled?: boolean
+          updated_at?: string
+        }
+        Update: {
+          email_alerts_enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          sync_enabled?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       feature_flags: {
         Row: {
           description: string
