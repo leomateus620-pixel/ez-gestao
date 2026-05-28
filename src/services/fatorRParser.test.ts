@@ -1,48 +1,87 @@
 import { describe, expect, it } from 'vitest';
-import { classifyFatorR, parseFatorRFromText } from './fatorRParser';
+import { parsePgdasFatorR } from './fatorRParser';
 
-describe('parseFatorRFromText', () => {
-  it('interprets an attention PGDAS extract with decimal Fator R', () => {
-    const result = parseFatorRFromText(`
-      PGDAS-D Extrato do Simples Nacional
-      Razão Social: Cliente Atenção Ltda
-      CNPJ: 12.345.678/0001-90
-      Período de Apuração: 05/2026
-      Receita bruta acumulada RBT12: R$ 950.000,00
-      Folha de salários FS12: R$ 304.000,00
-      Fator R apurado: 0,32
-    `, 'pgdas-cliente-atencao-05-2026.pdf');
+const baseHeader = (company: string, cnpj: string) => `
+Extrato do Simples Nacional
+CNPJ Básico: ${cnpj.slice(0, 10)} Nome Empresarial: ${company}
+CNPJ Estabelecimento: ${cnpj}
+Período de Apuração (PA): 04/2026
+`;
 
-    expect(result.cnpj).toBe('12.345.678/0001-90');
-    expect(result.referenceMonth).toBe(5);
-    expect(result.referenceYear).toBe(2026);
-    expect(result.fatorRValue).toBeCloseTo(0.32);
-    expect(result.fatorRPercent).toBeCloseTo(32);
-    expect(classifyFatorR(result.fatorRValue)).toBe('attention');
-  });
+describe('parsePgdasFatorR', () => {
+  it('interpreta PGDAS com Fator R não aplicável sem gerar alerta', () => {
+    const text = `
+${baseHeader('FELIPE HAMMES DIESEL', '55.371.662/0001-60')}
+Receita bruta acumulada nos doze meses anteriores ao PA (RBT12) 248.528,94 0,00 248.528,94
+2.3) Folhas de Salários Anteriores
+Nenhuma
+Fator r = Não se aplica
+`;
 
-  it('interprets a critical PGDAS extract with percentage Fator R', () => {
-    const result = parseFatorRFromText(`
-      Nome Empresarial: Cliente Crítico Serviços Médicos
-      CNPJ 98.765.432/0001-10
-      PA 2026-04
-      RBT12 R$ 1.200.000,00
-      FS12 R$ 336.000,00
-      Percentual do Fator R: 28,00%
-    `);
+    const result = parsePgdasFatorR(text, '042026 SERV. 7,43%.pdf');
 
+    expect(result.companyName).toBe('FELIPE HAMMES DIESEL');
+    expect(result.cnpj).toBe('55.371.662/0001-60');
     expect(result.referenceMonth).toBe(4);
     expect(result.referenceYear).toBe(2026);
-    expect(result.fatorRValue).toBeCloseTo(0.28);
-    expect(result.fatorRPercent).toBeCloseTo(28);
-    expect(classifyFatorR(result.fatorRValue)).toBe('critical');
+    expect(result.revenue12m).toBe(248528.94);
+    expect(result.payroll12m).toBeNull();
+    expect(result.folhaAusente).toBe(true);
+    expect(result.notApplicable).toBe(true);
+    expect(result.status).toBe('not_applicable');
+    expect(result.shouldAlert).toBe(false);
+    expect(result.confidence).toBeGreaterThanOrEqual(0.9);
   });
 
-  it('classifies values above 32% as safe', () => {
-    const result = parseFatorRFromText('Competência: março de 2026 Fator R: 33,50% CNPJ: 11.222.333/0001-44');
+  it('captura RBT12, total de FS12 e Fator R declarado em status atenção', () => {
+    const text = `
+${baseHeader('CRISTINE SCHWINGEL LTDA', '44.527.939/0001-84')}
+Receita bruta acumulada nos doze meses anteriores ao PA (RBT12) 244.000,00 0,00 244.000,00
+2.3) Folhas de Salários Anteriores
+04/2025 R$ 4.200,00
+05/2025 R$ 4.250,00
+2.3.1) Total de Folhas de Salários Anteriores (R$) R$ 76.608,07
+Fator r = 0,31 - Anexo III
+`;
 
-    expect(result.referenceMonth).toBe(3);
+    const result = parsePgdasFatorR(text, '042026 SERV. 7,36%.pdf');
+
+    expect(result.companyName).toBe('CRISTINE SCHWINGEL LTDA');
+    expect(result.cnpj).toBe('44.527.939/0001-84');
+    expect(result.referenceMonth).toBe(4);
     expect(result.referenceYear).toBe(2026);
-    expect(classifyFatorR(result.fatorRValue)).toBe('safe');
+    expect(result.revenue12m).toBe(244000);
+    expect(result.payroll12m).toBe(76608.07);
+    expect(result.declaredFatorRValue).toBe(0.31);
+    expect(result.fatorRValue).toBe(0.31);
+    expect(result.computedFatorRValue).toBeCloseTo(0.3139675, 6);
+    expect(result.status).toBe('attention');
+    expect(result.shouldAlert).toBe(true);
+    expect(result.confidence).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('classifica como crítico quando o Fator R declarado é 0,28', () => {
+    const text = `
+${baseHeader('E R ZANCAN CORRETORA DE SEGUROS LTDA', '54.767.050/0001-28')}
+Receita bruta acumulada nos doze meses anteriores ao PA (RBT12) 196.305,84 0,00 196.305,84
+2.3) Folhas de Salários Anteriores
+04/2025 R$ 3.900,00
+2.3.1) Total de Folhas de Salários Anteriores (R$) R$ 55.437,28
+Fator r = 0,28 - Anexo III
+`;
+
+    const result = parsePgdasFatorR(text, '042026 SERV. 6,43%.pdf');
+
+    expect(result.companyName).toBe('E R ZANCAN CORRETORA DE SEGUROS LTDA');
+    expect(result.cnpj).toBe('54.767.050/0001-28');
+    expect(result.referenceMonth).toBe(4);
+    expect(result.referenceYear).toBe(2026);
+    expect(result.revenue12m).toBe(196305.84);
+    expect(result.payroll12m).toBe(55437.28);
+    expect(result.declaredFatorRValue).toBe(0.28);
+    expect(result.computedFatorRValue).toBeCloseTo(0.2824, 4);
+    expect(result.status).toBe('critical');
+    expect(result.shouldAlert).toBe(true);
+    expect(result.confidence).toBeGreaterThanOrEqual(0.9);
   });
 });
