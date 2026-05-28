@@ -171,11 +171,13 @@ export function extractFatorR(lines: string[]) {
 
 export function classifyFatorR(input: number | null | Pick<FatorRParseResult, 'fatorRValue' | 'notApplicable'>): FatorRStatus {
   let value: number | null;
-  if (input !== null && typeof input === 'object') {
+  if (typeof input === 'number') {
+    value = input;
+  } else if (input === null) {
+    value = null;
+  } else {
     if (input.notApplicable) return 'not_applicable';
     value = input.fatorRValue;
-  } else {
-    value = input;
   }
   if (value === null || !Number.isFinite(value)) return 'unknown';
   if (value <= FATOR_R_CRITICAL_THRESHOLD) return 'critical';
