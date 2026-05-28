@@ -199,7 +199,7 @@ export default function EmpresaDetalhe() {
             <>
               <HealthBar validas={validas} vencendo={vencendo} vencidas={vencidas} pendentes={pendentes} total={cnds.length} showLabels className="px-1" />
               {Object.entries(cndsByType).map(([tipo, items]) => {
-                const tipoValidas = items.filter(c => c.status === 'válida').length;
+                const tipoValidas = items.filter(c => c.status === 'valida').length;
                 return (
                   <div key={tipo}>
                     <div className="flex items-center justify-between mb-2 px-1">
