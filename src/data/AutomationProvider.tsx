@@ -101,20 +101,22 @@ interface AutomationContextValue {
   criticalExceptions: ExceptionItem[];
   exceptionsByTipologia: Record<ExceptionTipologia, number>;
   unstableConnectors: Connector[];
+  enableHeavyData: () => void;
 }
 
 const AutomationContext = createContext<AutomationContextValue | null>(null);
 
 export function AutomationProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
+  const [heavyEnabled, setHeavyEnabled] = React.useState(false);
 
   const { data: connectors = [], isLoading: lC } = useQuery({ queryKey: ['connectors'], queryFn: fetchConnectors });
-  const { data: runs = [], isLoading: lR } = useQuery({ queryKey: ['connector_runs'], queryFn: fetchRuns });
+  const { data: runs = [], isLoading: lR } = useQuery({ queryKey: ['connector_runs'], queryFn: fetchRuns, enabled: heavyEnabled });
   const { data: exceptions = [], isLoading: lE } = useQuery({ queryKey: ['exceptions'], queryFn: fetchExceptions });
-  const { data: batches = [] } = useQuery({ queryKey: ['batches'], queryFn: fetchBatches });
-  const { data: healthLogs = [] } = useQuery({ queryKey: ['health_logs'], queryFn: fetchHealthLogs });
+  const { data: batches = [] } = useQuery({ queryKey: ['batches'], queryFn: fetchBatches, enabled: heavyEnabled });
+  const { data: healthLogs = [] } = useQuery({ queryKey: ['health_logs'], queryFn: fetchHealthLogs, enabled: heavyEnabled });
 
-  const isLoading = lC || lR || lE;
+  const isLoading = lC || lE || (heavyEnabled && lR);
 
   const state = useMemo<AutomationState>(() => ({
     connectors, runs, exceptions, batches, healthLogs,
@@ -207,6 +209,7 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
     state, isLoading, dispatch, addRun, updateRun, addException, resolveException, requeueException,
     discardException, assignException, updateConnectorStatus, pendingExceptions, criticalExceptions,
     exceptionsByTipologia, unstableConnectors,
+    enableHeavyData: () => setHeavyEnabled(true),
   }), [state, isLoading, addRun, updateRun, addException, resolveException, requeueException,
     discardException, assignException, updateConnectorStatus, pendingExceptions, criticalExceptions,
     exceptionsByTipologia, unstableConnectors]);

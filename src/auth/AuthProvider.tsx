@@ -13,19 +13,42 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function readCachedSession(): Session | null {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      const candidate = parsed?.currentSession ?? parsed;
+      if (candidate?.access_token && candidate?.user) {
+        const expiresAt = candidate.expires_at ?? 0;
+        if (!expiresAt || expiresAt * 1000 > Date.now()) {
+          return candidate as Session;
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [cachedSession] = useState<Session | null>(() => readCachedSession());
+  const [session, setSession] = useState<Session | null>(cachedSession);
+  const [isLoading, setIsLoading] = useState(cachedSession === null);
   const [error, setError] = useState<string | null>(null);
   const [bootAttempt, setBootAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    setIsLoading(true);
+    if (!cachedSession) setIsLoading(true);
     setError(null);
 
     const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
-      window.setTimeout(() => resolve({ timedOut: true }), 6000);
+      window.setTimeout(() => resolve({ timedOut: true }), 3000);
     });
 
     Promise.race([
@@ -36,15 +59,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         if ('timedOut' in outcome && outcome.timedOut === true && !('res' in outcome)) {
           console.error('[auth] getSession timed out');
-          setError('Tempo esgotado ao verificar a sessão. Verifique sua conexão.');
-          setSession(null);
+          if (!cachedSession) {
+            setError('Tempo esgotado ao verificar a sessão. Verifique sua conexão.');
+            setSession(null);
+          }
           setIsLoading(false);
           return;
         }
         const { res } = outcome as { res: Awaited<ReturnType<typeof supabase.auth.getSession>> };
         if (res.error) {
           console.error('[auth] getSession error', res.error);
-          setError(res.error.message);
+          if (!cachedSession) setError(res.error.message);
         }
         setSession(res.data?.session ?? null);
         setIsLoading(false);
@@ -52,8 +77,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .catch((err) => {
         if (cancelled) return;
         console.error('[auth] getSession threw', err);
-        setError(err?.message ?? 'Falha ao inicializar autenticação');
-        setSession(null);
+        if (!cachedSession) {
+          setError(err?.message ?? 'Falha ao inicializar autenticação');
+          setSession(null);
+        }
         setIsLoading(false);
       });
 
@@ -68,7 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       data.subscription.unsubscribe();
     };
-  }, [bootAttempt]);
+  }, [bootAttempt, cachedSession]);
 
   const value = useMemo<AuthContextValue>(() => ({
     session,
