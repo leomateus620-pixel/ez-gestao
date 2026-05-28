@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
 import { getFatorRRecommendation, parsePgdasFatorR, type FatorRStatus } from "../_shared/fatorRParser.ts";
+import { computeSha256, findExistingByName, resolveCompanyFolder, uploadPdf } from "../_shared/fator-r-drive-storage.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -96,11 +97,19 @@ serve(async (req) => {
       await logStep(supabase, { eventType: "fator_r_classified", message: `Fator R classificado como ${status}`, data: { status, confidence: parsed.confidence } });
 
       const alert = shouldSendAlert(status, parsed.confidence);
-      const resultPayload = { fileName: file.name, status, recommendation: getFatorRRecommendation(status), alert, alertFrom, alertTo, parsed };
+      const resultPayload: any = { fileName: file.name, status, recommendation: getFatorRRecommendation(status), alert, alertFrom, alertTo, parsed };
 
       let companyId = null;
       let documentId = null;
       let monthlyResultId = null;
+
+      const fileHash = await computeSha256(bytes);
+      let driveFileId: string | null = null;
+      let driveWebUrl: string | null = null;
+      let driveFolderId: string | null = null;
+      let cloudStoragePath: string | null = null;
+      let storageStatus: "uploaded" | "skipped_duplicate" | "failed" | "pending" = "pending";
+      let uploadedAt: string | null = null;
 
       if (persist) {
         if (parsed.cnpj && !parsed.cnpjIsPartial) {
@@ -119,11 +128,74 @@ serve(async (req) => {
           }
         }
 
+        // Deduplicação por hash (qualquer empresa) ou por (empresa, período, nome)
+        let dup: any = null;
+        const byHash = await supabase.from("fator_r_documents").select("id, drive_file_id, drive_web_url, drive_folder_id, cloud_storage_path, storage_status").eq("file_hash", fileHash).maybeSingle();
+        if (byHash.data) dup = byHash.data;
+        if (!dup && companyId && parsed.referenceMonth && parsed.referenceYear) {
+          const byName = await supabase.from("fator_r_documents")
+            .select("id, drive_file_id, drive_web_url, drive_folder_id, cloud_storage_path, storage_status")
+            .eq("company_id", companyId).eq("file_year", parsed.referenceYear).eq("file_month", parsed.referenceMonth)
+            .eq("drive_file_name", file.name).maybeSingle();
+          if (byName.data) dup = byName.data;
+        }
+
+        // Tenta enviar ao Drive (best-effort)
+        const driveKey = Deno.env.get("GOOGLE_DRIVE_API_KEY");
+        const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+        const rootName = Deno.env.get("FATOR_R_DRIVE_ROOT_NAME") || "PGDAS - Monitoramento Fator R";
+        const rootParentId = Deno.env.get("FATOR_R_DRIVE_ROOT_PARENT_ID") || null;
+
+        if (dup) {
+          driveFileId = dup.drive_file_id ?? null;
+          driveWebUrl = dup.drive_web_url ?? null;
+          driveFolderId = dup.drive_folder_id ?? null;
+          cloudStoragePath = dup.cloud_storage_path ?? null;
+          storageStatus = "skipped_duplicate";
+          await logStep(supabase, { companyId, eventType: "drive_duplicate_skipped", message: `Duplicado ignorado: ${file.name}`, data: { file_hash: fileHash } });
+        } else if (driveKey && lovableKey && parsed.companyName && parsed.cnpj && parsed.referenceMonth && parsed.referenceYear) {
+          try {
+            const { folderId, logicalPath } = await resolveCompanyFolder({
+              supabase, driveKey, lovableKey, rootName, rootParentId,
+              companyName: parsed.companyName, cnpj: parsed.cnpj,
+              year: parsed.referenceYear, month: parsed.referenceMonth, companyId,
+            });
+            driveFolderId = folderId;
+            cloudStoragePath = `${logicalPath}/${file.name}`;
+            const existing = await findExistingByName(folderId, file.name, driveKey, lovableKey);
+            if (existing) {
+              driveFileId = existing.id;
+              driveWebUrl = existing.webViewLink;
+              storageStatus = "skipped_duplicate";
+              await logStep(supabase, { companyId, eventType: "drive_duplicate_skipped", message: `Arquivo já existente no Drive: ${file.name}`, data: { drive_file_id: existing.id } });
+            } else {
+              const uploaded = await uploadPdf({ bytes, name: file.name, parentId: folderId, driveKey, lovableKey });
+              driveFileId = uploaded.id;
+              driveWebUrl = uploaded.webViewLink;
+              storageStatus = "uploaded";
+              uploadedAt = new Date().toISOString();
+              await logStep(supabase, { companyId, eventType: "drive_upload_success", message: `PDF enviado ao Drive: ${file.name}`, data: { drive_file_id: uploaded.id, path: cloudStoragePath } });
+            }
+          } catch (e) {
+            storageStatus = "failed";
+            await logStep(supabase, { companyId, eventType: "drive_upload_failed", message: `Falha no Drive: ${e instanceof Error ? e.message : String(e)}`, data: { file_name: file.name } });
+          }
+        } else if (!driveKey || !lovableKey) {
+          storageStatus = "failed";
+          await logStep(supabase, { companyId, eventType: "drive_upload_failed", message: "Drive não configurado (GOOGLE_DRIVE_API_KEY/LOVABLE_API_KEY ausente).", data: {} });
+        }
+
         const doc = await supabase.from("fator_r_documents").insert({
           company_id: companyId,
-          drive_file_id: `manual:${crypto.randomUUID()}`,
+          drive_file_id: driveFileId ?? `manual:${crypto.randomUUID()}`,
           drive_file_name: file.name,
           drive_mime_type: "application/pdf",
+          drive_web_url: driveWebUrl,
+          drive_folder_id: driveFolderId,
+          cloud_storage_path: cloudStoragePath,
+          file_hash: fileHash,
+          storage_status: storageStatus,
+          uploaded_at: uploadedAt,
           file_month: parsed.referenceMonth,
           file_year: parsed.referenceYear,
           detected_cnpj: parsed.cnpj,
@@ -134,11 +206,14 @@ serve(async (req) => {
           fator_r_status: status,
           not_applicable: parsed.notApplicable,
           raw_text: rawText.slice(0, 20000),
-          extracted_data: { ...resultPayload, declared_fator_r: parsed.declaredFatorRValue, computed_fator_r: parsed.computedFatorRValue, fator_r_status: status, not_applicable: parsed.notApplicable, source: "manual_pdf_upload" },
+          extracted_data: { ...resultPayload, declared_fator_r: parsed.declaredFatorRValue, computed_fator_r: parsed.computedFatorRValue, fator_r_status: status, not_applicable: parsed.notApplicable, source: "manual_pdf_upload", storage_status: storageStatus, drive_web_url: driveWebUrl, cloud_storage_path: cloudStoragePath },
           processing_status: "processed",
           processed_at: new Date().toISOString(),
         }).select("id").single();
         documentId = doc.data?.id ?? null;
+        if (documentId) {
+          await logStep(supabase, { documentId, companyId, eventType: "file_processed", message: `Arquivo ${file.name} vinculado.`, data: { storage_status: storageStatus, drive_web_url: driveWebUrl } });
+        }
 
         if (companyId && parsed.fatorRValue !== null && parsed.referenceMonth && parsed.referenceYear && status !== "not_applicable" && status !== "unknown") {
           const upsert = await supabase.from("fator_r_monthly_results").upsert({
@@ -180,7 +255,7 @@ serve(async (req) => {
         if (persist && alertId) await supabase.from("fator_r_alerts").update({ status: resp.error ? "failed" : "sent", sent_at: resp.error ? null : new Date().toISOString(), error_message: resp.error?.message ?? null }).eq("id", alertId);
       }
 
-      processed.push({ ...resultPayload, companyId, documentId, monthlyResultId, email });
+      processed.push({ ...resultPayload, companyId, documentId, monthlyResultId, email, driveWebUrl, storageStatus, cloudStoragePath, driveFileId });
     }
 
     return Response.json({ ok: true, processed }, { headers: cors });
