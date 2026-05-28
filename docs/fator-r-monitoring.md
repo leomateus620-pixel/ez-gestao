@@ -5,9 +5,9 @@ Automatizar leitura de documentos PGDAS do Google Drive, calcular/registrar Fato
 
 ## Configuração do Google Drive
 1. Criar pasta global (ex.: `PGDAS - Fator R - Empresas`).
-2. Compartilhar com o e-mail da Service Account (`GOOGLE_SERVICE_ACCOUNT_EMAIL`) ou configurar conexão Google Drive no gateway (`GOOGLE_DRIVE_API_KEY`).
+2. Compartilhar com o e-mail da Service Account (`GOOGLE_SERVICE_ACCOUNT_EMAIL`) **ou** configurar conexão no gateway (`GOOGLE_DRIVE_API_KEY`).
 3. Configurar `GOOGLE_DRIVE_FOLDER_ID` no Supabase para leitura global.
-4. Opcional: definir `drive_folder_id` por empresa em `fator_r_companies` para leitura dedicada por empresa.
+4. Opcional: definir `drive_folder_id` por empresa em `fator_r_companies` para leitura dedicada.
 
 ## Secrets Supabase
 - `GOOGLE_DRIVE_FOLDER_ID`
@@ -28,7 +28,7 @@ Automatizar leitura de documentos PGDAS do Google Drive, calcular/registrar Fato
 - Registra logs em `fator_r_processing_logs`.
 
 ## Extração de Fator R
-Parser detecta padrões de Fator R e normaliza `%`, `0,32` e `0.32`.
+Parser em `src/services/fatorRParser.ts` detecta padrões de Fator R, FS12, RBT12, CNPJ e período, normalizando `%`, `0,32` e `0.32`.
 
 ## Alertas e deduplicação
 - Alertas para `attention` e `critical` quando `confidence >= 0.75`.
@@ -45,7 +45,3 @@ Parser detecta padrões de Fator R e normaliza `%`, `0,32` e `0.32`.
 ## Limitações conhecidas
 - OCR/PDF parser avançado depende da qualidade do PDF e de evoluções do parser.
 - Layouts PGDAS variados podem reduzir confiança de extração.
-
-
-## Nota de resolução de merge
-Este documento consolida a configuração da branch de feature com compatibilidade para `main`, incluindo modo global e por empresa, além de providers de e-mail `resend` e `sendgrid`.
