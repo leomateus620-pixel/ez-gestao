@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Building2, Clock, FileSearch, Mail, MessageCircle, ShieldAlert } from 'lucide-react';
 import { useGuides } from '@/features/guias/GuideProvider';
@@ -12,7 +12,8 @@ import { formatCNPJ, formatDate, formatDateTime } from '@/lib/formatters';
 
 export default function GuiaDetalhe() {
   const { id } = useParams();
-  const { guides, dispatches, exceptions, events } = useGuides();
+  const { guides, dispatches, exceptions, events, enableEvents } = useGuides();
+  useEffect(() => { enableEvents(); }, [enableEvents]);
   const { state } = useDataStore();
   const guide = guides.find((item) => item.id === id);
   const company = state.empresas.find((item) => item.id === guide?.empresaId);

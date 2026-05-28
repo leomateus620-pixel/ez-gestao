@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useDataStore } from '@/data/DataProvider';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
@@ -21,7 +21,8 @@ const ITEMS_PER_PAGE = 30;
 
 export default function Logs() {
   const navigate = useNavigate();
-  const { state } = useDataStore();
+  const { state, enableLogs, enableAuditTrail } = useDataStore();
+  useEffect(() => { enableLogs(); enableAuditTrail(); }, [enableLogs, enableAuditTrail]);
   const [busca, setBusca] = useState('');
   const [filtroAcao, setFiltroAcao] = useState('todos');
   const [page, setPage] = useState(1);

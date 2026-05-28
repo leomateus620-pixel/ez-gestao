@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -115,16 +115,18 @@ interface GuideContextValue {
   };
   runScan: () => void;
   resolveException: (id: string) => void;
+  enableEvents: () => void;
 }
 
 const GuideContext = createContext<GuideContextValue | null>(null);
 
 export function GuideProvider({ children }: { children: React.ReactNode }) {
   const client = useQueryClient();
+  const [eventsEnabled, setEventsEnabled] = useState(false);
   const guidesQuery = useQuery({ queryKey: ['guias'], queryFn: () => rows('guias', 'received_at').then((data) => data.map(mapGuide)) });
   const dispatchQuery = useQuery({ queryKey: ['guia_envios'], queryFn: () => rows('guia_envios').then((data) => data.map(mapDispatch)) });
   const exceptionsQuery = useQuery({ queryKey: ['guia_excecoes'], queryFn: () => rows('guia_excecoes').then((data) => data.map(mapException)) });
-  const eventsQuery = useQuery({ queryKey: ['guia_eventos'], queryFn: () => rows('guia_eventos').then((data) => data.map(mapEvent)) });
+  const eventsQuery = useQuery({ queryKey: ['guia_eventos'], queryFn: () => rows('guia_eventos').then((data) => data.map(mapEvent)), enabled: eventsEnabled });
   const integrationsQuery = useQuery({
     queryKey: ['integracoes_guias'],
     queryFn: async () => {
@@ -191,6 +193,7 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
       isScanning: scan.isPending,
       runScan: () => scan.mutate(),
       resolveException: (id) => resolve.mutate(id),
+      enableEvents: () => setEventsEnabled(true),
     }}>
       {children}
     </GuideContext.Provider>

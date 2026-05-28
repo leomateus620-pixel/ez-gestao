@@ -14,8 +14,8 @@ import { lazyRetry } from '@/lib/lazy-retry';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
 
-const Dashboard = lazyRetry(() => import('./pages/Dashboard'));
 const Empresas = lazyRetry(() => import('./pages/Empresas'));
 const EmpresaDetalhe = lazyRetry(() => import('./pages/EmpresaDetalhe'));
 const Agenda = lazyRetry(() => import('./pages/Agenda'));
@@ -43,13 +43,31 @@ const ConsultaRelatorio = lazyRetry(() => import('./pages/consulta/ConsultaRelat
 const NotFound = lazyRetry(() => import('./pages/NotFound'));
 const WhatsAppPage = lazyRetry(() => import('./pages/admin/WhatsApp'));
 
+function RoutePreloader() {
+  useEffect(() => {
+    const idle = (window as any).requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 800));
+    const handle = idle(() => {
+      import('./pages/guias/Guias');
+      import('./pages/Empresas');
+      import('./pages/Agenda');
+    });
+    return () => {
+      const cancel = (window as any).cancelIdleCallback;
+      if (cancel) cancel(handle);
+      else window.clearTimeout(handle);
+    };
+  }, []);
+  return null;
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 2,
       retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
-      staleTime: 30_000,
+      staleTime: 60_000,
       refetchOnWindowFocus: false,
+      refetchOnMount: false,
     },
     mutations: { retry: 1 },
   },
@@ -118,6 +136,7 @@ function AuthenticatedApp() {
       <DataProvider>
         <AutomationProvider>
           <GuideProvider>
+            <RoutePreloader />
             <AppLayout>
               <ErrorBoundary label="route">
                 <Suspense fallback={<LoadingFallback />}>

@@ -195,6 +195,8 @@ interface DataContextValue {
   markAllAlertasLidos: () => void;
   cnpjExists: (cnpj: string, excludeId?: string) => boolean;
   generateChecklistForRegime: (empresaId: string, regime: RegimeTributario, responsavel: string) => void;
+  enableLogs: () => void;
+  enableAuditTrail: () => void;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -205,16 +207,18 @@ function errMsg(e: any) {
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
+  const [logsEnabled, setLogsEnabled] = React.useState(false);
+  const [auditEnabled, setAuditEnabled] = React.useState(false);
 
   const { data: empresas = [], isLoading: loadingE } = useQuery({ queryKey: ['empresas'], queryFn: fetchEmpresas });
   const { data: cnds = [], isLoading: loadingC } = useQuery({ queryKey: ['cnds'], queryFn: fetchCNDs });
   const { data: documentos = [], isLoading: loadingD } = useQuery({ queryKey: ['documentos'], queryFn: fetchDocumentos });
   const { data: envios = [], isLoading: loadingEn } = useQuery({ queryKey: ['envios'], queryFn: fetchEnvios });
   const { data: alertas = [], isLoading: loadingA } = useQuery({ queryKey: ['alertas'], queryFn: fetchAlertas });
-  const { data: logs = [], isLoading: loadingL } = useQuery({ queryKey: ['logs'], queryFn: fetchLogs });
-  const { data: auditTrail = [] } = useQuery({ queryKey: ['auditTrail'], queryFn: fetchAuditTrail });
+  const { data: logs = [], isLoading: loadingL } = useQuery({ queryKey: ['logs'], queryFn: fetchLogs, enabled: logsEnabled });
+  const { data: auditTrail = [] } = useQuery({ queryKey: ['auditTrail'], queryFn: fetchAuditTrail, enabled: auditEnabled });
 
-  const isLoading = loadingE || loadingC || loadingD || loadingEn || loadingA || loadingL;
+  const isLoading = loadingE || loadingC || loadingD || loadingEn || loadingA || (logsEnabled && loadingL);
 
   const state = useMemo<DataState>(() => ({
     empresas, cnds, documentos, envios, alertas, logs, auditTrail,
@@ -442,6 +446,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo(() => ({
     state, isLoading, dispatch, addEmpresa, updateEmpresa, addDocumento, addEnvio, addLog,
     resolveAlerta, markAlertaLido, resolveAllAlertas, markAllAlertasLidos, cnpjExists, generateChecklistForRegime,
+    enableLogs: () => setLogsEnabled(true),
+    enableAuditTrail: () => setAuditEnabled(true),
   }), [state, isLoading, addEmpresa, updateEmpresa, addDocumento, addEnvio, addLog,
     resolveAlerta, markAlertaLido, resolveAllAlertas, markAllAlertasLidos, cnpjExists, generateChecklistForRegime]);
 
