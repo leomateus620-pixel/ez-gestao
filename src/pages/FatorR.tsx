@@ -14,11 +14,12 @@ export default function FatorR() {
   const [loadingSync, setLoadingSync] = useState(false);
 
   const load = async () => {
+    const db = supabase as any;
     const [c, r, l, s] = await Promise.all([
-      supabase.from('fator_r_companies').select('*').order('created_at', { ascending: false }).limit(20),
-      supabase.from('fator_r_monthly_results').select('*').order('reference_year', { ascending: false }).limit(50),
-      supabase.from('fator_r_processing_logs').select('*').order('created_at', { ascending: false }).limit(10),
-      supabase.from('fator_r_sync_config').select('*').limit(1).maybeSingle(),
+      db.from('fator_r_companies').select('*').order('created_at', { ascending: false }).limit(20),
+      db.from('fator_r_monthly_results').select('*').order('reference_year', { ascending: false }).limit(50),
+      db.from('fator_r_processing_logs').select('*').order('created_at', { ascending: false }).limit(10),
+      db.from('fator_r_sync_config').select('*').limit(1).maybeSingle(),
     ]);
     setCompanies(c.data ?? []);
     setResults(r.data ?? []);
@@ -62,7 +63,7 @@ export default function FatorR() {
     const status = raw <= 0.28 ? 'critical' : raw <= 0.32 ? 'attention' : 'safe';
     const newData = { fator_r_value: raw, fator_r_percent: raw * 100, status, reason, manual: true };
 
-    await supabase
+    await (supabase as any)
       .from('fator_r_monthly_results')
       .update({
         ...newData,
@@ -70,7 +71,7 @@ export default function FatorR() {
       })
       .eq('id', result.id);
 
-    await supabase.from('fator_r_audit_logs').insert({
+    await (supabase as any).from('fator_r_audit_logs').insert({
       entity_type: 'fator_r_monthly_results',
       entity_id: result.id,
       action: 'manual_adjustment',
