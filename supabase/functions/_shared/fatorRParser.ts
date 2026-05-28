@@ -145,15 +145,33 @@ export function extractRbt12(lines: string[]) {
 }
 
 export function extractFs12(lines: string[]) {
-  const folhaAusente = lines.some((line, index) => /2\.3\)?|Folhas?\s+de\s+Sal[aá]rios\s+Anteriores/i.test(line)
-    && /Nenhuma/i.test(`${line} ${lines[index + 1] ?? ''}`));
+  let folhaAusente = false;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!/2\.3(?:\.1)?\)?\s*(?:Total\s+de\s+)?Folhas?\s+de\s+Sal[aá]rios\s+Anteriores/i.test(lines[i])) continue;
+    const windowText = lines.slice(i, i + 4).join(' ');
+    if (/Nenhuma/i.test(windowText)) { folhaAusente = true; break; }
+  }
 
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (!/Total\s+de\s+Folhas?\s+de\s+Sal[aá]rios\s+Anteriores/i.test(line)) continue;
-    const currentLineValues = moneyValues(line);
-    const values = currentLineValues.length > 0 ? currentLineValues : moneyValues(lines[index + 1] ?? '');
-    if (values.length > 0) return { payroll12m: values[values.length - 1], folhaAusente: false };
+  const TRIBUTO = /ISS|INSS|CPP|\bDAS\b|Tributo|D[eé]bito|Total\s+Geral|Anexo\s+[IVX]+|Al[ií]quota|Receita\s+Bruta/i;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!/2\.3\.1\)?\s*Total\s+de\s+Folhas?\s+de\s+Sal[aá]rios\s+Anteriores/i.test(line)) continue;
+    const markerIdx = line.search(/\(R\$\)/i);
+    if (markerIdx >= 0) {
+      const vals = moneyValues(line.slice(markerIdx));
+      if (vals.length > 0) return { payroll12m: vals[0], folhaAusente: false };
+    }
+    const sameLine = moneyValues(line);
+    if (sameLine.length > 0) return { payroll12m: sameLine[0], folhaAusente: false };
+    for (let j = i + 1; j < Math.min(i + 3, lines.length); j += 1) {
+      const next = lines[j];
+      if (!next.trim()) continue;
+      if (TRIBUTO.test(next)) break;
+      const v = moneyValues(next);
+      if (v.length > 0) return { payroll12m: v[0], folhaAusente: false };
+      break;
+    }
   }
 
   return { payroll12m: null, folhaAusente };
@@ -193,7 +211,11 @@ export function parsePgdasFatorR(rawText: string, fileName = ''): FatorRParseRes
   const { cnpj, cnpjIsPartial } = extractCnpj(lines);
   const { referenceMonth, referenceYear } = extractReferencePeriod(lines);
   const revenue12m = extractRbt12(lines);
-  const { payroll12m, folhaAusente } = extractFs12(lines);
+  let { payroll12m, folhaAusente } = extractFs12(lines);
+  if (payroll12m !== null && revenue12m !== null && revenue12m > 0 && payroll12m > revenue12m) {
+    warnings.push('FS12 capturado era maior que RBT12 — provável valor de tributo/ISS da página 2; descartado.');
+    payroll12m = null;
+  }
   const declared = extractFatorR(lines);
   const computedFatorRValue = payroll12m !== null && revenue12m !== null && revenue12m > 0 ? payroll12m / revenue12m : null;
   const fatorRValue = declared.fatorRValue ?? computedFatorRValue;
@@ -206,8 +228,8 @@ export function parsePgdasFatorR(rawText: string, fileName = ''): FatorRParseRes
   if (revenue12m === null) warnings.push('RBT12 não identificado na seção de receita bruta acumulada.');
   if (payroll12m === null && !folhaAusente) warnings.push('FS12 não identificado na seção 2.3.1 de folhas de salários anteriores.');
   if (declared.fatorRValue === null && !notApplicable && computedFatorRValue === null) warnings.push('Fator R não identificado e cálculo por FS12/RBT12 indisponível.');
-  if (declared.fatorRValue !== null && computedFatorRValue !== null && Math.abs(declared.fatorRValue - computedFatorRValue) > 0.005) {
-    warnings.push('Fator R declarado difere do cálculo interno; provável arredondamento/critério do PGDAS.');
+  if (declared.fatorRValue !== null && computedFatorRValue !== null && Math.abs(declared.fatorRValue - computedFatorRValue) > 0.02) {
+    warnings.push('Fator R declarado difere significativamente do cálculo FS12/RBT12; revisar.');
   }
 
   const status = notApplicable ? 'not_applicable' : classifyFatorR(fatorRValue);

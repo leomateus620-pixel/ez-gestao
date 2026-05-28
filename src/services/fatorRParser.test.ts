@@ -84,4 +84,21 @@ Fator r = 0,28 - Anexo III
     expect(result.shouldAlert).toBe(true);
     expect(result.confidence).toBeGreaterThanOrEqual(0.9);
   });
+
+  it('ignora valores de ISS/DAS da página 2 quando a seção 2.3.1 não traz o total', () => {
+    const text = `
+${baseHeader('CRISTINE SCHWINGEL LTDA', '44.527.939/0001-84')}
+Receita bruta acumulada nos doze meses anteriores ao PA (RBT12) 244.000,00 0,00 244.000,00
+2.3) Folhas de Salários Anteriores
+2.3.1) Total de Folhas de Salários Anteriores (R$)
+ISS R$ 541,99
+Total Geral da Empresa R$ 1.234,56
+Fator r = 0,31 - Anexo III
+`;
+
+    const result = parsePgdasFatorR(text, '042026 SERV. 7,36%.pdf');
+    expect(result.payroll12m).toBeNull();
+    expect(result.declaredFatorRValue).toBe(0.31);
+    expect(result.status).toBe('attention');
+  });
 });

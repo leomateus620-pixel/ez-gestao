@@ -17,7 +17,7 @@ type ManualPdfResult = {
   alertFrom: string;
   alertTo: string;
   parsed: FatorRParseResult;
-  email?: { attempted: boolean; sent: boolean; error: string | null };
+  email?: { attempted: boolean; sent: boolean; error: string | null; provider?: string };
   driveWebUrl?: string | null;
   storageStatus?: 'uploaded' | 'skipped_duplicate' | 'failed' | 'pending' | 'drive_native' | null;
   cloudStoragePath?: string | null;
@@ -288,8 +288,8 @@ export default function FatorR() {
                   ['CNPJ', result.parsed.cnpj || 'Não identificado'],
                   ['Período', formatPeriod(result.parsed)],
                   ['Status', statusLabel[result.status]],
-                  ['Fator R', formatFatorR(result.parsed)],
-                  ['Fator R calculado', formatPercent(result.parsed.computedFatorRPercent)],
+                  ['Fator R declarado', result.parsed.notApplicable ? 'Não se aplica' : formatPercent(result.parsed.declaredFatorRPercent)],
+                  ['Fator R calculado', result.parsed.folhaAusente || result.parsed.computedFatorRPercent === null ? '—' : formatPercent(result.parsed.computedFatorRPercent)],
                   ['RBT12', formatMoney(result.parsed.revenue12m)],
                   ['FS12', result.parsed.folhaAusente ? 'Nenhuma' : formatMoney(result.parsed.payroll12m)],
                   ['Confiança', `${Math.round(result.parsed.confidence * 100)}%`],
