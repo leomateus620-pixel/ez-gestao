@@ -236,23 +236,75 @@ serve(async (req) => {
         }
       }
 
-      let email = { attempted: false, sent: false, error: null as string | null };
+      let email = { attempted: false, sent: false, error: null as string | null, provider: "gmail_connector" as string };
       if (sendAlerts && alert && alertTo) {
         const subject = `[Fator R] ${status === "critical" ? "Crítico" : "Atenção"}: ${parsed.companyName ?? file.name} em ${formatPercent(parsed.fatorRPercent)}`;
         const html = buildAlertHtml(parsed, file.name, status);
-        let alertId = null;
+        let alertId: string | null = null;
+        let duplicateSent = false;
+
         if (persist && companyId) {
-          const existing = await supabase.from("fator_r_alerts").select("id,status").eq("company_id", companyId).eq("monthly_result_id", monthlyResultId).eq("alert_type", status).eq("recipient_email", alertTo).maybeSingle();
-          if (!existing.data) {
+          const existing = await supabase
+            .from("fator_r_alerts")
+            .select("id,status")
+            .eq("company_id", companyId)
+            .eq("monthly_result_id", monthlyResultId)
+            .eq("alert_type", status)
+            .eq("recipient_email", alertTo)
+            .maybeSingle();
+          if (existing.data) {
+            alertId = existing.data.id;
+            if (existing.data.status === "sent") {
+              duplicateSent = true;
+              await logStep(supabase, { documentId, companyId, eventType: "alert_duplicate_skipped", message: "Alerta já existente; envio duplicado ignorado.", data: { alertId } });
+            }
+          } else {
             const created = await supabase.from("fator_r_alerts").insert({ company_id: companyId, monthly_result_id: monthlyResultId, alert_type: status, recipient_email: alertTo, subject, body: html, status: "pending" }).select("id").single();
             alertId = created.data?.id ?? null;
             await logStep(supabase, { documentId, companyId, eventType: "alert_created", message: `Alerta ${status} criado para ${alertTo}` });
           }
         }
-        const resp = await supabase.functions.invoke("fator-r-send-alert", { body: { to: alertTo, from: alertFrom, subject, html } });
-        email = { attempted: true, sent: !resp.error, error: resp.error?.message ?? null };
-        await logStep(supabase, { documentId, companyId, eventType: resp.error ? "email_failed" : "email_sent", message: resp.error ? `Falha ao enviar e-mail: ${resp.error.message}` : `E-mail enviado para ${alertTo}` });
-        if (persist && alertId) await supabase.from("fator_r_alerts").update({ status: resp.error ? "failed" : "sent", sent_at: resp.error ? null : new Date().toISOString(), error_message: resp.error?.message ?? null }).eq("id", alertId);
+
+        if (duplicateSent) {
+          email = { attempted: false, sent: true, error: "Alerta já existente; envio duplicado ignorado.", provider: "gmail_connector" };
+        } else {
+          await logStep(supabase, { documentId, companyId, eventType: "email_send_started", message: `Iniciando envio Gmail para ${alertTo}`, data: { from: alertFrom, subject } });
+          try {
+            const resp = await supabase.functions.invoke("fator-r-send-alert", { body: { to: alertTo, from: alertFrom, subject, html } });
+            const respData = (resp.data ?? {}) as any;
+            const transportError = resp.error?.message ?? null;
+            const sent = !transportError && respData?.ok === true;
+            const reason = respData?.reason ?? null;
+            const message = respData?.message ?? transportError ?? null;
+
+            if (!sent && reason === "gmail_not_connected") {
+              await logStep(supabase, { documentId, companyId, eventType: "gmail_connector_missing", message: message ?? "Gmail não conectado.", data: respData });
+            } else if (sent) {
+              await logStep(supabase, { documentId, companyId, eventType: "gmail_send_success", message: `E-mail enviado via Gmail para ${alertTo}`, data: { messageId: respData?.messageId } });
+            } else {
+              await logStep(supabase, { documentId, companyId, eventType: "gmail_send_failed", message: message ?? "Falha desconhecida no envio Gmail.", data: respData });
+            }
+
+            email = { attempted: true, sent, error: sent ? null : (message ?? "Falha no envio"), provider: "gmail_connector" };
+
+            if (persist && alertId) {
+              await supabase.from("fator_r_alerts").update({
+                status: sent ? "sent" : "failed",
+                sent_at: sent ? new Date().toISOString() : null,
+                error_message: sent ? null : (message ?? null),
+              }).eq("id", alertId);
+              await logStep(supabase, { documentId, companyId, eventType: "alert_status_updated", message: `Alerta marcado como ${sent ? "sent" : "failed"}`, data: { alertId } });
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            await logStep(supabase, { documentId, companyId, eventType: "gmail_send_failed", message: `Exceção no envio Gmail: ${message}` });
+            email = { attempted: true, sent: false, error: message, provider: "gmail_connector" };
+            if (persist && alertId) {
+              await supabase.from("fator_r_alerts").update({ status: "failed", error_message: message }).eq("id", alertId);
+              await logStep(supabase, { documentId, companyId, eventType: "alert_status_updated", message: "Alerta marcado como failed após exceção", data: { alertId } });
+            }
+          }
+        }
       }
 
       processed.push({ ...resultPayload, companyId, documentId, monthlyResultId, email, driveWebUrl, storageStatus, cloudStoragePath, driveFileId });
