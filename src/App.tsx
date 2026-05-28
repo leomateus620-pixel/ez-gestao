@@ -14,8 +14,8 @@ import { lazyRetry } from '@/lib/lazy-retry';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
 
-const Dashboard = lazyRetry(() => import('./pages/Dashboard'));
 const Empresas = lazyRetry(() => import('./pages/Empresas'));
 const EmpresaDetalhe = lazyRetry(() => import('./pages/EmpresaDetalhe'));
 const Agenda = lazyRetry(() => import('./pages/Agenda'));
@@ -48,8 +48,9 @@ const queryClient = new QueryClient({
     queries: {
       retry: 2,
       retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
-      staleTime: 30_000,
+      staleTime: 60_000,
       refetchOnWindowFocus: false,
+      refetchOnMount: false,
     },
     mutations: { retry: 1 },
   },
@@ -118,6 +119,7 @@ function AuthenticatedApp() {
       <DataProvider>
         <AutomationProvider>
           <GuideProvider>
+            <RoutePreloader />
             <AppLayout>
               <ErrorBoundary label="route">
                 <Suspense fallback={<LoadingFallback />}>
