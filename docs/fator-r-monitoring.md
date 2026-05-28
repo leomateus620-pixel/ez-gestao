@@ -45,3 +45,7 @@ Parser detecta padrões de Fator R e normaliza `%`, `0,32` e `0.32`.
 ## Limitações conhecidas
 - OCR/PDF parser avançado depende da qualidade do PDF e de evoluções do parser.
 - Layouts PGDAS variados podem reduzir confiança de extração.
+
+
+## Nota de resolução de merge
+Este documento consolida a configuração da branch de feature com compatibilidade para `main`, incluindo modo global e por empresa, além de providers de e-mail `resend` e `sendgrid`.
