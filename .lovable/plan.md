@@ -1,51 +1,66 @@
-## Diagnóstico
 
-- O parser PGDAS está pegando `541,99` no PDF da CRISTINE SCHWINGEL como FS12. Esse valor é ISS (página 2 – "Valor do Débito por Tributo"). Causa provável: `unpdf` com `mergePages: true` junta o texto e o regex atual de FS12 captura o primeiro `R$ x,xx` de qualquer linha que contenha "Total de Folhas de Salários Anteriores", ou cai na linha seguinte que já é tabela de tributos.
-- A função `fator-r-send-alert` depende de `RESEND_API_KEY` / `SENDGRID_API_KEY` não configurados → retorna 4xx. Já existe o connector Gmail linkado (`GOOGLE_MAIL_API_KEY` está nos secrets), então o caminho correto é usar o connector gateway.
-- O parser já trata "Fator r = Não se aplica" e "Nenhuma" corretamente — os testes existentes cobrem os 3 PDFs do enunciado. Só falta blindar contra o caso da Cristine e ajustar a UI/e-mail.
+## Diagnóstico — por que a tela fica branca antes dos menus aparecerem
 
-## Mudanças
+Investiguei a cadeia de inicialização (`src/App.tsx` → `AuthProvider` → `DataProvider` + `AutomationProvider` + `GuideProvider` → `AppLayout`/`SmartSidebar` → rota lazy). Encontrei **4 causas combinadas**:
 
-### 1. `supabase/functions/_shared/fatorRParser.ts` e `src/services/fatorRParser.ts` (manter espelhados)
-Reescrever `extractFs12` para ser estrito à seção 2.3.1:
+### 1. `AuthProvider` bloqueia a UI inteira até `getSession()` responder
+`src/auth/AuthProvider.tsx` inicia com `isLoading=true` e enquanto isso o app mostra apenas "Verificando sessão..." (sem sidebar, sem nada). O timeout máximo é 6s, mas mesmo em condições normais a chamada de rede leva 300–1500ms — todo esse tempo é tela branca/spinner, **mesmo quando já existe uma sessão válida em cache no localStorage**.
 
-- Localizar a linha com `2\.3\.1\)?\s*Total\s+de\s+Folhas?\s+de\s+Sal[aá]rios\s+Anteriores`.
-- Capturar o **primeiro** `R$ x,xx` que apareça **após** o marcador `(R$)` na mesma linha; se não houver, olhar SOMENTE a próxima linha não-vazia E somente se essa linha não contiver `ISS|INSS|CPP|DAS|Tributo|D[eé]bito|Total\s+Geral`.
-- Plausibilidade: descartar valores onde `payroll12m / revenue12m > 1` ou `< 0.0001` (FS12 não pode ser > RBT12).
-- Detectar "Nenhuma" só na seção `2.3)`/`2.3.1)` (não no documento inteiro), evitando falsos positivos.
+### 2. 17 queries Supabase disparadas em paralelo antes do primeiro paint
+Quando o app finalmente passa do auth, os três providers montam ao mesmo tempo e disparam simultaneamente:
+- `DataProvider`: empresas, cnds, documentos, envios, alertas, logs (500), auditTrail (500) — 7 queries
+- `AutomationProvider`: connectors, runs (500), exceptions, batches, healthLogs (200) — 5 queries
+- `GuideProvider`: guias, guia_envios, guia_excecoes, guia_eventos, integracoes_guias — 5 queries
 
-Ajustar warning de divergência declarado vs calculado: só emitir se `|declared - computed| > 0.02` (≈ 2 pontos percentuais) — atualmente é `0.005` e marca 31,00% vs 31,40% como erro.
+Essa rajada satura o pipeline HTTP/2 e bloqueia o thread principal com 17 deserializações + mapeamentos enquanto o React tenta pintar. A `SmartSidebar` consegue renderizar com counters zerados, mas o jank atrasa o paint.
 
-Manter `fatorRValue = declared ?? computed` (já prioriza declarado).
+### 3. Dashboard é lazy — chunk separado precisa baixar antes de mostrar conteúdo
+`Dashboard` (rota `/`) é importado com `lazyRetry`, então no primeiro carregamento o usuário vê o sidebar com a área principal em fallback de loading enquanto o chunk de Dashboard chega.
 
-### 2. `supabase/functions/fator-r-send-alert/index.ts`
-Substituir Resend/SendGrid pelo connector Gmail via gateway:
+### 4. Queries pesadas e raramente vistas rodam toda visita
+`logs(500)`, `auditTrail(500)`, `connector_runs(500)`, `health_logs(200)`, `guia_eventos`, `batches` — nada disso é necessário para mostrar os menus, mas competem com as queries críticas.
 
-- URL: `https://connector-gateway.lovable.dev/google_mail/gmail/v1/users/me/messages/send`.
-- Headers: `Authorization: Bearer ${LOVABLE_API_KEY}`, `X-Connection-Api-Key: ${GOOGLE_MAIL_API_KEY}`.
-- Construir RFC 2822 (`To:`, `From: leomateus620@gmail.com`, `Subject:`, `Content-Type: text/html`) e enviar em `{ raw: base64url(...) }`.
-- Se `GOOGLE_MAIL_API_KEY` ausente → 200 com `{ ok: false, reason: "gmail_not_connected", message: "Gmail não conectado. Conecte o Gmail no Lovable para ativar os alertas." }` (não 4xx, para não quebrar o processamento).
-- Logar resposta completa do Gmail no console; retornar `{ ok, provider: "gmail_connector", messageId }`.
+---
 
-### 3. `supabase/functions/fator-r-process-upload/index.ts`
-- Antes de invocar `fator-r-send-alert`, verificar dedup em `fator_r_alerts` por `(company_id, monthly_result_id, alert_type, recipient_email)`; se já existir com `status='sent'`, pular envio e registrar log `alert_duplicate_skipped` com mensagem `Alerta já existente; envio duplicado ignorado.`
-- Logar eventos novos: `email_send_started`, `gmail_connector_missing`, `gmail_send_success`, `gmail_send_failed`, `alert_status_updated`.
-- Tratar resposta da função: se `reason === "gmail_not_connected"`, marcar alerta como `failed` com mensagem amigável, mas **não** lançar erro — o PDF continua processado normalmente.
-- Garantir `provider: "gmail_connector"` no payload retornado.
+## Plano de correção
 
-### 4. `src/pages/FatorR.tsx`
-Por PDF processado, exibir na ordem solicitada: Nome do arquivo, Empresa, CNPJ, Período, **Fator R declarado**, **Fator R calculado**, RBT12, FS12 (mostrar "Nenhuma" quando `folhaAusente`), Status, Confiança, Alerta de e-mail, botão "Abrir PDF no Drive". A maior parte já existe — apenas garantir as duas linhas separadas declarado/calculado e o label "Nenhuma" quando aplicável.
+### Passo 1 — Bootstrap de autenticação otimista (`src/auth/AuthProvider.tsx`)
+- Inicializar `session` lendo sincronamente do localStorage (chave `sb-<ref>-auth-token` que o supabase-js já persiste).
+- Se houver sessão em cache: `isLoading=false` imediatamente; o `getSession()` continua em background para validar/atualizar, e `onAuthStateChange` ajusta se preciso.
+- Reduzir o timeout de 6s para 3s.
+- Resultado: usuários autenticados pulam a tela "Verificando sessão..." em 100% dos casos (paint imediato).
 
-### 5. Testes
-- Atualizar `src/services/fatorRParser.test.ts` (e espelhar do lado da edge function se houver) com um caso simulando o layout problemático: linha do 2.3.1 sem valor, seguida de linha com `R$ 541,99 ISS` — deve retornar `payroll12m: null` (descartado) ou o valor correto quando estiver em sequência limpa.
-- Manter os 3 testes existentes verdes.
+### Passo 2 — Adiar queries não-críticas para o menu
+Marcar como `enabled: false` (carregam só quando o usuário entra na rota correspondente) ou aumentar `staleTime` para nunca refetchar no mount:
+
+| Provider | Query | Ação |
+|---|---|---|
+| DataProvider | `logs`, `auditTrail` | `enabled: false` (carregar dentro de `/logs`) |
+| AutomationProvider | `connector_runs`, `health_logs`, `batches` | `enabled: false` (carregar em `/execucoes`, `/automacao`) |
+| GuideProvider | `guia_eventos` | `enabled: false` (carregar em `/guias/:id`) |
+
+Para isso, expor um helper `useEnableHeavyQuery(key)` que cada página chama no mount; ou simplesmente fazer cada página rodar seu próprio `useQuery` paralelo (sem mexer no shape do contexto, passando dados via context só quando carregados). Implementação mais simples: usar `enabled` controlado por um flag global em context, ativado pelo `useEffect` da página.
+
+Resultado: rajada inicial cai de **17 → 9 queries**, e as 9 restantes são pequenas (counts/listas curtas).
+
+### Passo 3 — Dashboard sem lazy
+`src/App.tsx`: importar `Dashboard` diretamente (não via `lazyRetry`). É a rota raiz, todo mundo abre nela primeiro — não faz sentido pagar o custo do chunk separado. Demais rotas continuam lazy.
+
+### Passo 4 — Pré-carregar chunks das rotas mais usadas
+Após auth resolver, disparar `import('./pages/Guias')` e `import('./pages/Empresas')` em background (sem await). Isso aquece o cache para o próximo clique no menu sem afetar o paint inicial.
+
+### Passo 5 — `staleTime` agressivo em counters
+Aumentar `staleTime` das 9 queries críticas restantes para 60s (atualmente 30s no QueryClient global) e setar `refetchOnMount: false`. Counters do menu não precisam ser segundo-a-segundo.
+
+---
+
+## Resultado esperado
+- Tempo até menus aparecerem: ~1.5–3s → **< 200ms** (sessão em cache).
+- Sem rajada de 17 requests no DevTools Network no boot.
+- Dashboard aparece junto com o sidebar (sem fallback de loading).
+- Páginas de logs/execuções carregam seus dados pesados só quando visitadas.
 
 ## Fora de escopo
-
-- Cálculo do Fator R (mantido `FS12 / RBT12`).
-- Regras de status (`<=0.28 critical`, `<=0.32 attention`).
-- Estrutura Drive, design geral, autenticação.
-
-## Verificação final
-
-`bunx vitest run src/services/fatorRParser.test.ts` e reprocessar os 3 PDFs reais no preview, conferindo cards e log do envio Gmail.
+- Não mexer no design dos menus / shell.
+- Não alterar lógica de Fator R, parser, e-mail, Drive.
+- Não trocar React Query nem Supabase client.
