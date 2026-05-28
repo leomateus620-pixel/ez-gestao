@@ -83,10 +83,22 @@ serve(async (req) => {
       const { data: exists } = await supabase.from("fator_r_documents").select("id").eq("drive_file_id", file.id).maybeSingle();
       if (exists) continue;
 
-      const docIns = await supabase.from("fator_r_documents").insert({ drive_file_id: file.id, drive_file_name: file.name, drive_mime_type: file.mimeType, drive_web_url: file.webViewLink, processing_status: "processing", extracted_data: { source_folder_id: file.sourceFolderId } }).select("*").single();
+      const docIns = await supabase.from("fator_r_documents").insert({
+        drive_file_id: file.id,
+        drive_file_name: file.name,
+        drive_mime_type: file.mimeType,
+        drive_web_url: file.webViewLink,
+        drive_folder_id: file.sourceFolderId,
+        cloud_storage_path: `drive://${file.sourceFolderId}/${file.name}`,
+        storage_status: "drive_native",
+        uploaded_at: file.createdTime ?? new Date().toISOString(),
+        processing_status: "processing",
+        extracted_data: { source_folder_id: file.sourceFolderId },
+      }).select("*").single();
       if (docIns.error || !docIns.data) continue;
       const documentId = docIns.data.id;
       await logStep(supabase, { documentId, eventType: "upload_received", message: `Arquivo do Drive recebido: ${file.name}`, data: { source_folder_id: file.sourceFolderId } });
+      await logStep(supabase, { documentId, eventType: "drive_source_linked", message: `Origem no Drive vinculada: ${file.name}`, data: { source_folder_id: file.sourceFolderId, drive_file_id: file.id } });
 
       try {
         const dl = await fetch(`${DRIVE_GW}/files/${file.id}?alt=media`, { headers: gwHeaders(driveKey) });
