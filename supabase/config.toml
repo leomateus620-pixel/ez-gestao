@@ -52,7 +52,7 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.fator-r-send-alert]
-verify_jwt = true
+verify_jwt = false
 
 [functions.fator-r-process-upload]
 verify_jwt = true
