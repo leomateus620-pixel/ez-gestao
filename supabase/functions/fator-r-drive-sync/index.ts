@@ -35,10 +35,24 @@ async function extractPdf(bytes: Uint8Array) {
 
 async function listFolderFiles(folderId: string, driveKey: string, lovableKey: string) {
   const q = `'${folderId}' in parents and trashed=false`;
-  const listRes = await fetch(`${DRIVE_GW}/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,webViewLink,createdTime,parents)&pageSize=100`, { headers: gwHeaders(driveKey, lovableKey) });
+  const listRes = await fetch(`${DRIVE_GW}/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,webViewLink,createdTime,parents)&pageSize=200`, { headers: gwHeaders(driveKey, lovableKey) });
   if (!listRes.ok) throw new Error(`Falha ao listar Drive: HTTP ${listRes.status}`);
   const payload = await listRes.json() as any;
-  return (payload.files ?? []).filter((file: any) => ALLOWED.has(file.mimeType));
+  return (payload.files ?? []) as any[];
+}
+
+async function listFolderFilesRecursive(folderId: string, driveKey: string, lovableKey: string, depth = 0): Promise<any[]> {
+  if (depth > 6) return [];
+  const entries = await listFolderFiles(folderId, driveKey, lovableKey);
+  const pdfs = entries.filter((e: any) => ALLOWED.has(e.mimeType));
+  const folders = entries.filter((e: any) => e.mimeType === "application/vnd.google-apps.folder");
+  for (const folder of folders) {
+    // Skip the "Analisados" folder to avoid reprocessing already-moved files.
+    if ((folder.name ?? "").toLowerCase() === "analisados") continue;
+    const nested = await listFolderFilesRecursive(folder.id, driveKey, lovableKey, depth + 1);
+    for (const f of nested) pdfs.push(f);
+  }
+  return pdfs;
 }
 
 const logStep = async (supabase: any, payload: { documentId?: string | null; companyId?: string | null; eventType: string; message: string; data?: any }) => {
@@ -96,8 +110,11 @@ serve(async (req) => {
 
     const allFiles: any[] = [];
     for (const [folderId, companyId] of folderMap.entries()) {
-      const files = await listFolderFiles(folderId, driveKey, lovableKey);
-      for (const file of files) allFiles.push({ ...file, sourceCompanyId: companyId, sourceFolderId: folderId });
+      const files = await listFolderFilesRecursive(folderId, driveKey, lovableKey);
+      for (const file of files) {
+        const actualParent = Array.isArray(file.parents) && file.parents.length ? file.parents[0] : folderId;
+        allFiles.push({ ...file, sourceCompanyId: companyId, sourceFolderId: actualParent });
+      }
     }
 
     let processed = 0;
