@@ -278,7 +278,7 @@ export function extractActivitySubjectToFatorR(lines: string[]) {
 export function classifyFatorR(input: number | null | Pick<FatorRParseResult, 'fatorRValue' | 'notApplicable'>): FatorRStatus {
   if (typeof input === 'object' && input !== null && input.notApplicable) return 'not_applicable';
   const value = typeof input === 'object' && input !== null ? input.fatorRValue : input;
-  if (value === null || !Number.isFinite(value)) return 'parse_error';
+  if (value === null || value === undefined || !Number.isFinite(value)) return 'parse_error';
   if (value <= FATOR_R_CRITICAL_THRESHOLD) return 'critical';
   if (value <= FATOR_R_ATTENTION_THRESHOLD) return 'attention';
   return 'safe';
