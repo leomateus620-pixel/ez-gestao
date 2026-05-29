@@ -111,7 +111,10 @@ serve(async (req) => {
     const allFiles: any[] = [];
     for (const [folderId, companyId] of folderMap.entries()) {
       const files = await listFolderFilesRecursive(folderId, driveKey, lovableKey);
-      for (const file of files) allFiles.push({ ...file, sourceCompanyId: companyId, sourceFolderId: folderId });
+      for (const file of files) {
+        const actualParent = Array.isArray(file.parents) && file.parents.length ? file.parents[0] : folderId;
+        allFiles.push({ ...file, sourceCompanyId: companyId, sourceFolderId: actualParent });
+      }
     }
 
     let processed = 0;
