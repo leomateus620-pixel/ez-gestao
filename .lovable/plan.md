@@ -1,66 +1,79 @@
-
-## Diagnóstico — por que a tela fica branca antes dos menus aparecerem
-
-Investiguei a cadeia de inicialização (`src/App.tsx` → `AuthProvider` → `DataProvider` + `AutomationProvider` + `GuideProvider` → `AppLayout`/`SmartSidebar` → rota lazy). Encontrei **4 causas combinadas**:
-
-### 1. `AuthProvider` bloqueia a UI inteira até `getSession()` responder
-`src/auth/AuthProvider.tsx` inicia com `isLoading=true` e enquanto isso o app mostra apenas "Verificando sessão..." (sem sidebar, sem nada). O timeout máximo é 6s, mas mesmo em condições normais a chamada de rede leva 300–1500ms — todo esse tempo é tela branca/spinner, **mesmo quando já existe uma sessão válida em cache no localStorage**.
-
-### 2. 17 queries Supabase disparadas em paralelo antes do primeiro paint
-Quando o app finalmente passa do auth, os três providers montam ao mesmo tempo e disparam simultaneamente:
-- `DataProvider`: empresas, cnds, documentos, envios, alertas, logs (500), auditTrail (500) — 7 queries
-- `AutomationProvider`: connectors, runs (500), exceptions, batches, healthLogs (200) — 5 queries
-- `GuideProvider`: guias, guia_envios, guia_excecoes, guia_eventos, integracoes_guias — 5 queries
-
-Essa rajada satura o pipeline HTTP/2 e bloqueia o thread principal com 17 deserializações + mapeamentos enquanto o React tenta pintar. A `SmartSidebar` consegue renderizar com counters zerados, mas o jank atrasa o paint.
-
-### 3. Dashboard é lazy — chunk separado precisa baixar antes de mostrar conteúdo
-`Dashboard` (rota `/`) é importado com `lazyRetry`, então no primeiro carregamento o usuário vê o sidebar com a área principal em fallback de loading enquanto o chunk de Dashboard chega.
-
-### 4. Queries pesadas e raramente vistas rodam toda visita
-`logs(500)`, `auditTrail(500)`, `connector_runs(500)`, `health_logs(200)`, `guia_eventos`, `batches` — nada disso é necessário para mostrar os menus, mas competem com as queries críticas.
+## Objetivo
+1. **Etapa 1 — Teste real**: rodar `fator-r-drive-sync` para os PDFs da pasta do Drive, com envio Gmail real de `leomateus620@gmail.com` para `leonardostroschein@hotmail.com` e `leonardomateuspjjc56@gmail.com`.
+2. **Etapa 2 — Após validação**: adicionar na tela `/fator-r` um card dedicado "Envio automático de alertas" onde cada arquivo/empresa tem seus destinatários pré-cadastrados, e os e-mails passam a ser enviados para esses contatos (não mais para destinatário de teste).
 
 ---
 
-## Plano de correção
+## Etapa 1 — Teste real (executar primeiro)
 
-### Passo 1 — Bootstrap de autenticação otimista (`src/auth/AuthProvider.tsx`)
-- Inicializar `session` lendo sincronamente do localStorage (chave `sb-<ref>-auth-token` que o supabase-js já persiste).
-- Se houver sessão em cache: `isLoading=false` imediatamente; o `getSession()` continua em background para validar/atualizar, e `onAuthStateChange` ajusta se preciso.
-- Reduzir o timeout de 6s para 3s.
-- Resultado: usuários autenticados pulam a tela "Verificando sessão..." em 100% dos casos (paint imediato).
+### Diagnóstico atual
+- `fator-r-send-alert` já chama Gmail via conector, mas envia em **dry-run** por padrão (`FATOR_R_EMAIL_DRY_RUN != "false"`).
+- `fator-r-drive-sync` aceita `FATOR_R_ALERT_TEST_RECIPIENT`, mas como **string única** — não suporta múltiplos destinatários hoje.
+- `FATOR_R_EMAIL_FROM` já default para `leomateus620@gmail.com` (precisa bater com a conta Gmail conectada).
 
-### Passo 2 — Adiar queries não-críticas para o menu
-Marcar como `enabled: false` (carregam só quando o usuário entra na rota correspondente) ou aumentar `staleTime` para nunca refetchar no mount:
+### Mudança de código (mínima, só para o teste)
+Em `supabase/functions/fator-r-drive-sync/index.ts`, trocar:
+```ts
+const recipients = testRecipient ? [testRecipient] : [...]
+```
+por:
+```ts
+const testRecipients = testRecipient
+  ? testRecipient.split(",").map(s => s.trim()).filter(Boolean)
+  : [];
+const recipients = testRecipients.length
+  ? testRecipients
+  : [...new Set([company.responsible_email, ...(company.secondary_emails ?? []), defaultRecipient].filter(Boolean))];
+```
 
-| Provider | Query | Ação |
-|---|---|---|
-| DataProvider | `logs`, `auditTrail` | `enabled: false` (carregar dentro de `/logs`) |
-| AutomationProvider | `connector_runs`, `health_logs`, `batches` | `enabled: false` (carregar em `/execucoes`, `/automacao`) |
-| GuideProvider | `guia_eventos` | `enabled: false` (carregar em `/guias/:id`) |
+### Secrets a configurar (via `add_secret`)
+- `FATOR_R_EMAIL_DRY_RUN` = `false`
+- `FATOR_R_ALERT_TEST_RECIPIENT` = `leonardostroschein@hotmail.com,leonardomateuspjjc56@gmail.com`
+- `FATOR_R_EMAIL_FROM` = `leomateus620@gmail.com`
 
-Para isso, expor um helper `useEnableHeavyQuery(key)` que cada página chama no mount; ou simplesmente fazer cada página rodar seu próprio `useQuery` paralelo (sem mexer no shape do contexto, passando dados via context só quando carregados). Implementação mais simples: usar `enabled` controlado por um flag global em context, ativado pelo `useEffect` da página.
+### Execução e validação
+1. `deploy_edge_functions(["fator-r-drive-sync","fator-r-send-alert"])`
+2. `curl_edge_functions POST /fator-r-drive-sync`
+3. Conferir logs (`gmail_send_success` + `messageId`) e tabelas `fator_r_alerts.status='sent'` e `fator_r_documents.email_status='sent'`.
+4. Usuário confirma chegada nas duas caixas → libera Etapa 2.
 
-Resultado: rajada inicial cai de **17 → 9 queries**, e as 9 restantes são pequenas (counts/listas curtas).
-
-### Passo 3 — Dashboard sem lazy
-`src/App.tsx`: importar `Dashboard` diretamente (não via `lazyRetry`). É a rota raiz, todo mundo abre nela primeiro — não faz sentido pagar o custo do chunk separado. Demais rotas continuam lazy.
-
-### Passo 4 — Pré-carregar chunks das rotas mais usadas
-Após auth resolver, disparar `import('./pages/Guias')` e `import('./pages/Empresas')` em background (sem await). Isso aquece o cache para o próximo clique no menu sem afetar o paint inicial.
-
-### Passo 5 — `staleTime` agressivo em counters
-Aumentar `staleTime` das 9 queries críticas restantes para 60s (atualmente 30s no QueryClient global) e setar `refetchOnMount: false`. Counters do menu não precisam ser segundo-a-segundo.
+### Pré-requisito
+A conexão Gmail ativa precisa ser de `leomateus620@gmail.com`. Se for outra conta, peço reconexão antes de disparar (senão Gmail rejeita o `From`).
 
 ---
 
-## Resultado esperado
-- Tempo até menus aparecerem: ~1.5–3s → **< 200ms** (sessão em cache).
-- Sem rajada de 17 requests no DevTools Network no boot.
-- Dashboard aparece junto com o sidebar (sem fallback de loading).
-- Páginas de logs/execuções carregam seus dados pesados só quando visitadas.
+## Etapa 2 — Card dedicado "Envio automático de alertas" (depois do OK no teste)
+
+### Modelo de dados
+A tabela `fator_r_companies` já tem `responsible_email` (principal) e `secondary_emails text[]` (cópias). Vou usar esses campos como **lista de destinatários por empresa** (cada PDF é associado a uma empresa via CNPJ).
+
+Migração necessária: nenhuma — campos já existem. Só configurar via UI.
+
+### UI — novo card em `src/pages/FatorR.tsx`
+Bloco `GlassCard` com:
+- Lista de empresas cadastradas (uma linha por empresa).
+- Por linha: nome, CNPJ, **e-mail principal** (input) e **e-mails adicionais** (chips editáveis).
+- Botão "Salvar destinatários" por empresa → atualiza `responsible_email` e `secondary_emails`.
+- Toggle "Envio real ativo" lendo/escrevendo `fator_r_sync_config.email_alerts_enabled`.
+- Badge mostrando "Dry-run / Envio real" lido do status do último alerta.
+
+### Backend — remover dependência do `TEST_RECIPIENT`
+Depois do teste validado, **remover** o secret `FATOR_R_ALERT_TEST_RECIPIENT` (via `delete_secret`) para que o sync volte a usar a lista real por empresa:
+```ts
+const recipients = [...new Set([
+  company.responsible_email,
+  ...(company.secondary_emails ?? []),
+].filter(Boolean))];
+```
+(O `defaultRecipient` global fica como fallback só se a empresa não tiver nenhum e-mail.)
+
+### Fluxo final
+1. Usuário cadastra/edita destinatários por empresa no novo card.
+2. Sync diário lê PDFs → identifica empresa por CNPJ → envia alerta para os e-mails daquela empresa.
+3. Dedupe por `(company_id, monthly_result_id, alert_type, recipient_email)` continua igual.
+
+---
 
 ## Fora de escopo
-- Não mexer no design dos menus / shell.
-- Não alterar lógica de Fator R, parser, e-mail, Drive.
-- Não trocar React Query nem Supabase client.
+- Não mexer no parser, layout do e-mail, lógica de movimentação no Drive, nem na UI principal do Fator R.
+- Etapa 2 só começa depois que Etapa 1 for validada pelo usuário ("recebi os e-mails").

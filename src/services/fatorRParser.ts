@@ -276,8 +276,15 @@ export function extractActivitySubjectToFatorR(lines: string[]) {
 }
 
 export function classifyFatorR(input: number | null | Pick<FatorRParseResult, 'fatorRValue' | 'notApplicable'>): FatorRStatus {
-  if (typeof input === 'object' && input !== null && input.notApplicable) return 'not_applicable';
-  const value = typeof input === 'object' && input !== null ? input.fatorRValue : input;
+  let value: number | null;
+  if (input !== null && typeof input === 'object') {
+    if (input.notApplicable) return 'not_applicable';
+    value = input.fatorRValue;
+  } else if (typeof input === 'number') {
+    value = input;
+  } else {
+    value = null;
+  }
   if (value === null || !Number.isFinite(value)) return 'parse_error';
   if (value <= FATOR_R_CRITICAL_THRESHOLD) return 'critical';
   if (value <= FATOR_R_ATTENTION_THRESHOLD) return 'attention';

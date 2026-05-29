@@ -80,6 +80,9 @@ serve(async (req) => {
     const alertFrom = Deno.env.get("FATOR_R_EMAIL_FROM") || "leomateus620@gmail.com";
     const defaultRecipient = Deno.env.get("FATOR_R_ALERT_DEFAULT_RECIPIENT") || "ricardo@escritoriozimmermann.com.br";
     const testRecipient = Deno.env.get("FATOR_R_ALERT_TEST_RECIPIENT");
+    const testRecipients = testRecipient
+      ? testRecipient.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
     const emailDryRun = Deno.env.get("FATOR_R_EMAIL_DRY_RUN") !== "false";
     const analyzedFolderName = Deno.env.get("FATOR_R_ANALYZED_FOLDER_NAME") || "Analisados";
     const { data: config } = await supabase.from("fator_r_sync_config").select("*").limit(1).maybeSingle();
@@ -141,7 +144,7 @@ serve(async (req) => {
           const { data: company } = await supabase.from("fator_r_companies").select("id").eq("normalized_cnpj", normalizedCnpj).maybeSingle();
           if (company) companyId = company.id;
           else {
-            const created = await supabase.from("fator_r_companies").insert({ name: parsed.companyName || `Empresa ${normalizedCnpj}`, cnpj: parsed.cnpj ?? parsed.cnpjBase, normalized_cnpj: normalizedCnpj, active: true, responsible_email: testRecipient || defaultRecipient, user_id: syncUserId }).select("id").single();
+            const created = await supabase.from("fator_r_companies").insert({ name: parsed.companyName || `Empresa ${normalizedCnpj}`, cnpj: parsed.cnpj ?? parsed.cnpjBase, normalized_cnpj: normalizedCnpj, active: true, responsible_email: testRecipients[0] || defaultRecipient, user_id: syncUserId }).select("id").single();
             companyId = created.data?.id ?? null;
           }
         }
@@ -262,7 +265,9 @@ serve(async (req) => {
           monthlyResultId = upsert.data?.id ?? null;
 
           if (!duplicateDocument && company?.active && config?.email_alerts_enabled !== false && alert) {
-            const recipients = testRecipient ? [testRecipient] : [...new Set([company.responsible_email, ...(company.secondary_emails ?? []), defaultRecipient].filter(Boolean))];
+            const recipients = testRecipients.length
+              ? testRecipients
+              : [...new Set([company.responsible_email, ...(company.secondary_emails ?? []), defaultRecipient].filter(Boolean))];
             for (const recipient of recipients) {
               const subject = `Alerta Fator R — ${parsed.companyName ?? company.name} — ${formatPeriod(parsed)}`;
               const html = buildAlertHtml(parsed, file.name, status);
