@@ -20,7 +20,29 @@
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot-fallback" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-family:system-ui,-apple-system,sans-serif;padding:24px;text-align:center;color:#1f2937;background:#f8fafc">
+        <div style="height:36px;width:36px;border-radius:9999px;border:3px solid #cbd5e1;border-top-color:#2563eb;animation:bootspin 0.9s linear infinite"></div>
+        <div style="font-size:14px;color:#475569">Carregando aplicação...</div>
+        <div id="boot-fallback-error" style="display:none;flex-direction:column;align-items:center;gap:10px;margin-top:8px">
+          <div style="font-size:16px;font-weight:600;color:#0f172a">Não foi possível carregar o aplicativo</div>
+          <div style="font-size:13px;color:#64748b;max-width:420px">Os arquivos do app não foram carregados. Verifique sua conexão e tente novamente.</div>
+          <button onclick="try{Object.keys(localStorage).filter(function(k){return k.indexOf('sb-')===0}).forEach(function(k){localStorage.removeItem(k)})}catch(e){};location.reload()" style="margin-top:4px;padding:10px 18px;border-radius:10px;background:#2563eb;color:#fff;border:none;font-weight:600;cursor:pointer">Recarregar</button>
+        </div>
+        <style>@keyframes bootspin{to{transform:rotate(360deg)}}</style>
+      </div>
+    </div>
+    <script>
+      (function(){
+        setTimeout(function(){
+          var root = document.getElementById('root');
+          if (!root) return;
+          if (root.getAttribute('data-app-mounted') === '1') return;
+          var err = document.getElementById('boot-fallback-error');
+          if (err) err.style.display = 'flex';
+        }, 8000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

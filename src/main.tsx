@@ -18,6 +18,7 @@ try {
   if (!rootEl) {
     console.error("[boot] #root element not found");
   } else {
+    rootEl.setAttribute("data-app-mounted", "1");
     createRoot(rootEl).render(<App />);
   }
 } catch (err) {
