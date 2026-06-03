@@ -1,14 +1,12 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
 type TopbarPanel = 'search' | 'notifications' | 'profile';
 
 interface NavigationUiState {
   hoveredMenuId?: string;
-  expandedMenuId?: string;
   activeTopbarPanel?: TopbarPanel;
   isDesktop: boolean;
   setHoveredMenuId: (value?: string) => void;
-  setExpandedMenuId: (value?: string) => void;
   setActiveTopbarPanel: (value?: TopbarPanel) => void;
   closeAllPanels: () => void;
 }
@@ -17,27 +15,23 @@ const NavigationStateContext = createContext<NavigationUiState | null>(null);
 
 export function NavigationStateProvider({ children }: { children: React.ReactNode }) {
   const [hoveredMenuId, setHoveredMenuId] = useState<string>();
-  const [expandedMenuId, setExpandedMenuId] = useState<string>();
   const [activeTopbarPanel, setActiveTopbarPanel] = useState<TopbarPanel>();
 
-  const closeAllPanels = () => {
+  const closeAllPanels = useCallback(() => {
     setHoveredMenuId(undefined);
-    setExpandedMenuId(undefined);
     setActiveTopbarPanel(undefined);
-  };
+  }, []);
 
   const value = useMemo(
     () => ({
       hoveredMenuId,
-      expandedMenuId,
       activeTopbarPanel,
       isDesktop: true,
       setHoveredMenuId,
-      setExpandedMenuId,
       setActiveTopbarPanel,
       closeAllPanels,
     }),
-    [hoveredMenuId, expandedMenuId, activeTopbarPanel],
+    [hoveredMenuId, activeTopbarPanel, closeAllPanels],
   );
 
   return <NavigationStateContext.Provider value={value}>{children}</NavigationStateContext.Provider>;

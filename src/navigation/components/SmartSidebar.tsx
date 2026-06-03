@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { DynamicIslandPanel } from '@/navigation/components/DynamicIslandPanel';
 import { MenuIconRenderer } from '@/navigation/components/MenuIconRenderer';
 import { resolveContextualMenu, type MenuCounters } from '@/navigation/engine/contextual-menu-engine';
 import { useNavigationUiState } from '@/navigation/state/NavigationStateProvider';
 import { menuRegistry } from '@/navigation/menu-registry';
+import { preloadRoute } from '@/navigation/route-preload';
 import { cn } from '@/lib/utils';
 
 const menuAccent: Record<string, string> = {
@@ -22,11 +23,19 @@ const menuAccent: Record<string, string> = {
 export function SmartSidebar({ counters }: { counters: MenuCounters }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { hoveredMenuId, setHoveredMenuId, expandedMenuId, setExpandedMenuId } = useNavigationUiState();
+  const { hoveredMenuId, setHoveredMenuId, closeAllPanels } = useNavigationUiState();
   const model = resolveContextualMenu({ pathname: location.pathname, isMobile: false, counters });
 
-  const previewId = expandedMenuId ?? hoveredMenuId;
-  const preview = useMemo(() => menuRegistry.find((item) => item.id === previewId), [previewId]);
+  const preview = useMemo(() => menuRegistry.find((item) => item.id === hoveredMenuId), [hoveredMenuId]);
+  const navigateTo = useCallback((route: string) => {
+    preloadRoute(route);
+    closeAllPanels();
+    if (location.pathname !== route) navigate(route);
+  }, [closeAllPanels, location.pathname, navigate]);
+  const previewRoute = useCallback((menuId: string, route: string) => {
+    setHoveredMenuId(menuId);
+    preloadRoute(route);
+  }, [setHoveredMenuId]);
 
   return (
     <aside className="relative w-[92px] border-r border-white/45 bg-[linear-gradient(180deg,rgba(255,255,255,0.62),rgba(238,243,255,0.46)),radial-gradient(circle_at_50%_0%,rgba(37,99,235,0.16),transparent_44%)] px-3 py-4 shadow-[inset_-1px_0_0_rgba(255,255,255,0.72)] backdrop-blur-2xl">
@@ -41,19 +50,17 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
           const active = model.activeMenuId === item.id;
           const accent = menuAccent[item.id] ?? 'from-primary to-accent';
           return (
-            <div key={item.id} onMouseEnter={() => setHoveredMenuId(item.id)} onMouseLeave={() => setHoveredMenuId(undefined)}>
+            <div key={item.id} onMouseEnter={() => previewRoute(item.id, item.route)} onMouseLeave={() => setHoveredMenuId(undefined)}>
               <button
-                onClick={() => {
-                  setExpandedMenuId(expandedMenuId === item.id ? undefined : item.id);
-                  navigate(item.route);
-                }}
-                onFocus={() => setHoveredMenuId(item.id)}
+                type="button"
+                onClick={() => navigateTo(item.route)}
+                onFocus={() => previewRoute(item.id, item.route)}
                 className={cn(
-                  'group relative w-full rounded-[22px] p-1.5 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+                  'group relative w-full rounded-[22px] p-1.5 transition-[background-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
                   active ? 'bg-white/68 shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_14px_32px_-22px_rgba(37,99,235,0.9)] ring-1 ring-primary/25' : 'hover:bg-white/48 hover:shadow-sm',
                 )}
                 aria-label={item.a11yLabel}
-                aria-pressed={active}
+                aria-current={active ? 'page' : undefined}
               >
                 <span className={cn('absolute -left-1.5 top-1/2 h-7 w-1 -translate-y-1/2 rounded-full bg-gradient-to-b opacity-0 transition', accent, active && 'opacity-100')} />
                 <span className={cn('absolute inset-1 rounded-[18px] bg-gradient-to-br opacity-0 blur-md transition', accent, active ? 'opacity-20' : 'group-hover:opacity-12')} />
@@ -85,8 +92,12 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                 return (
                   <button
                     key={child.id}
-                    onClick={() => navigate(child.route)}
+                    type="button"
+                    onMouseEnter={() => preloadRoute(child.route)}
+                    onFocus={() => preloadRoute(child.route)}
+                    onClick={() => navigateTo(child.route)}
                     className={cn('flex items-center justify-between rounded-2xl border px-3 py-2 text-left text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', isActive ? 'border-primary/25 bg-primary/10 text-foreground' : 'border-white/40 bg-white/40 text-foreground/70 hover:bg-white/65')}
+                    aria-current={isActive ? 'page' : undefined}
                   >
                     <span>{child.label}</span>
                     {child.badgeKey && counters[child.badgeKey] > 0 && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] text-primary">{counters[child.badgeKey]}</span>}
@@ -102,7 +113,10 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
               {model.legacy.map((legacy) => (
                 <button
                   key={legacy.id}
-                  onClick={() => navigate(legacy.route)}
+                  type="button"
+                  onMouseEnter={() => preloadRoute(legacy.route)}
+                  onFocus={() => preloadRoute(legacy.route)}
+                  onClick={() => navigateTo(legacy.route)}
                   className="w-full rounded-xl px-2 py-1.5 text-left text-xs text-foreground/60 transition hover:bg-white/55 hover:text-foreground/80"
                 >
                   {legacy.label}
