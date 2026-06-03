@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+import { isSupabaseConfigured, supabase, supabaseConfigError } from '@/integrations/supabase/client';
 
 interface AuthContextValue {
   session: Session | null;
@@ -12,8 +12,15 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const AUTH_BOOT_TIMEOUT_MS = 3000;
+
+function toAuthErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 function readCachedSession(): Session | null {
+  if (typeof window === 'undefined') return null;
+
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
@@ -30,7 +37,7 @@ function readCachedSession(): Session | null {
       }
     }
   } catch {
-    /* ignore */
+    /* ignore corrupt cached auth data */
   }
   return null;
 }
@@ -44,11 +51,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: number | undefined;
+
+    if (!isSupabaseConfigured) {
+      setSession(null);
+      setIsLoading(false);
+      setError(supabaseConfigError ?? 'Supabase nao configurado.');
+      return () => {
+        cancelled = true;
+      };
+    }
+
     if (!cachedSession) setIsLoading(true);
     setError(null);
 
     const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
-      window.setTimeout(() => resolve({ timedOut: true }), 3000);
+      timeoutId = window.setTimeout(() => resolve({ timedOut: true }), AUTH_BOOT_TIMEOUT_MS);
     });
 
     Promise.race([
@@ -57,30 +75,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     ])
       .then((outcome) => {
         if (cancelled) return;
+        if (timeoutId) window.clearTimeout(timeoutId);
+
         if ('timedOut' in outcome && outcome.timedOut === true && !('res' in outcome)) {
-          console.error('[auth] getSession timed out');
-          if (!cachedSession) {
-            setError('Tempo esgotado ao verificar a sessão. Verifique sua conexão.');
-            setSession(null);
-          }
+          console.warn('[auth] getSession timed out; falling back to login screen');
+          if (!cachedSession) setSession(null);
+          setError(null);
           setIsLoading(false);
           return;
         }
+
         const { res } = outcome as { res: Awaited<ReturnType<typeof supabase.auth.getSession>> };
         if (res.error) {
-          console.error('[auth] getSession error', res.error);
-          if (!cachedSession) setError(res.error.message);
+          console.warn('[auth] getSession error; falling back to login screen', res.error);
         }
         setSession(res.data?.session ?? null);
+        setError(null);
         setIsLoading(false);
       })
       .catch((err) => {
         if (cancelled) return;
-        console.error('[auth] getSession threw', err);
-        if (!cachedSession) {
-          setError(err?.message ?? 'Falha ao inicializar autenticação');
-          setSession(null);
-        }
+        if (timeoutId) window.clearTimeout(timeoutId);
+        console.warn('[auth] getSession threw; falling back to login screen', err);
+        if (!cachedSession) setSession(null);
+        setError(null);
         setIsLoading(false);
       });
 
@@ -93,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
+      if (timeoutId) window.clearTimeout(timeoutId);
       data.subscription.unsubscribe();
     };
   }, [bootAttempt, cachedSession]);
@@ -103,10 +122,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     error,
     retry: () => setBootAttempt((n) => n + 1),
     signIn: async (email: string, password: string) => {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      return error ? error.message : null;
+      if (!isSupabaseConfigured) {
+        return supabaseConfigError ?? 'Supabase nao configurado.';
+      }
+      try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        return error ? error.message : null;
+      } catch (err) {
+        console.error('[auth] signIn threw', err);
+        return toAuthErrorMessage(err, 'Falha ao autenticar. Tente novamente.');
+      }
     },
     signOut: async () => {
+      if (!isSupabaseConfigured) return;
       await supabase.auth.signOut();
     },
   }), [session, isLoading, error]);
