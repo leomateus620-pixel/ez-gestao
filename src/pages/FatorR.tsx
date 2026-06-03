@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { GlassCard } from '@/components/GlassCard';
 import { type FatorRParseResult, type FatorRStatus } from '@/services/fatorRParser';
+import { FatorRRecipientsCard } from '@/components/FatorRRecipientsCard';
 
 type EmailResult = {
   attempted: boolean;
@@ -377,6 +378,8 @@ export default function FatorR() {
         </GlassCard>
       ))}
     </div>
+
+    <FatorRRecipientsCard />
 
     <GlassCard className="p-4 rounded-2xl border border-slate-300/80 dark:border-slate-700 bg-white/90 dark:bg-slate-900/85 shadow-sm">
       <div className="flex items-start justify-between gap-3">
