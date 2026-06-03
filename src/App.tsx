@@ -11,6 +11,7 @@ import { GuideProvider } from '@/features/guias/GuideProvider';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { lazyRetry } from '@/lib/lazy-retry';
+import { preloadInitialAppRoutes } from '@/navigation/route-preload';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 import Login from './pages/Login';
@@ -45,15 +46,14 @@ const WhatsAppPage = lazyRetry(() => import('./pages/admin/WhatsApp'));
 
 function RoutePreloader() {
   useEffect(() => {
-    const idle = (window as any).requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 800));
-    const handle = idle(() => {
-      import('./pages/guias/Guias');
-      import('./pages/Empresas');
-      import('./pages/Agenda');
-    });
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: () => void) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const idle = idleWindow.requestIdleCallback ?? ((callback: () => void) => window.setTimeout(callback, 800));
+    const handle = idle(preloadInitialAppRoutes);
     return () => {
-      const cancel = (window as any).cancelIdleCallback;
-      if (cancel) cancel(handle);
+      if (idleWindow.cancelIdleCallback) idleWindow.cancelIdleCallback(handle);
       else window.clearTimeout(handle);
     };
   }, []);

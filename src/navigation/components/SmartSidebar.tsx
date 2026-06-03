@@ -1,20 +1,29 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { DynamicIslandPanel } from '@/navigation/components/DynamicIslandPanel';
 import { MenuIconRenderer } from '@/navigation/components/MenuIconRenderer';
 import { resolveContextualMenu, type MenuCounters } from '@/navigation/engine/contextual-menu-engine';
 import { useNavigationUiState } from '@/navigation/state/NavigationStateProvider';
 import { menuRegistry } from '@/navigation/menu-registry';
+import { preloadRoute } from '@/navigation/route-preload';
 import { cn } from '@/lib/utils';
 
 export function SmartSidebar({ counters }: { counters: MenuCounters }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { hoveredMenuId, setHoveredMenuId, expandedMenuId, setExpandedMenuId } = useNavigationUiState();
+  const { hoveredMenuId, setHoveredMenuId, closeAllPanels } = useNavigationUiState();
   const model = resolveContextualMenu({ pathname: location.pathname, isMobile: false, counters });
 
-  const previewId = expandedMenuId ?? hoveredMenuId;
-  const preview = useMemo(() => menuRegistry.find((item) => item.id === previewId), [previewId]);
+  const preview = useMemo(() => menuRegistry.find((item) => item.id === hoveredMenuId), [hoveredMenuId]);
+  const navigateTo = useCallback((route: string) => {
+    preloadRoute(route);
+    closeAllPanels();
+    if (location.pathname !== route) navigate(route);
+  }, [closeAllPanels, location.pathname, navigate]);
+  const previewRoute = useCallback((menuId: string, route: string) => {
+    setHoveredMenuId(menuId);
+    preloadRoute(route);
+  }, [setHoveredMenuId]);
 
   return (
     <aside className="relative w-[86px] border-r border-border/40 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%),rgba(4,7,15,0.45)] px-3 py-4 backdrop-blur-xl">
@@ -22,16 +31,14 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
         {model.visiblePrimary.map((item) => {
           const active = model.activeMenuId === item.id;
           return (
-            <div key={item.id} onMouseEnter={() => setHoveredMenuId(item.id)} onMouseLeave={() => setHoveredMenuId(undefined)}>
+            <div key={item.id} onMouseEnter={() => previewRoute(item.id, item.route)} onMouseLeave={() => setHoveredMenuId(undefined)}>
               <button
-                onClick={() => {
-                  setExpandedMenuId(expandedMenuId === item.id ? undefined : item.id);
-                  navigate(item.route);
-                }}
-                onFocus={() => setHoveredMenuId(item.id)}
-                className={cn('relative w-full rounded-2xl p-1.5 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60', active ? 'bg-primary/10 ring-1 ring-primary/30' : 'hover:bg-white/[0.04]')}
+                type="button"
+                onClick={() => navigateTo(item.route)}
+                onFocus={() => previewRoute(item.id, item.route)}
+                className={cn('relative w-full rounded-2xl p-1.5 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60', active ? 'bg-primary/10 ring-1 ring-primary/30' : 'hover:bg-white/[0.04]')}
                 aria-label={item.a11yLabel}
-                aria-pressed={active}
+                aria-current={active ? 'page' : undefined}
               >
                 <MenuIconRenderer Icon={item.icon} active={active} menuId={item.id} />
               </button>
@@ -53,8 +60,12 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                 return (
                   <button
                     key={child.id}
-                    onClick={() => navigate(child.route)}
+                    type="button"
+                    onMouseEnter={() => preloadRoute(child.route)}
+                    onFocus={() => preloadRoute(child.route)}
+                    onClick={() => navigateTo(child.route)}
                     className={cn('flex items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', isActive ? 'bg-primary/15 text-foreground ring-1 ring-primary/30' : 'bg-white/[0.02] text-foreground/70 hover:bg-white/[0.06]')}
+                    aria-current={isActive ? 'page' : undefined}
                   >
                     <span>{child.label}</span>
                     {child.badgeKey && counters[child.badgeKey] > 0 && <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px]">{counters[child.badgeKey]}</span>}
@@ -70,7 +81,10 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
               {model.legacy.map((legacy) => (
                 <button
                   key={legacy.id}
-                  onClick={() => navigate(legacy.route)}
+                  type="button"
+                  onMouseEnter={() => preloadRoute(legacy.route)}
+                  onFocus={() => preloadRoute(legacy.route)}
+                  onClick={() => navigateTo(legacy.route)}
                   className="w-full rounded-lg px-2 py-1.5 text-left text-xs text-foreground/60 transition hover:bg-white/[0.05] hover:text-foreground/80"
                 >
                   {legacy.label}
