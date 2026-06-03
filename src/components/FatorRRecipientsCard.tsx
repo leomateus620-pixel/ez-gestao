@@ -38,7 +38,7 @@ function EmailChips({ emails, onChange }: { emails: string[]; onChange: (next: s
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {emails.map((email) => (
-        <span key={email} className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-2 py-0.5 text-xs text-foreground">
+        <span key={email} className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/60 px-2 py-0.5 text-xs text-foreground shadow-inner dark:border-slate-700 dark:bg-slate-800">
           {email}
           <button type="button" onClick={() => onChange(emails.filter((e) => e !== email))} className="text-foreground/60 hover:text-foreground">
             <X className="h-3 w-3" />
@@ -80,7 +80,7 @@ function CompanyRow({ company, onSaved }: { company: Company; onSaved: () => voi
   const totalEmails = (primary ? 1 : 0) + secondary.length;
 
   return (
-    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-950/60 p-3">
+    <div className="rounded-2xl border border-white/55 bg-white/48 p-3 shadow-inner backdrop-blur-xl dark:border-slate-700 dark:bg-slate-950/60">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="font-semibold text-foreground truncate">{company.name}</div>
@@ -173,7 +173,7 @@ export function FatorRRecipientsCard() {
   const withoutEmail = companies.filter((c) => !c.responsible_email && !(c.secondary_emails?.length)).length;
 
   return (
-    <GlassCard className="p-4 rounded-2xl border border-slate-300/80 dark:border-slate-700 bg-white/90 dark:bg-slate-900/85 shadow-sm">
+    <GlassCard className="p-4 rounded-[24px]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -204,7 +204,7 @@ export function FatorRRecipientsCard() {
       </div>
 
       {adding && (
-        <div className="mt-3 rounded-xl border border-dashed border-primary/40 bg-primary/5 p-3 grid gap-2 md:grid-cols-4">
+        <div className="mt-3 grid gap-2 rounded-2xl border border-dashed border-primary/35 bg-primary/8 p-3 md:grid-cols-4">
           <Input placeholder="Nome da empresa" value={newName} onChange={(e) => setNewName(e.target.value)} />
           <Input placeholder="CNPJ" value={newCnpj} onChange={(e) => setNewCnpj(e.target.value)} />
           <Input placeholder="E-mail principal" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
@@ -216,9 +216,9 @@ export function FatorRRecipientsCard() {
 
       <div className="mt-4 grid gap-2">
         {loading ? (
-          <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-4 text-sm text-foreground/70">Carregando empresas...</div>
+          <div className="rounded-2xl border border-dashed border-primary/25 bg-white/35 p-4 text-sm text-foreground/70 dark:border-slate-700">Carregando empresas...</div>
         ) : companies.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-4 text-sm text-foreground/70">
+          <div className="rounded-2xl border border-dashed border-primary/25 bg-white/35 p-4 text-sm text-foreground/70 dark:border-slate-700">
             Nenhuma empresa cadastrada. As empresas são criadas automaticamente quando um PDF do Drive é processado, ou adicione manualmente acima.
           </div>
         ) : (

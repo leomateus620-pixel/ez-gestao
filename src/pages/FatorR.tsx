@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AlertTriangle, Archive, CheckCircle2, ExternalLink, FileText, FolderSync, Mail, Pencil, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
@@ -144,7 +144,7 @@ function PdfResultCard({ card }: { card: PdfCardData }) {
   ];
 
   return (
-    <div className="rounded-2xl bg-white/90 dark:bg-slate-900/85 p-4 border border-slate-300/80 dark:border-slate-700 shadow-sm">
+    <div className="glass-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1 min-w-0">
           <div className="font-bold text-foreground flex items-center gap-2">
@@ -165,7 +165,7 @@ function PdfResultCard({ card }: { card: PdfCardData }) {
 
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-4 text-sm">
         {fields.map(([label, value]) => (
-          <div key={label} className="rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-700 p-3">
+          <div key={label} className="rounded-2xl border border-white/55 bg-white/48 p-3 shadow-inner dark:border-slate-700 dark:bg-slate-950/70">
             <div className="text-xs text-foreground/75 font-medium uppercase tracking-wide">{label}</div>
             <strong className="text-foreground font-semibold">{String(value)}</strong>
           </div>
@@ -340,7 +340,7 @@ export default function FatorR() {
   const folderUrl = folderId ? `https://drive.google.com/drive/folders/${folderId}` : null;
 
   return <div className="space-y-5 animate-fade-in">
-    <PageHeader title="Monitoramento de Fator R" subtitle="Acompanhamento dos PGDAS no Drive, classificação do Fator R e alertas preventivos por e-mail.">
+    <PageHeader title="Monitoramento de Fator R" subtitle="Acompanhamento dos PGDAS no Drive com leitura clara, cores por criticidade e alertas preventivos por e-mail.">
       <div className="flex items-center gap-2 flex-wrap justify-end">
         {folderUrl && (
           <Button variant="outline" className="gap-1.5" onClick={() => window.open(folderUrl, '_blank')}>
@@ -366,22 +366,23 @@ export default function FatorR() {
 
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
       {[
-        ['Empresas', stats.monitored, 'from-violet-500/20 to-indigo-500/10'],
-        ['OK', stats.safe, 'from-emerald-500/25 to-green-500/10'],
-        ['Atenção', stats.attention, 'from-amber-500/25 to-orange-500/10'],
-        ['Críticos', stats.critical, 'from-rose-500/25 to-red-500/10'],
-        ['Não se aplica', stats.notApplicable, 'from-sky-500/25 to-cyan-500/10'],
-      ].map(([label, value, bg]) => (
-        <GlassCard key={String(label)} className={`p-3 rounded-2xl bg-gradient-to-br ${bg} border border-slate-300/80 dark:border-slate-700 shadow-sm`}>
-          <div className="text-xs uppercase tracking-wide text-foreground/75 font-medium">{label}</div>
-          <div className="text-2xl font-bold mt-1 text-foreground">{String(value)}</div>
-        </GlassCard>
+        ['Empresas', stats.monitored, 'Base monitorada', 'var(--menu-violet)'],
+        ['OK', stats.safe, 'Dentro da faixa segura', 'var(--menu-emerald)'],
+        ['Atenção', stats.attention, 'Faixa preventiva', 'var(--menu-amber)'],
+        ['Críticos', stats.critical, 'Abaixo do limite', 'var(--menu-rose)'],
+        ['Não se aplica', stats.notApplicable, 'Sem enquadramento', 'var(--menu-cyan)'],
+      ].map(([label, value, caption, color]) => (
+        <div key={String(label)} className="liquid-stat-card" style={{ '--stat-color': color } as CSSProperties}>
+          <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/48">{label}</div>
+          <div className="mt-2 text-3xl font-black tracking-tight text-foreground">{String(value)}</div>
+          <p className="text-xs font-medium text-foreground/55">{caption}</p>
+        </div>
       ))}
     </div>
 
     <FatorRRecipientsCard />
 
-    <GlassCard className="p-4 rounded-2xl border border-slate-300/80 dark:border-slate-700 bg-white/90 dark:bg-slate-900/85 shadow-sm">
+    <GlassCard className="p-4 rounded-[24px]">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold text-foreground">PDFs processados</h3>
@@ -403,15 +404,15 @@ export default function FatorR() {
       )}
     </GlassCard>
 
-    <GlassCard className="p-4 rounded-2xl border border-slate-300/80 dark:border-slate-700 bg-white/90 dark:bg-slate-900/85 shadow-sm">
+    <GlassCard className="p-4 rounded-[24px]">
       <h3 className="text-lg font-semibold mb-3 text-foreground">Resultados mensais</h3>
       <div className="space-y-2 text-sm max-h-80 overflow-auto">
         {results.length === 0 ? (
-          <div className="rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-700 px-3 py-3 text-foreground/75">
+          <div className="rounded-2xl border border-white/55 bg-white/48 px-3 py-3 text-foreground/75 shadow-inner dark:border-slate-700 dark:bg-slate-950/70">
             Nenhum resultado mensal registrado.
           </div>
         ) : results.map((result) => (
-          <div key={result.id} className="flex items-center justify-between rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-700 px-3 py-2 gap-2">
+          <div key={result.id} className="flex items-center justify-between gap-2 rounded-2xl border border-white/55 bg-white/48 px-3 py-2 shadow-inner dark:border-slate-700 dark:bg-slate-950/70">
             <span className="text-foreground font-medium">
               {String(result.reference_month).padStart(2, '0')}/{result.reference_year} • {formatPercent(result.fator_r_percent)} • {statusLabel[normalizeStatus(result.status)]}
             </span>

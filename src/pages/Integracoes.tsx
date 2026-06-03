@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Plug, RefreshCw, Pause, Play, Activity, ShieldOff } from 'lucide-react';
+import { useMemo, type CSSProperties } from 'react';
+import { Plug, RefreshCw, Pause, Play, Activity, ShieldOff, Wifi, Zap } from 'lucide-react';
 import { useAutomation } from '@/data/AutomationProvider';
 import { getConnectorHealth, getConnectorStats } from '@/lib/connector-registry';
 import { getCircuitBreaker, resetCircuitBreaker } from '@/lib/automation-resilience';
@@ -36,16 +36,37 @@ export default function Integracoes() {
     integracao_assistida: 'Assistida', upload_manual: 'Manual',
   };
 
+  const activeConnectors = state.connectors.filter((connector) => connector.status === 'ativo').length;
+  const runsToday = connectorsWithStats.reduce((acc, item) => acc + item.runsToday, 0);
+  const averageSuccess = state.connectors.length
+    ? Math.round(state.connectors.reduce((acc, connector) => acc + connector.taxaSucesso, 0) / state.connectors.length)
+    : 0;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
         title="Integrações"
-        subtitle={`${state.connectors.length} conectores configurados`}
+        subtitle={`${state.connectors.length} conectores configurados com saúde, segurança e execução em tempo real.`}
       >
         <Button size="sm" variant="outline" className="gap-1.5" onClick={() => toast({ title: 'Health check', description: 'Todos os conectores verificados.' })}>
           <RefreshCw className="h-4 w-4" /> Health Check
         </Button>
       </PageHeader>
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="liquid-stat-card" style={{ '--stat-color': 'var(--menu-emerald)' } as CSSProperties}>
+          <div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/48">Ativos</p><Wifi className="h-4 w-4 text-success" /></div>
+          <p className="mt-2 text-3xl font-black tracking-tight">{activeConnectors}</p><p className="text-xs text-foreground/55">Conectores prontos para uso</p>
+        </div>
+        <div className="liquid-stat-card" style={{ '--stat-color': 'var(--menu-blue)' } as CSSProperties}>
+          <div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/48">Execuções hoje</p><Activity className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-3xl font-black tracking-tight">{runsToday}</p><p className="text-xs text-foreground/55">Volume monitorado no dia</p>
+        </div>
+        <div className="liquid-stat-card" style={{ '--stat-color': 'var(--menu-cyan)' } as CSSProperties}>
+          <div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/48">Sucesso médio</p><Zap className="h-4 w-4 text-cyan-600" /></div>
+          <p className="mt-2 text-3xl font-black tracking-tight">{averageSuccess}%</p><p className="text-xs text-foreground/55">Confiabilidade dos conectores</p>
+        </div>
+      </div>
 
       {/* Connector cards with health bars */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
