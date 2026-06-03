@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,8 +6,8 @@
 
 @layer base {
   :root {
-    --background: 218 32% 97%;
-    --foreground: 222 47% 11%;
+    --background: 218 42% 97%;
+    --foreground: 222 47% 10%;
 
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
@@ -15,7 +15,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    --primary: 224 71% 45%;
+    --primary: 224 76% 48%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 220 14% 96%;
@@ -24,7 +24,7 @@
     --muted: 220 14% 96%;
     --muted-foreground: 220 9% 36%;
 
-    --accent: 250 60% 58%;
+    --accent: 263 73% 60%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
@@ -54,11 +54,17 @@
     --sidebar-border: 222 30% 18%;
     --sidebar-ring: 224 71% 55%;
 
-    --glass-bg: 0 0% 100% / 0.7;
-    --glass-border: 214 42% 92% / 0.9;
-    --glass-shadow: 222 47% 11% / 0.09;
-    --glass-highlight: 0 0% 100% / 0.86;
-    --glass-glow: 224 90% 58% / 0.14;
+    --glass-bg: 0 0% 100% / 0.76;
+    --glass-border: 214 48% 88% / 0.86;
+    --glass-shadow: 222 47% 11% / 0.12;
+    --glass-highlight: 0 0% 100% / 0.92;
+    --glass-glow: 224 90% 58% / 0.18;
+    --menu-blue: 224 76% 52%;
+    --menu-violet: 263 73% 60%;
+    --menu-cyan: 194 88% 52%;
+    --menu-emerald: 156 72% 42%;
+    --menu-amber: 38 92% 52%;
+    --menu-rose: 348 83% 58%;
   }
 
   .dark {
@@ -124,21 +130,27 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.01em;
+    background-color: hsl(var(--background));
     background-image:
-      radial-gradient(circle at 16% 5%, hsl(var(--primary) / 0.08), transparent 27rem),
-      radial-gradient(circle at 90% 9%, hsl(var(--accent) / 0.08), transparent 28rem);
+      radial-gradient(circle at 12% 7%, hsl(var(--primary) / 0.16), transparent 28rem),
+      radial-gradient(circle at 86% 4%, hsl(var(--accent) / 0.14), transparent 30rem),
+      radial-gradient(circle at 78% 58%, hsl(var(--menu-cyan) / 0.08), transparent 26rem),
+      linear-gradient(135deg, hsl(220 54% 98%), hsl(232 55% 96%) 44%, hsl(214 48% 97%));
+    background-attachment: fixed;
   }
 }
 
 @layer components {
   .glass-card {
-    @apply relative overflow-hidden rounded-xl border;
+    @apply relative overflow-hidden rounded-2xl border;
     background: hsla(var(--glass-bg));
     border-color: hsla(var(--glass-border));
-    backdrop-filter: blur(24px) saturate(170%);
+    backdrop-filter: blur(26px) saturate(178%);
     box-shadow: inset 0 1px 0 hsla(var(--glass-highlight)),
+                inset 0 -1px 0 hsl(220 30% 100% / 0.28),
                 0 1px 3px -1px hsla(var(--glass-shadow)),
-                0 14px 36px -21px hsla(var(--glass-shadow));
+                0 18px 42px -24px hsla(var(--glass-shadow));
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
@@ -179,17 +191,19 @@
 
   .liquid-stage {
     position: relative;
+    isolation: isolate;
     background-image:
-      radial-gradient(circle at 5% 8%, hsl(var(--primary) / 0.08), transparent 23rem),
-      radial-gradient(circle at 92% 20%, hsl(var(--accent) / 0.08), transparent 26rem);
+      radial-gradient(circle at 2% 3%, hsl(var(--primary) / 0.11), transparent 24rem),
+      radial-gradient(circle at 92% 14%, hsl(var(--accent) / 0.12), transparent 28rem),
+      radial-gradient(circle at 48% 0%, hsl(var(--menu-cyan) / 0.06), transparent 18rem);
   }
 
   .liquid-stage::before {
     content: '';
     position: fixed;
-    inset: 3.5rem auto auto 16rem;
-    width: 22rem;
-    height: 22rem;
+    inset: 4.5rem auto auto 10rem;
+    width: 28rem;
+    height: 28rem;
     border-radius: 9999px;
     background: hsla(var(--glass-glow));
     filter: blur(96px);
@@ -203,6 +217,7 @@
 
   .metric-card {
     @apply glass-card p-5 min-h-[120px] flex flex-col justify-between;
+    background-image: linear-gradient(145deg, hsl(0 0% 100% / 0.86), hsl(222 70% 98% / 0.62));
   }
 
   .metric-card:hover {
@@ -227,11 +242,42 @@
   }
 
   .page-title {
-    @apply text-2xl font-bold tracking-tight text-foreground;
+    @apply text-2xl font-extrabold tracking-tight text-foreground;
+    font-family: 'Manrope', 'Inter', system-ui, sans-serif;
   }
 
   .page-subtitle {
     @apply text-sm text-muted-foreground mt-0.5;
+  }
+
+  .page-accent-panel {
+    @apply relative overflow-hidden rounded-[28px] border p-5;
+    background:
+      linear-gradient(135deg, hsl(0 0% 100% / 0.82), hsl(222 76% 98% / 0.62)),
+      radial-gradient(circle at 0% 0%, hsl(var(--primary) / 0.14), transparent 18rem),
+      radial-gradient(circle at 95% 12%, hsl(var(--accent) / 0.14), transparent 18rem);
+    border-color: hsl(220 48% 88% / 0.82);
+    backdrop-filter: blur(28px) saturate(180%);
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.86), 0 22px 60px -36px hsl(222 47% 11% / 0.35);
+  }
+
+  .liquid-stat-card {
+    @apply relative overflow-hidden rounded-2xl border p-4;
+    background: linear-gradient(145deg, hsl(0 0% 100% / 0.78), hsl(222 70% 98% / 0.52));
+    border-color: hsl(220 45% 88% / 0.78);
+    box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.9), 0 14px 34px -26px hsl(222 47% 11% / 0.38);
+    backdrop-filter: blur(24px) saturate(170%);
+  }
+
+  .liquid-stat-card::after {
+    content: '';
+    position: absolute;
+    inset: auto -20% -55% auto;
+    width: 8rem;
+    height: 8rem;
+    border-radius: 9999px;
+    background: hsl(var(--stat-color, var(--primary)) / 0.18);
+    filter: blur(24px);
   }
 
   .data-row {

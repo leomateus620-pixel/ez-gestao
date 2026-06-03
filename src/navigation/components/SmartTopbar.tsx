@@ -13,35 +13,39 @@ export function SmartTopbar({ counters }: { counters: MenuCounters }) {
   const { session, signOut } = useAuth();
   const { activeTopbarPanel, setActiveTopbarPanel } = useNavigationUiState();
   const model = resolveContextualMenu({ pathname: location.pathname, isMobile: false, counters });
+  const activeMenu = model.visiblePrimary.find((m) => m.id === model.activeMenuId);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border/40 bg-background/60 px-4 py-3 backdrop-blur-xl">
-      <DynamicIslandPanel className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 rounded-[28px] px-5 py-3">
-        <div className="min-w-0">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-foreground/45">Contexto ativo</p>
-          <p className="truncate text-sm font-semibold">{model.activeMenuId ? model.visiblePrimary.find((m) => m.id === model.activeMenuId)?.label : 'Painel'}</p>
+    <header className="sticky top-0 z-30 border-b border-white/35 bg-background/50 px-4 py-3 backdrop-blur-2xl">
+      <DynamicIslandPanel className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 px-5 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="hidden h-10 w-1.5 rounded-full bg-gradient-to-b from-primary via-blue-500 to-accent shadow-[0_0_24px_rgba(37,99,235,0.36)] sm:block" />
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary/62">Contexto ativo</p>
+            <p className="truncate font-display text-sm font-extrabold tracking-tight text-foreground">{activeMenu?.label ?? 'Painel'}</p>
+          </div>
         </div>
 
         <div className="hidden xl:block"><ContextualQuickActions actions={model.quickActions} /></div>
 
-        <div className="flex items-center gap-1">
-          <Button size="icon" variant="ghost" onClick={() => setActiveTopbarPanel(activeTopbarPanel === 'search' ? undefined : 'search')} aria-label="Busca global"><Search className="h-4 w-4" /></Button>
-          <Button size="icon" variant="ghost" className="relative" onClick={() => setActiveTopbarPanel(activeTopbarPanel === 'notifications' ? undefined : 'notifications')} aria-label="Notificações"><Bell className="h-4 w-4" />{counters.alerts > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" />}</Button>
-          <Button size="icon" variant="ghost" onClick={() => setActiveTopbarPanel(activeTopbarPanel === 'profile' ? undefined : 'profile')} aria-label="Perfil"><User2 className="h-4 w-4" /></Button>
+        <div className="flex items-center gap-1 rounded-full border border-white/45 bg-white/35 p-1 shadow-inner backdrop-blur-xl">
+          <Button size="icon" variant="ghost" className="h-9 w-9 rounded-full" onClick={() => setActiveTopbarPanel(activeTopbarPanel === 'search' ? undefined : 'search')} aria-label="Busca global"><Search className="h-4 w-4" /></Button>
+          <Button size="icon" variant="ghost" className="relative h-9 w-9 rounded-full" onClick={() => setActiveTopbarPanel(activeTopbarPanel === 'notifications' ? undefined : 'notifications')} aria-label="Notificações"><Bell className="h-4 w-4" />{counters.alerts > 0 && <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border border-white bg-rose-500" />}</Button>
+          <Button size="icon" variant="ghost" className="h-9 w-9 rounded-full" onClick={() => setActiveTopbarPanel(activeTopbarPanel === 'profile' ? undefined : 'profile')} aria-label="Perfil"><User2 className="h-4 w-4" /></Button>
         </div>
       </DynamicIslandPanel>
 
       {activeTopbarPanel && (
         <div className="mx-auto mt-2 flex max-w-[1240px] justify-end">
-          <DynamicIslandPanel className="w-[360px]">
+          <DynamicIslandPanel className="w-[360px] p-4">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-foreground/50">{activeTopbarPanel}</p>
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setActiveTopbarPanel(undefined)}><X className="h-4 w-4" /></Button>
+              <p className="text-xs font-bold uppercase tracking-wider text-primary/60">{activeTopbarPanel}</p>
+              <Button size="icon" variant="ghost" className="h-7 w-7 rounded-full" onClick={() => setActiveTopbarPanel(undefined)}><X className="h-4 w-4" /></Button>
             </div>
 
             {activeTopbarPanel === 'search' && (
               <div className="space-y-2">
-                <input className="h-10 w-full rounded-xl border border-white/20 bg-white/[0.03] px-3 text-sm outline-none ring-primary/40 focus:ring-2" placeholder="Buscar em dashboard, guias, empresas e integrações..." />
+                <input className="h-10 w-full rounded-2xl border border-white/55 bg-white/55 px-3 text-sm outline-none ring-primary/40 backdrop-blur-xl focus:ring-2" placeholder="Buscar em dashboard, guias, empresas e integrações..." />
                 <p className="text-xs text-foreground/55">Dica: você pode digitar nome da empresa, CNPJ ou módulo.</p>
               </div>
             )}

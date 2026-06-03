@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore } from '@/data/DataProvider';
 import { GlassCard } from '@/components/GlassCard';
@@ -131,6 +131,9 @@ export default function Empresas() {
 
   const filtrosAtivos = busca !== '' || filtroStatus !== 'todos' || filtroRegime !== 'todos';
   const ocultas = state.empresas.length - empresasFiltradas.length;
+  const ativas = state.empresas.filter((empresa) => empresa.status === 'ativa').length;
+  const comEmail = state.empresas.filter((empresa) => empresa.emailPrincipal).length;
+  const porWhatsApp = state.empresas.filter((empresa) => empresa.canalPreferido === 'whatsapp').length;
   const limparFiltros = useCallback(() => {
     setBusca('');
     setFiltroStatus('todos');
@@ -140,17 +143,32 @@ export default function Empresas() {
 
   return (
     <div className="space-y-6 animate-slide-in">
-      <PageHeader title="Empresas" subtitle={`${state.empresas.length} empresas cadastradas`}>
+      <PageHeader title="Empresas" subtitle={`${state.empresas.length} empresas cadastradas com canais, regimes e status em destaque.`}>
         <Button className="gap-2" onClick={() => setShowForm(true)}>
           <Plus className="h-4 w-4" /> Nova Empresa
         </Button>
       </PageHeader>
 
+      <div className="grid gap-3 md:grid-cols-4">
+        {[
+          ['Carteira', state.empresas.length, 'Empresas totais', 'var(--menu-blue)'],
+          ['Ativas', ativas, 'Operando agora', 'var(--menu-emerald)'],
+          ['Com e-mail', comEmail, 'Canal pronto', 'var(--menu-cyan)'],
+          ['WhatsApp', porWhatsApp, 'Preferência mobile', 'var(--menu-violet)'],
+        ].map(([label, value, caption, color]) => (
+          <div key={String(label)} className="liquid-stat-card" style={{ '--stat-color': color } as CSSProperties}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/48">{label}</p>
+            <p className="mt-2 text-3xl font-black tracking-tight text-foreground">{String(value)}</p>
+            <p className="text-xs font-medium text-foreground/55">{caption}</p>
+          </div>
+        ))}
+      </div>
+
       <div className="filter-bar">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar por razão social, CNPJ, município..." value={busca} onChange={e => setBusca(e.target.value)} className="pl-9 bg-transparent" />
+            <Input placeholder="Buscar por razão social, CNPJ, município..." value={busca} onChange={e => setBusca(e.target.value)} className="pl-9 border-white/55 bg-white/55 backdrop-blur-xl" />
           </div>
           <Select value={filtroStatus} onValueChange={setFiltroStatus}>
             <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder="Status" /></SelectTrigger>
@@ -197,23 +215,23 @@ export default function Empresas() {
         {paginatedEmpresas.map((empresa, i) => {
           const resumo = resumos[empresa.id];
           return (
-            <div key={empresa.id} className={cn('glass-card p-4 cursor-pointer transition-all duration-200 hover:shadow-md group', i % 2 === 1 && 'bg-card/30')} onClick={() => navigate(`/empresas/${empresa.id}`)}>
+            <div key={empresa.id} className={cn('glass-card group cursor-pointer p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_48px_-34px_rgba(37,99,235,0.7)]', i % 2 === 1 && 'bg-card/45')} onClick={() => navigate(`/empresas/${empresa.id}`)}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/8 text-primary text-xs font-bold">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/60 bg-gradient-to-br from-emerald-400/20 via-cyan-400/12 to-blue-500/18 text-sm font-black text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
                     {empresa.nomeFantasia.substring(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold truncate">{empresa.nomeFantasia}</p>
+                      <p className="truncate font-display text-base font-extrabold tracking-tight text-foreground">{empresa.nomeFantasia}</p>
                       <StatusBadge status={empresa.status} variant="empresa" />
                     </div>
-                    <p className="text-[11px] text-foreground/60 truncate">{empresa.razaoSocial}</p>
-                    <div className="flex items-center gap-3 mt-1 text-[11px] text-foreground/60">
+                    <p className="truncate text-xs font-medium text-foreground/58">{empresa.razaoSocial}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium text-foreground/62">
                       <span className="font-mono">{formatCNPJ(empresa.cnpj)}</span>
                       <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{empresa.municipio}/{empresa.estado}</span>
                       <span className="hidden sm:inline">{getRegimeLabel(empresa.regimeTributario)}</span>
-                      <Badge variant="outline" className="gap-1 text-[10px] capitalize">
+                      <Badge variant="outline" className="gap-1 rounded-full border-white/60 bg-white/55 text-[10px] capitalize">
                         {empresa.canalPreferido === 'whatsapp' ? <MessageCircle className="h-3 w-3" /> : <Mail className="h-3 w-3" />}
                         {empresa.canalPreferido || 'sem canal'}
                       </Badge>
@@ -231,7 +249,7 @@ export default function Empresas() {
                       <HealthBar validas={resumo.validas} vencendo={resumo.vencendo} vencidas={resumo.vencidas} pendentes={resumo.pendentes} total={resumo.total} className="w-32" />
                     </div>
                   )}
-                  <ArrowRight className="h-4 w-4 text-foreground/30 group-hover:text-foreground/60 transition-colors" />
+                  <ArrowRight className="h-4 w-4 text-primary/45 transition-colors group-hover:text-primary" />
                 </div>
               </div>
             </div>

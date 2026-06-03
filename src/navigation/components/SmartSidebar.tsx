@@ -7,6 +7,18 @@ import { useNavigationUiState } from '@/navigation/state/NavigationStateProvider
 import { menuRegistry } from '@/navigation/menu-registry';
 import { cn } from '@/lib/utils';
 
+const menuAccent: Record<string, string> = {
+  dashboard: 'from-sky-500 to-blue-600',
+  guias: 'from-violet-500 to-indigo-600',
+  empresas: 'from-emerald-500 to-teal-600',
+  integracoes: 'from-cyan-500 to-blue-500',
+  'fator-r': 'from-amber-400 to-orange-500',
+  classifica: 'from-fuchsia-500 to-violet-600',
+  whatsapp: 'from-green-500 to-emerald-600',
+  configuracoes: 'from-slate-500 to-slate-700',
+  'legacy-consulta': 'from-blue-500 to-slate-600',
+};
+
 export function SmartSidebar({ counters }: { counters: MenuCounters }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -17,10 +29,17 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
   const preview = useMemo(() => menuRegistry.find((item) => item.id === previewId), [previewId]);
 
   return (
-    <aside className="relative w-[86px] border-r border-border/40 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%),rgba(4,7,15,0.45)] px-3 py-4 backdrop-blur-xl">
+    <aside className="relative w-[92px] border-r border-white/45 bg-[linear-gradient(180deg,rgba(255,255,255,0.62),rgba(238,243,255,0.46)),radial-gradient(circle_at_50%_0%,rgba(37,99,235,0.16),transparent_44%)] px-3 py-4 shadow-[inset_-1px_0_0_rgba(255,255,255,0.72)] backdrop-blur-2xl">
+      <div className="mb-5 flex justify-center">
+        <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary via-blue-500 to-violet-500 p-[1px] shadow-[0_16px_34px_-22px_rgba(37,99,235,0.9)]">
+          <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white/72 text-[11px] font-black tracking-tight text-primary backdrop-blur-xl">EZ</div>
+        </div>
+      </div>
+
       <nav aria-label="Navegação principal" className="space-y-2.5">
         {model.visiblePrimary.map((item) => {
           const active = model.activeMenuId === item.id;
+          const accent = menuAccent[item.id] ?? 'from-primary to-accent';
           return (
             <div key={item.id} onMouseEnter={() => setHoveredMenuId(item.id)} onMouseLeave={() => setHoveredMenuId(undefined)}>
               <button
@@ -29,11 +48,17 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                   navigate(item.route);
                 }}
                 onFocus={() => setHoveredMenuId(item.id)}
-                className={cn('relative w-full rounded-2xl p-1.5 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60', active ? 'bg-primary/10 ring-1 ring-primary/30' : 'hover:bg-white/[0.04]')}
+                className={cn(
+                  'group relative w-full rounded-[22px] p-1.5 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+                  active ? 'bg-white/68 shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_14px_32px_-22px_rgba(37,99,235,0.9)] ring-1 ring-primary/25' : 'hover:bg-white/48 hover:shadow-sm',
+                )}
                 aria-label={item.a11yLabel}
                 aria-pressed={active}
               >
+                <span className={cn('absolute -left-1.5 top-1/2 h-7 w-1 -translate-y-1/2 rounded-full bg-gradient-to-b opacity-0 transition', accent, active && 'opacity-100')} />
+                <span className={cn('absolute inset-1 rounded-[18px] bg-gradient-to-br opacity-0 blur-md transition', accent, active ? 'opacity-20' : 'group-hover:opacity-12')} />
                 <MenuIconRenderer Icon={item.icon} active={active} menuId={item.id} />
+                {item.badgeKey && counters[item.badgeKey] > 0 && <span className="absolute right-1 top-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">{counters[item.badgeKey]}</span>}
               </button>
             </div>
           );
@@ -41,9 +66,16 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
       </nav>
 
       {preview && (
-        <DynamicIslandPanel className="absolute left-[86px] top-4 z-40 w-[320px] animate-in fade-in zoom-in-95 duration-200">
-          <p className="text-sm font-semibold tracking-tight">{preview.label}</p>
-          <p className="mt-0.5 text-xs text-foreground/65">{preview.shortDescription}</p>
+        <DynamicIslandPanel className="absolute left-[92px] top-4 z-40 w-[340px] animate-in fade-in zoom-in-95 duration-200 p-4">
+          <div className="flex items-start gap-3">
+            <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-lg', menuAccent[preview.id] ?? 'from-primary to-accent')}>
+              <preview.icon className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-extrabold tracking-tight text-foreground">{preview.label}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-foreground/65">{preview.shortDescription}</p>
+            </div>
+          </div>
           {!!preview.children?.length && (
             <div className="mt-3 grid gap-1.5">
               {preview.children.map((childId) => {
@@ -54,10 +86,10 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                   <button
                     key={child.id}
                     onClick={() => navigate(child.route)}
-                    className={cn('flex items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', isActive ? 'bg-primary/15 text-foreground ring-1 ring-primary/30' : 'bg-white/[0.02] text-foreground/70 hover:bg-white/[0.06]')}
+                    className={cn('flex items-center justify-between rounded-2xl border px-3 py-2 text-left text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', isActive ? 'border-primary/25 bg-primary/10 text-foreground' : 'border-white/40 bg-white/40 text-foreground/70 hover:bg-white/65')}
                   >
                     <span>{child.label}</span>
-                    {child.badgeKey && counters[child.badgeKey] > 0 && <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px]">{counters[child.badgeKey]}</span>}
+                    {child.badgeKey && counters[child.badgeKey] > 0 && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] text-primary">{counters[child.badgeKey]}</span>}
                   </button>
                 );
               })}
@@ -65,13 +97,13 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
           )}
 
           {!!model.legacy.length && (
-            <div className="mt-3 border-t border-white/10 pt-2">
-              <p className="mb-1 text-[10px] uppercase tracking-[0.14em] text-foreground/45">Legado</p>
+            <div className="mt-3 border-t border-white/50 pt-2">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground/45">Legado</p>
               {model.legacy.map((legacy) => (
                 <button
                   key={legacy.id}
                   onClick={() => navigate(legacy.route)}
-                  className="w-full rounded-lg px-2 py-1.5 text-left text-xs text-foreground/60 transition hover:bg-white/[0.05] hover:text-foreground/80"
+                  className="w-full rounded-xl px-2 py-1.5 text-left text-xs text-foreground/60 transition hover:bg-white/55 hover:text-foreground/80"
                 >
                   {legacy.label}
                 </button>
