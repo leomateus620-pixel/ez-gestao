@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { GlassCard } from '@/components/GlassCard';
 import { type FatorRParseResult, type FatorRStatus } from '@/services/fatorRParser';
+import { FatorRRecipientsCard } from '@/components/FatorRRecipientsCard';
 
 type EmailResult = {
   attempted: boolean;
