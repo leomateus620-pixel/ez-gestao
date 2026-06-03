@@ -1,34 +1,35 @@
-## Diagnóstico provável
+## Problema identificado
 
-A tela branca acontece antes do login, então o ponto crítico é o boot do app: `main.tsx`, `App.tsx`, `AuthProvider` e `Login`.
+O domínio publicado `ez-gestao.lovable.app` está retornando um HTML com apenas:
 
-Pelo que consegui verificar:
-- O preview carregou a tela de login no meu teste, sem erro de console.
-- Não há erro de Vite relevante nos logs.
-- O fluxo pré-login depende de leitura do `localStorage` e inicialização da sessão no `AuthProvider`.
-- Se algum erro acontecer antes do `ErrorBoundary` montar, ou se o elemento `#root` não existir/ficar indisponível, o app pode ficar branco sem fallback amigável.
+```html
+<div id="root"></div>
+```
+
+sem o script JavaScript do React. Por isso o app nunca monta, o login não aparece e as proteções adicionadas em `main.tsx`/`AuthProvider` não chegam a executar. O problema está antes da autenticação: é carregamento/publicação do bundle.
 
 ## Plano de correção
 
-1. **Blindar o boot em `src/main.tsx`**
-   - Verificar se o elemento `#root` existe antes de renderizar.
-   - Envolver o render inicial em `try/catch`.
-   - Renderizar um fallback HTML simples se o React falhar antes de montar.
+1. **Adicionar fallback estático no `index.html`**
+   - Inserir uma tela inicial mínima dentro de `#root`, antes do React carregar.
+   - Se o script do app não for injetado/carregado, o usuário verá uma mensagem clara com botão de recarregar, em vez de tela branca.
 
-2. **Fortalecer o `AuthProvider`**
-   - Tornar a leitura de sessão cacheada mais defensiva contra dados corrompidos no `localStorage`.
-   - Limpar tokens inválidos/corrompidos em vez de deixar o boot quebrar silenciosamente.
-   - Garantir que qualquer falha de `getSession()` sempre libere a tela de loading e mostre login/erro, nunca tela branca.
+2. **Adicionar detector de bundle não carregado**
+   - Incluir um pequeno script inline no `index.html` que, após alguns segundos, verifica se o React substituiu o conteúdo inicial.
+   - Se não substituiu, exibe: “Não foi possível carregar os arquivos do aplicativo”.
+   - Isso cobre exatamente o caso atual: HTML publicado sem assets JS.
 
-3. **Adicionar fallback pré-login seguro**
-   - Se a autenticação travar ou falhar antes de existir sessão, exibir uma tela clara com botão de recarregar/tentar novamente.
-   - Manter a tela de login funcionando normalmente quando não houver sessão.
+3. **Marcar montagem bem-sucedida no `main.tsx`**
+   - Quando o React iniciar, gravar um atributo simples no `#root` indicando que o app montou.
+   - Assim o fallback do `index.html` não aparece quando o app carregar corretamente.
 
-4. **Validar no preview**
-   - Abrir o app sem sessão.
-   - Confirmar que a tela de login aparece.
-   - Confirmar que não existem erros críticos no console.
+4. **Ajustar fallback de erro fatal**
+   - Manter o fallback já criado, mas fazê-lo também marcar o estado como erro carregado, evitando conflito com o detector do `index.html`.
 
-## Escopo
+5. **Validar no preview/publicado**
+   - Verificar que, se o bundle carregar, aparece login/app normalmente.
+   - Se o bundle não carregar, aparece uma tela de erro acionável em vez de branco.
 
-Não vou alterar o card do Fator R nem regras de envio de e-mail nesta correção; o foco é somente eliminar a tela branca antes do login.
+## Observação importante
+
+Essa correção elimina a tela branca e torna o erro visível. Como o HTML publicado atualmente parece estar sem scripts, depois da implementação pode ser necessário **publicar novamente** para o domínio `ez-gestao.lovable.app` receber o novo `index.html` e os assets corretos.
