@@ -379,6 +379,8 @@ export default function FatorR() {
       ))}
     </div>
 
+    <FatorRRecipientsCard />
+
     <GlassCard className="p-4 rounded-2xl border border-slate-300/80 dark:border-slate-700 bg-white/90 dark:bg-slate-900/85 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
