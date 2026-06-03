@@ -41,11 +41,21 @@ serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: cors });
 
   try {
-    const { to, subject, html, from } = await req.json();
+    const { to, subject, html, from, dryRun } = await req.json();
     if (!to || !subject || !html) {
       return Response.json({ ok: false, provider: "gmail_connector", reason: "invalid_payload", message: "Campos obrigatórios ausentes (to, subject, html)." }, { headers: cors });
     }
     const sender = from || Deno.env.get("FATOR_R_EMAIL_FROM") || "leomateus620@gmail.com";
+    const shouldDryRun = dryRun !== false || Deno.env.get("FATOR_R_EMAIL_DRY_RUN") !== "false";
+    if (shouldDryRun) {
+      console.log("[fator-r-send-alert] email_dry_run", { to, subject, from: sender });
+      return Response.json({
+        ok: true,
+        dryRun: true,
+        provider: "gmail_connector",
+        message: "Envio simulado; defina dryRun=false e FATOR_R_EMAIL_DRY_RUN=false para envio real.",
+      }, { headers: cors });
+    }
 
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
     const gmailKey = Deno.env.get("GOOGLE_MAIL_API_KEY");

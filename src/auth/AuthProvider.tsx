@@ -27,13 +27,18 @@ function readCachedSession(): Session | null {
       if (!key || !key.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
       const raw = localStorage.getItem(key);
       if (!raw) continue;
-      const parsed = JSON.parse(raw);
-      const candidate = parsed?.currentSession ?? parsed;
-      if (candidate?.access_token && candidate?.user) {
-        const expiresAt = candidate.expires_at ?? 0;
-        if (!expiresAt || expiresAt * 1000 > Date.now()) {
-          return candidate as Session;
+      try {
+        const parsed = JSON.parse(raw);
+        const candidate = parsed?.currentSession ?? parsed;
+        if (candidate?.access_token && candidate?.user) {
+          const expiresAt = candidate.expires_at ?? 0;
+          if (!expiresAt || expiresAt * 1000 > Date.now()) {
+            return candidate as Session;
+          }
         }
+      } catch (parseErr) {
+        console.warn('[auth] removing corrupted session entry', key, parseErr);
+        try { localStorage.removeItem(key); } catch { /* ignore */ }
       }
     }
   } catch {

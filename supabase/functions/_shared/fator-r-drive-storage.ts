@@ -70,7 +70,7 @@ export async function getOrCreateFolder(opts: {
   supabase: any;
   name: string;
   parentId: string | null;
-  kind: "root" | "year" | "month" | "company";
+  kind: "root" | "year" | "month" | "company" | "processed" | "error";
   path: string;
   driveKey: string;
   lovableKey: string;
@@ -173,6 +173,58 @@ export async function uploadPdf(opts: {
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`drive_upload_failed_${res.status}:${text.slice(0, 200)}`);
+  }
+  return await res.json();
+}
+
+export async function resolveAnalyzedFolder(opts: {
+  supabase: any;
+  parentId: string;
+  driveKey: string;
+  lovableKey: string;
+  pathPrefix: string;
+  folderName?: string;
+  documentId?: string | null;
+  companyId?: string | null;
+}): Promise<{ folderId: string; logicalPath: string }> {
+  const folderName = sanitizeFolderName(opts.folderName ?? "Analisados");
+  const logicalPath = `${opts.pathPrefix}/${folderName}`;
+  const folderId = await getOrCreateFolder({
+    supabase: opts.supabase,
+    name: folderName,
+    parentId: opts.parentId,
+    kind: "processed",
+    path: logicalPath,
+    driveKey: opts.driveKey,
+    lovableKey: opts.lovableKey,
+    documentId: opts.documentId,
+    companyId: opts.companyId,
+  });
+  return { folderId, logicalPath };
+}
+
+export async function moveFileToFolder(opts: {
+  fileId: string;
+  addParentId: string;
+  removeParentIds: string[];
+  driveKey: string;
+  lovableKey: string;
+}): Promise<{ id: string; name: string; webViewLink: string | null; parents: string[] }> {
+  const removeParents = opts.removeParentIds.filter(Boolean).join(",");
+  const params = new URLSearchParams({
+    addParents: opts.addParentId,
+    fields: "id,name,webViewLink,parents",
+  });
+  if (removeParents) params.set("removeParents", removeParents);
+
+  const res = await fetch(`${DRIVE_GW}/files/${opts.fileId}?${params.toString()}`, {
+    method: "PATCH",
+    headers: gwHeaders(opts.driveKey, opts.lovableKey),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`drive_move_failed_${res.status}:${text.slice(0, 200)}`);
   }
   return await res.json();
 }

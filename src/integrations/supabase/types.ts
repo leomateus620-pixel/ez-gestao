@@ -1174,6 +1174,7 @@ export type Database = {
           sent_at: string | null
           status: string
           subject: string
+          user_id: string | null
         }
         Insert: {
           alert_type: string
@@ -1187,6 +1188,7 @@ export type Database = {
           sent_at?: string | null
           status?: string
           subject: string
+          user_id?: string | null
         }
         Update: {
           alert_type?: string
@@ -1200,6 +1202,7 @@ export type Database = {
           sent_at?: string | null
           status?: string
           subject?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -1263,6 +1266,7 @@ export type Database = {
           responsible_email: string | null
           secondary_emails: string[] | null
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           active?: boolean
@@ -1275,6 +1279,7 @@ export type Database = {
           responsible_email?: string | null
           secondary_emails?: string[] | null
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           active?: boolean
@@ -1287,15 +1292,19 @@ export type Database = {
           responsible_email?: string | null
           secondary_emails?: string[] | null
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
       fator_r_documents: {
         Row: {
+          alert_reason: string | null
+          anexo: string | null
           cloud_storage_path: string | null
           company_id: string | null
           computed_fator_r: number | null
           created_at: string
+          das_total: number | null
           declared_fator_r: number | null
           detected_cnpj: string | null
           detected_company_name: string | null
@@ -1304,27 +1313,42 @@ export type Database = {
           drive_folder_id: string | null
           drive_mime_type: string | null
           drive_parent_path: string | null
+          drive_processed_file_id: string | null
+          drive_processed_folder_id: string | null
           drive_web_url: string | null
+          email_sent_at: string | null
+          email_status: string | null
           error_message: string | null
           extracted_data: Json
           extraction_confidence: number | null
+          fator_r: number | null
+          fator_r_percent: number | null
           fator_r_status: string | null
           file_hash: string | null
           file_month: number | null
           file_year: number | null
           id: string
           not_applicable: boolean | null
+          parse_json: Json | null
+          payment_recognized: boolean | null
+          payroll12: number | null
           processed_at: string | null
           processing_status: string
           raw_text: string | null
+          rbt12: number | null
+          rpa: number | null
           storage_status: string
           uploaded_at: string | null
+          user_id: string | null
         }
         Insert: {
+          alert_reason?: string | null
+          anexo?: string | null
           cloud_storage_path?: string | null
           company_id?: string | null
           computed_fator_r?: number | null
           created_at?: string
+          das_total?: number | null
           declared_fator_r?: number | null
           detected_cnpj?: string | null
           detected_company_name?: string | null
@@ -1333,27 +1357,42 @@ export type Database = {
           drive_folder_id?: string | null
           drive_mime_type?: string | null
           drive_parent_path?: string | null
+          drive_processed_file_id?: string | null
+          drive_processed_folder_id?: string | null
           drive_web_url?: string | null
+          email_sent_at?: string | null
+          email_status?: string | null
           error_message?: string | null
           extracted_data?: Json
           extraction_confidence?: number | null
+          fator_r?: number | null
+          fator_r_percent?: number | null
           fator_r_status?: string | null
           file_hash?: string | null
           file_month?: number | null
           file_year?: number | null
           id?: string
           not_applicable?: boolean | null
+          parse_json?: Json | null
+          payment_recognized?: boolean | null
+          payroll12?: number | null
           processed_at?: string | null
           processing_status?: string
           raw_text?: string | null
+          rbt12?: number | null
+          rpa?: number | null
           storage_status?: string
           uploaded_at?: string | null
+          user_id?: string | null
         }
         Update: {
+          alert_reason?: string | null
+          anexo?: string | null
           cloud_storage_path?: string | null
           company_id?: string | null
           computed_fator_r?: number | null
           created_at?: string
+          das_total?: number | null
           declared_fator_r?: number | null
           detected_cnpj?: string | null
           detected_company_name?: string | null
@@ -1362,21 +1401,33 @@ export type Database = {
           drive_folder_id?: string | null
           drive_mime_type?: string | null
           drive_parent_path?: string | null
+          drive_processed_file_id?: string | null
+          drive_processed_folder_id?: string | null
           drive_web_url?: string | null
+          email_sent_at?: string | null
+          email_status?: string | null
           error_message?: string | null
           extracted_data?: Json
           extraction_confidence?: number | null
+          fator_r?: number | null
+          fator_r_percent?: number | null
           fator_r_status?: string | null
           file_hash?: string | null
           file_month?: number | null
           file_year?: number | null
           id?: string
           not_applicable?: boolean | null
+          parse_json?: Json | null
+          payment_recognized?: boolean | null
+          payroll12?: number | null
           processed_at?: string | null
           processing_status?: string
           raw_text?: string | null
+          rbt12?: number | null
+          rpa?: number | null
           storage_status?: string
           uploaded_at?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -1417,9 +1468,12 @@ export type Database = {
       }
       fator_r_monthly_results: {
         Row: {
+          alert_reason: string | null
+          anexo: string | null
           company_id: string
           computed_fator_r: number | null
           created_at: string
+          das_total: number | null
           declared_fator_r: number | null
           document_id: string | null
           fator_r_percent: number | null
@@ -1427,18 +1481,24 @@ export type Database = {
           id: string
           metadata: Json
           not_applicable: boolean | null
+          payment_recognized: boolean | null
           payroll_12m: number | null
           recommendation: string | null
           reference_month: number
           reference_year: number
           revenue_12m: number | null
+          rpa: number | null
           status: string
           updated_at: string
+          user_id: string | null
         }
         Insert: {
+          alert_reason?: string | null
+          anexo?: string | null
           company_id: string
           computed_fator_r?: number | null
           created_at?: string
+          das_total?: number | null
           declared_fator_r?: number | null
           document_id?: string | null
           fator_r_percent?: number | null
@@ -1446,18 +1506,24 @@ export type Database = {
           id?: string
           metadata?: Json
           not_applicable?: boolean | null
+          payment_recognized?: boolean | null
           payroll_12m?: number | null
           recommendation?: string | null
           reference_month: number
           reference_year: number
           revenue_12m?: number | null
+          rpa?: number | null
           status?: string
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
+          alert_reason?: string | null
+          anexo?: string | null
           company_id?: string
           computed_fator_r?: number | null
           created_at?: string
+          das_total?: number | null
           declared_fator_r?: number | null
           document_id?: string | null
           fator_r_percent?: number | null
@@ -1465,13 +1531,16 @@ export type Database = {
           id?: string
           metadata?: Json
           not_applicable?: boolean | null
+          payment_recognized?: boolean | null
           payroll_12m?: number | null
           recommendation?: string | null
           reference_month?: number
           reference_year?: number
           revenue_12m?: number | null
+          rpa?: number | null
           status?: string
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: [
           {
