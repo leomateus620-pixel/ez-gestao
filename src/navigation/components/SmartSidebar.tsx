@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { startTransition, useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { DynamicIslandPanel } from '@/navigation/components/DynamicIslandPanel';
 import { MenuIconRenderer } from '@/navigation/components/MenuIconRenderer';
@@ -25,12 +25,24 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
   const navigate = useNavigate();
   const { hoveredMenuId, setHoveredMenuId, closeAllPanels } = useNavigationUiState();
   const model = resolveContextualMenu({ pathname: location.pathname, isMobile: false, counters });
+  const navigatingToRef = useRef<string>();
 
   const preview = useMemo(() => menuRegistry.find((item) => item.id === hoveredMenuId), [hoveredMenuId]);
   const navigateTo = useCallback((route: string) => {
+    if (location.pathname === route || navigatingToRef.current === route) {
+      closeAllPanels();
+      return;
+    }
+
+    navigatingToRef.current = route;
     preloadRoute(route);
     closeAllPanels();
-    if (location.pathname !== route) navigate(route);
+    startTransition(() => {
+      navigate(route);
+      window.setTimeout(() => {
+        if (navigatingToRef.current === route) navigatingToRef.current = undefined;
+      }, 350);
+    });
   }, [closeAllPanels, location.pathname, navigate]);
   const previewRoute = useCallback((menuId: string, route: string) => {
     setHoveredMenuId(menuId);
