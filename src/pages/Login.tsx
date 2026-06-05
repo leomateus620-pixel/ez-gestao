@@ -4,6 +4,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { BrandLogo } from '@/components/BrandLogo';
 
 export default function Login() {
   const { signIn } = useAuth();
@@ -27,7 +28,9 @@ export default function Login() {
         <div className="absolute -right-16 -top-16 h-44 w-44 rounded-full bg-primary/15 blur-3xl" />
         <div className="relative">
           <div className="mb-8 flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent text-sm font-bold text-white shadow-lg shadow-primary/20">EZ</div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/70 p-1.5 shadow-lg shadow-primary/20 backdrop-blur-xl">
+              <BrandLogo className="h-full w-full" />
+            </div>
             <div>
               <p className="text-xl font-bold tracking-tight">EZ Gestão</p>
               <p className="text-xs text-foreground/70">Automação segura de guias</p>
