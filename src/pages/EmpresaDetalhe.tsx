@@ -1,7 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMemo, useRef, useCallback } from 'react';
 import { useDataStore } from '@/data/DataProvider';
-import { useGuides } from '@/features/guias/GuideProvider';
 import { GlassCard } from '@/components/GlassCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import { HealthRing } from '@/components/HealthRing';
@@ -15,13 +14,11 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Building2, Mail, Phone, MapPin, FileText, Send, Clock, Download, Eye, Upload, Bell, Edit, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { EmpresaAutomacaoCards } from '@/components/EmpresaAutomacaoCards';
 
 export default function EmpresaDetalhe() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { state, addDocumento, addLog, resolveAlerta, markAlertaLido } = useDataStore();
-  const { guides } = useGuides();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const empresa = useMemo(() => state.empresas.find(e => e.id === id), [state.empresas, id]);
@@ -31,7 +28,6 @@ export default function EmpresaDetalhe() {
   const envios = useMemo(() => state.envios.filter(e => e.empresaId === id), [state.envios, id]);
   const alertas = useMemo(() => state.alertas.filter(a => a.empresaId === id && !a.resolvido), [state.alertas, id]);
   const logs = useMemo(() => state.logs.filter(l => l.empresaId === id), [state.logs, id]);
-  const guias = useMemo(() => guides.filter(guide => guide.empresaId === id), [guides, id]);
 
   const { vencidas, vencendo, validas, pendentes, pctValid } = useMemo(() => {
     const v = cnds.filter(c => c.status === 'vencida').length;
@@ -99,7 +95,7 @@ export default function EmpresaDetalhe() {
     <div className="space-y-6 animate-slide-in">
       <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={handleUpload} />
 
-      <Button variant="ghost" size="sm" onClick={() => navigate('/empresas')} className="gap-1.5 -ml-2 text-foreground/72 hover:text-foreground">
+      <Button variant="ghost" size="sm" onClick={() => navigate('/empresas')} className="gap-1.5 -ml-2 text-foreground/60 hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Voltar
       </Button>
 
@@ -115,8 +111,8 @@ export default function EmpresaDetalhe() {
                   <h1 className="text-xl font-bold tracking-tight">{empresa.nomeFantasia}</h1>
                   <StatusBadge status={empresa.status} variant="empresa" />
                 </div>
-                <p className="text-sm text-foreground/72 mt-0.5">{empresa.razaoSocial}</p>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-xs text-foreground/76">
+                <p className="text-sm text-foreground/60 mt-0.5">{empresa.razaoSocial}</p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-xs text-foreground/65">
                   <span className="font-mono bg-muted/50 px-2 py-0.5 rounded">{formatCNPJ(empresa.cnpj)}</span>
                   <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{empresa.municipio}/{empresa.estado}</span>
                   <span>{getRegimeLabel(empresa.regimeTributario)}</span>
@@ -128,19 +124,14 @@ export default function EmpresaDetalhe() {
             <div className="flex items-center gap-6 shrink-0">
               <HealthRing percentage={pctValid} label="Saúde" />
               <div className="grid grid-cols-3 gap-4 text-center">
-                <div><p className="text-xl font-bold text-destructive">{vencidas}</p><p className="text-[10px] text-foreground/68 font-medium">Vencidas</p></div>
-                <div><p className="text-xl font-bold text-warning">{vencendo}</p><p className="text-[10px] text-foreground/68 font-medium">Vencendo</p></div>
-                <div><p className="text-xl font-bold text-success">{validas}</p><p className="text-[10px] text-foreground/68 font-medium">Válidas</p></div>
+                <div><p className="text-xl font-bold text-destructive">{vencidas}</p><p className="text-[10px] text-foreground/50 font-medium">Vencidas</p></div>
+                <div><p className="text-xl font-bold text-warning">{vencendo}</p><p className="text-[10px] text-foreground/50 font-medium">Vencendo</p></div>
+                <div><p className="text-xl font-bold text-success">{validas}</p><p className="text-[10px] text-foreground/50 font-medium">Válidas</p></div>
               </div>
             </div>
           </div>
         </div>
         <div className="flex gap-2 px-6 py-3 border-t border-border/40 bg-muted/20">
-          <div className="mr-auto flex items-center gap-2 rounded-lg border border-border/50 bg-background/50 px-3 text-xs">
-            Canal de guias: <span className="font-semibold capitalize">{empresa.canalPreferido || 'não configurado'}</span>
-            {empresa.canalPreferido === 'whatsapp' && !empresa.whatsappOptInAt && <span className="text-warning">sem opt-in</span>}
-            {empresa.canalPreferido === 'email' && !empresa.emailValidado && <span className="text-warning">não validado</span>}
-          </div>
           <Button variant="outline" size="sm" className="text-xs gap-1.5 h-8" onClick={() => fileInputRef.current?.click()}>
             <Upload className="h-3.5 w-3.5" /> Upload PDF
           </Button>
@@ -168,24 +159,19 @@ export default function EmpresaDetalhe() {
         </div>
       )}
 
-      <EmpresaAutomacaoCards empresaId={empresa.id} />
-
       <Tabs defaultValue="checklist" className="space-y-4">
         <TabsList className="w-full justify-start overflow-x-auto bg-muted/30 p-1">
           <TabsTrigger value="checklist" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <ShieldCheck className="h-3.5 w-3.5" /> Checklist CNDs <span className="ml-1 text-[10px] text-foreground/68">({cnds.length})</span>
+            <ShieldCheck className="h-3.5 w-3.5" /> Checklist CNDs <span className="ml-1 text-[10px] text-foreground/50">({cnds.length})</span>
           </TabsTrigger>
           <TabsTrigger value="documentos" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <FileText className="h-3.5 w-3.5" /> Documentos <span className="ml-1 text-[10px] text-foreground/68">({docs.length})</span>
+            <FileText className="h-3.5 w-3.5" /> Documentos <span className="ml-1 text-[10px] text-foreground/50">({docs.length})</span>
           </TabsTrigger>
           <TabsTrigger value="envios" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <Send className="h-3.5 w-3.5" /> Envios <span className="ml-1 text-[10px] text-foreground/68">({envios.length})</span>
+            <Send className="h-3.5 w-3.5" /> Envios <span className="ml-1 text-[10px] text-foreground/50">({envios.length})</span>
           </TabsTrigger>
           <TabsTrigger value="logs" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <Clock className="h-3.5 w-3.5" /> Logs <span className="ml-1 text-[10px] text-foreground/68">({logs.length})</span>
-          </TabsTrigger>
-          <TabsTrigger value="guias" className="gap-1.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <FileText className="h-3.5 w-3.5" /> Guias <span className="ml-1 text-[10px] text-foreground/68">({guias.length})</span>
+            <Clock className="h-3.5 w-3.5" /> Logs <span className="ml-1 text-[10px] text-foreground/50">({logs.length})</span>
           </TabsTrigger>
           <TabsTrigger value="observacoes" className="text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm">
             Observações
@@ -203,8 +189,8 @@ export default function EmpresaDetalhe() {
                 return (
                   <div key={tipo}>
                     <div className="flex items-center justify-between mb-2 px-1">
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground/70">{getCNDTipoLabel(tipo)}</h4>
-                      <span className="text-[10px] text-foreground/68">{tipoValidas}/{items.length} válidas</span>
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground/55">{getCNDTipoLabel(tipo)}</h4>
+                      <span className="text-[10px] text-foreground/50">{tipoValidas}/{items.length} válidas</span>
                     </div>
                     <div className="space-y-1.5">
                       {items.map(cnd => (
@@ -215,12 +201,12 @@ export default function EmpresaDetalhe() {
                                 <p className="text-sm font-medium">{getCNDTipoLabel(cnd.tipo)}</p>
                                 <StatusBadge status={cnd.status} />
                               </div>
-                              <div className="flex gap-4 text-[11px] text-foreground/72">
+                              <div className="flex gap-4 text-[11px] text-foreground/60">
                                 {cnd.dataEmissao && <span>Emissão: {formatDate(cnd.dataEmissao)}</span>}
                                 {cnd.dataVencimento && <span>Vencimento: {formatDate(cnd.dataVencimento)}</span>}
                                 {cnd.origem && <span>Origem: {cnd.origem}</span>}
                               </div>
-                              {cnd.observacao && <p className="text-[11px] text-foreground/70 italic mt-0.5">{cnd.observacao}</p>}
+                              {cnd.observacao && <p className="text-[11px] text-foreground/55 italic mt-0.5">{cnd.observacao}</p>}
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               {cnd.arquivoId ? (
@@ -255,7 +241,7 @@ export default function EmpresaDetalhe() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{doc.nome}</p>
-                      <div className="flex gap-3 text-[11px] text-foreground/72">
+                      <div className="flex gap-3 text-[11px] text-foreground/60">
                         <span>{getCNDTipoLabel(doc.tipo)}</span>
                         <span>v{doc.versao}</span>
                         <span>{doc.tamanho}</span>
@@ -286,7 +272,7 @@ export default function EmpresaDetalhe() {
                     </div>
                     <div>
                       <p className="text-sm font-medium">{envio.canal === 'email' ? envio.assunto || 'E-mail' : 'WhatsApp'}</p>
-                      <div className="flex gap-3 text-[11px] text-foreground/72">
+                      <div className="flex gap-3 text-[11px] text-foreground/60">
                         <span>{envio.destinatario}</span>
                         <span>{formatDateTime(envio.dataEnvio)}</span>
                         <span>{envio.documentoIds.length} doc(s)</span>
@@ -311,7 +297,7 @@ export default function EmpresaDetalhe() {
                     log.acao === 'envio' ? 'border-primary' : log.acao === 'download' ? 'border-success' : log.acao === 'visualizacao' ? 'border-info' : 'border-warning'
                   )} />
                   <div className="text-sm font-medium">{log.detalhes}</div>
-                  <div className="flex gap-3 text-[11px] text-foreground/72 mt-0.5">
+                  <div className="flex gap-3 text-[11px] text-foreground/60 mt-0.5">
                     <span>{formatDateTime(log.dataHora)}</span>
                     <span>{log.usuario}</span>
                     {log.canal && <span className="capitalize">{log.canal}</span>}
@@ -320,20 +306,6 @@ export default function EmpresaDetalhe() {
               ))}
             </div>
           )}
-        </TabsContent>
-
-        <TabsContent value="guias" className="space-y-2">
-          {guias.length === 0 ? (
-            <EmptyState icon={FileText} title="Nenhuma guia processada" description="Guias identificadas pelo CNPJ desta empresa aparecerao aqui." />
-          ) : guias.map(guia => (
-            <div key={guia.id} className="glass-card-subtle flex items-center justify-between gap-3 p-4">
-              <div>
-                <p className="text-sm font-medium">{guia.fileName}</p>
-                <p className="mt-1 text-xs text-foreground/70">{guia.tipoGuia || 'Guia'} | {formatDateTime(guia.receivedAt)}</p>
-              </div>
-              <Button size="sm" variant="outline" onClick={() => navigate(`/guias/${guia.id}`)}>Abrir</Button>
-            </div>
-          ))}
         </TabsContent>
 
         <TabsContent value="observacoes">

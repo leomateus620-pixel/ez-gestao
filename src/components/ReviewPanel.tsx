@@ -63,7 +63,7 @@ export function ReviewPanel({ exception, open, onClose, onPublish }: ReviewPanel
         </SheetHeader>
 
         <div className="mt-4 space-y-1">
-          <div className="grid grid-cols-[1fr_1fr_1fr_80px] gap-2 text-[10px] font-semibold text-foreground/68 uppercase tracking-wider pb-2 border-b border-border">
+          <div className="grid grid-cols-[1fr_1fr_1fr_80px] gap-2 text-[10px] font-semibold text-foreground/50 uppercase tracking-wider pb-2 border-b border-border">
             <span>Campo</span>
             <span>Extraído</span>
             <span>Esperado</span>
@@ -82,7 +82,7 @@ export function ReviewPanel({ exception, open, onClose, onPublish }: ReviewPanel
                   <span className="text-xs font-medium text-foreground">{field.label}</span>
                 </div>
                 <span className="text-xs text-foreground/70 font-mono truncate">{field.extracted}</span>
-                <span className="text-xs text-foreground/68 truncate">{field.expected}</span>
+                <span className="text-xs text-foreground/50 truncate">{field.expected}</span>
                 <div className="flex items-center justify-center gap-1">
                   <Button
                     variant={field.approved === true ? 'default' : 'ghost'}
@@ -108,7 +108,7 @@ export function ReviewPanel({ exception, open, onClose, onPublish }: ReviewPanel
 
         <div className="mt-6 space-y-3">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-foreground/68">
+            <span className="text-foreground/50">
               {fields.filter(f => f.approved === true).length}/{fields.length} campos aprovados
             </span>
             {allReviewed && (

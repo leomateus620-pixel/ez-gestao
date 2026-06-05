@@ -28,14 +28,11 @@ export async function dispatchLookup(input: DispatchInput): Promise<DispatchResu
 
 export async function fetchLookupStatus(request_id: string, type: LookupType) {
   // Use direct fetch because supabase.functions.invoke doesn't support query strings on GET.
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new Error("authentication_required");
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lookup-status?request_id=${encodeURIComponent(request_id)}&type=${type}`;
   const r = await fetch(url, {
     headers: {
       apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string}`,
     },
   });
   if (!r.ok) throw new Error(`status_${r.status}`);

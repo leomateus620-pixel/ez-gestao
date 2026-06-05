@@ -57,13 +57,13 @@ export function ExecutionTimeline({ steps }: ExecutionTimelineProps) {
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-foreground">{etapaLabels[step.etapa] || step.etapa}</p>
                 {step.inicio && step.fim && (
-                  <span className="text-[10px] text-foreground/72">
+                  <span className="text-[10px] text-foreground/40">
                     {Math.round((new Date(step.fim).getTime() - new Date(step.inicio).getTime()) / 1000)}s
                   </span>
                 )}
               </div>
               {step.detalhes && (
-                <p className="text-[11px] text-foreground/68 mt-0.5">{step.detalhes}</p>
+                <p className="text-[11px] text-foreground/50 mt-0.5">{step.detalhes}</p>
               )}
             </div>
           </div>

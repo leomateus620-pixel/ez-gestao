@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useDataStore } from '@/data/DataProvider';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
@@ -21,8 +21,7 @@ const ITEMS_PER_PAGE = 30;
 
 export default function Logs() {
   const navigate = useNavigate();
-  const { state, enableLogs, enableAuditTrail } = useDataStore();
-  useEffect(() => { enableLogs(); enableAuditTrail(); }, [enableLogs, enableAuditTrail]);
+  const { state } = useDataStore();
   const [busca, setBusca] = useState('');
   const [filtroAcao, setFiltroAcao] = useState('todos');
   const [page, setPage] = useState(1);
@@ -90,7 +89,7 @@ export default function Logs() {
               {Object.entries(grouped).map(([dateKey, logs]) => (
                 <div key={dateKey}>
                   <div className="flex items-center gap-3 mb-3">
-                    <span className="text-xs font-semibold text-foreground/70 uppercase tracking-wider">{dateKey}</span>
+                    <span className="text-xs font-semibold text-foreground/55 uppercase tracking-wider">{dateKey}</span>
                     <div className="flex-1 h-px bg-border/60" />
                   </div>
                   <div className="relative border-l-2 border-border/60 ml-4 space-y-2.5">
@@ -102,10 +101,10 @@ export default function Logs() {
                           <div className={cn('absolute -left-[5px] top-3 h-2.5 w-2.5 rounded-full', acaoColors[log.acao] || 'bg-muted-foreground')} />
                           <div className="glass-card-subtle p-3.5 hover:shadow-sm transition-all">
                             <div className="flex items-start gap-3">
-                              <Icon className="h-4 w-4 text-foreground/68 shrink-0 mt-0.5" />
+                              <Icon className="h-4 w-4 text-foreground/50 shrink-0 mt-0.5" />
                               <div className="min-w-0 flex-1">
                                 <p className="text-sm font-medium">{log.detalhes}</p>
-                                <div className="flex flex-wrap gap-x-3 text-[11px] text-foreground/72 mt-0.5">
+                                <div className="flex flex-wrap gap-x-3 text-[11px] text-foreground/60 mt-0.5">
                                   <span className="cursor-pointer hover:underline" onClick={() => navigate(`/empresas/${log.empresaId}`)}>{empresa?.nomeFantasia}</span>
                                   <span className="inline-flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-medium">{acaoLabels[log.acao]}</span>
                                   <span>{log.usuario}</span>
@@ -139,7 +138,7 @@ export default function Logs() {
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium">{entry.details}</p>
-                    <div className="flex gap-3 text-[11px] text-foreground/72 mt-0.5">
+                    <div className="flex gap-3 text-[11px] text-foreground/60 mt-0.5">
                       <span className="capitalize">{entry.action}</span>
                       <span className="capitalize">{entry.entityType}</span>
                       <span>{entry.userId}</span>

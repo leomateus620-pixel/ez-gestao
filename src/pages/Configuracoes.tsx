@@ -1,74 +1,58 @@
-import { Clock, Database, KeyRound, Lock, Palette, ShieldCheck } from 'lucide-react';
 import { GlassCard } from '@/components/GlassCard';
 import { PageHeader } from '@/components/PageHeader';
-import { Badge } from '@/components/ui/badge';
-
-const controls = [
-  {
-    icon: Clock,
-    title: 'Agendamento',
-    description: 'Varredura automática da pasta a enviar a cada 5 minutos, além da execução manual.',
-  },
-  {
-    icon: KeyRound,
-    title: 'Segredos e OAuth',
-    description: 'Tokens Google criptografados e chaves Twilio mantidos apenas em secrets ou Vault server-side.',
-  },
-  {
-    icon: Database,
-    title: 'Retenção LGPD',
-    description: 'Bucket privado para entrega temporária de anexos, com expiracao curta e logs de auditoria.',
-  },
-  {
-    icon: Palette,
-    title: 'Liquid Glass',
-    description: 'Contraste acessivel, suporte a tema escuro e reducao de animacoes pelo sistema operacional.',
-  },
-];
+import { Settings, ShieldCheck, Users, Palette, Lock } from 'lucide-react';
+import { getCurrentRole } from '@/lib/permissions';
 
 export default function Configuracoes() {
+  const role = getCurrentRole();
+
+  const sections = [
+    { icon: ShieldCheck, title: 'Tipos de CND', desc: 'Gerenciar tipos de certidões disponíveis no sistema' },
+    { icon: Users, title: 'Perfis e Usuários', desc: 'Configurar perfis de acesso e usuários internos' },
+    { icon: Settings, title: 'Preferências', desc: 'Configurações gerais do sistema, notificações e integrações' },
+    { icon: Palette, title: 'Aparência', desc: 'Personalizar tema, cores e layout do sistema' },
+  ];
+
   return (
     <div className="space-y-6 animate-slide-in">
-      <PageHeader title="Configuracoes" subtitle="Seguranca e operação do envio automático de guias." />
+      <PageHeader title="Configurações" subtitle="Gerencie as preferências do sistema" />
 
-      <GlassCard variant="elevated">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-          <div className="flex items-start gap-3">
-            <ShieldCheck className="mt-0.5 h-5 w-5 text-success" />
-            <div>
-              <p className="text-sm font-semibold">Modo automático seguro</p>
-              <p className="mt-1 text-xs text-foreground/72">
-                Envio ocorre somente com CNPJ único, empresa ativa, contato válido, consentimento aplicável e conector ativo.
-              </p>
-            </div>
-          </div>
-          <Badge variant="outline" className="border-success/30 bg-success/10 text-success">Política ativa</Badge>
-        </div>
-      </GlassCard>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        {controls.map((control) => (
-          <GlassCard key={control.title} className="p-5">
+      <div className="grid sm:grid-cols-2 gap-4">
+        {sections.map(s => (
+          <div key={s.title} className="glass-card p-5 cursor-pointer transition-all duration-200 hover:shadow-md group">
             <div className="flex items-start gap-4">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <control.icon className="h-5 w-5" />
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/8 text-primary group-hover:bg-primary/12 transition-colors">
+                <s.icon className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-sm font-semibold">{control.title}</p>
-                <p className="mt-1 text-xs leading-relaxed text-foreground/72">{control.description}</p>
+                <p className="text-sm font-semibold">{s.title}</p>
+                <p className="text-xs text-foreground/60 mt-1 leading-relaxed">{s.desc}</p>
               </div>
             </div>
-          </GlassCard>
+          </div>
         ))}
       </div>
 
       <GlassCard variant="subtle">
-        <div className="flex items-center gap-3">
-          <Lock className="h-4 w-4 text-foreground/68" />
-          <div>
-            <p className="text-sm font-medium">Administrador único com Supabase Auth</p>
-            <p className="text-xs text-foreground/72">Acesso anonimo foi removido das tabelas operacionais e as acoes manuais exigem sessão autenticada.</p>
+        <div className="flex items-center gap-3 mb-4">
+          <Lock className="h-4 w-4 text-foreground/50" />
+          <p className="text-sm font-medium">Perfil de Acesso</p>
+        </div>
+        <div className="flex items-center gap-3 text-xs">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-primary font-semibold capitalize">
+            {role}
+          </span>
+          <span className="text-foreground/60">Permissões completas do sistema</span>
+        </div>
+      </GlassCard>
+
+      <GlassCard variant="subtle">
+        <div className="text-center py-10">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60 mx-auto mb-4">
+            <Settings className="h-7 w-7 text-foreground/30 animate-pulse-soft" />
           </div>
+          <p className="text-sm font-medium text-foreground">Configurações completas na Fase 2</p>
+          <p className="text-xs text-foreground/55 mt-1.5">Integração com backend, regras de acesso e automações</p>
         </div>
       </GlassCard>
     </div>

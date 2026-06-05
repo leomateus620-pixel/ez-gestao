@@ -1,182 +1,26 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EZ Gestao</title>
-    <meta name="description" content="Automacao segura de guias e rotinas fiscais" />
-    <meta name="author" content="EZ Gestao" />
+    <!-- TODO: Set the document title to the name of your application -->
+    <title>Lovable App</title>
+    <meta name="description" content="Lovable Generated Project" />
+    <meta name="author" content="Lovable" />
 
-    <meta property="og:title" content="EZ Gestao" />
-    <meta property="og:description" content="Automacao segura de guias e rotinas fiscais" />
+    <!-- TODO: Update og:title to match your application name -->
+    <meta property="og:title" content="Lovable App" />
+    <meta property="og:description" content="Lovable Generated Project" />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
 
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@Lovable" />
     <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
-    <style>
-      #app-boot-fallback {
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 24px;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        color: #111827;
-        background: #f8fafc;
-      }
-
-      #app-boot-fallback .boot-box {
-        max-width: 360px;
-        text-align: center;
-      }
-
-      #app-boot-fallback .boot-spinner {
-        width: 34px;
-        height: 34px;
-        margin: 0 auto 14px;
-        border: 2px solid rgba(37, 99, 235, 0.24);
-        border-top-color: #2563eb;
-        border-radius: 999px;
-        animation: ez-boot-spin 0.9s linear infinite;
-      }
-
-      #app-boot-fallback .boot-loading {
-        margin: 0 0 22px;
-        font-size: 13px;
-        color: #334155;
-      }
-
-      #app-boot-fallback .boot-title {
-        margin: 0 0 10px;
-        font-size: 15px;
-        font-weight: 700;
-      }
-
-      #app-boot-fallback .boot-message {
-        margin: 0 0 16px;
-        font-size: 13px;
-        line-height: 1.55;
-        color: #475569;
-      }
-
-      #app-boot-fallback .boot-button {
-        border: 0;
-        border-radius: 8px;
-        background: #2563eb;
-        color: white;
-        cursor: pointer;
-        font: inherit;
-        font-weight: 700;
-        padding: 10px 18px;
-      }
-
-      @keyframes ez-boot-spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-    </style>
-    <script>
-      (function () {
-        window.__EZ_APP_BOOTED__ = false;
-        var recoveryKey = 'ez-app-asset-recovery-at';
-        var recoveryWindowMs = 30000;
-
-        function showBootError(title, message) {
-          var titleNode = document.getElementById('app-boot-title');
-          var messageNode = document.getElementById('app-boot-message');
-          if (titleNode) {
-            titleNode.hidden = false;
-            titleNode.textContent = title;
-          }
-          if (messageNode) {
-            messageNode.textContent = message;
-          }
-        }
-
-        function canRecover() {
-          try {
-            var lastRecovery = Number(sessionStorage.getItem(recoveryKey) || 0);
-            if (lastRecovery && Date.now() - lastRecovery < recoveryWindowMs) return false;
-            sessionStorage.setItem(recoveryKey, String(Date.now()));
-            return true;
-          } catch (err) {
-            return true;
-          }
-        }
-
-        function clearCaches() {
-          if (!('caches' in window)) return Promise.resolve();
-          return caches.keys()
-            .then(function (keys) {
-              return Promise.all(keys.map(function (key) { return caches.delete(key); }));
-            })
-            .catch(function () {});
-        }
-
-        window.__EZ_RELOAD_APP__ = function () {
-          showBootError('Atualizando arquivos do app...', 'Limpando cache local e buscando a versao mais recente.');
-          clearCaches().finally(function () {
-            window.location.reload();
-          });
-        };
-
-        window.addEventListener('error', function (event) {
-          var target = event.target;
-          var tagName = target && target.tagName;
-          var assetUrl = target && (target.src || target.href);
-          var isAssetError = (tagName === 'SCRIPT' || tagName === 'LINK') && assetUrl && assetUrl.indexOf('/assets/') !== -1;
-          if (!isAssetError) return;
-
-          if (canRecover()) {
-            window.__EZ_RELOAD_APP__();
-            return;
-          }
-
-          showBootError(
-            'Nao foi possivel carregar o aplicativo',
-            'Os arquivos do app nao foram carregados. Verifique sua conexao e tente novamente.'
-          );
-        }, true);
-
-        window.addEventListener('load', function () {
-          window.setTimeout(function () {
-            if (window.__EZ_APP_BOOTED__) return;
-            showBootError(
-              'Nao foi possivel iniciar o aplicativo',
-              'O carregamento demorou mais que o esperado. Recarregue para buscar os arquivos mais recentes.'
-            );
-          }, 12000);
-        });
-      })();
-    </script>
   </head>
 
   <body>
-    <div id="root">
-      <div id="boot-fallback" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-family:system-ui,-apple-system,sans-serif;padding:24px;text-align:center;color:#1f2937;background:#f8fafc">
-        <div style="height:36px;width:36px;border-radius:9999px;border:3px solid #cbd5e1;border-top-color:#2563eb;animation:bootspin 0.9s linear infinite"></div>
-        <div style="font-size:14px;color:#475569">Carregando aplicação...</div>
-        <div id="boot-fallback-error" style="display:none;flex-direction:column;align-items:center;gap:10px;margin-top:8px">
-          <div style="font-size:16px;font-weight:600;color:#0f172a">Não foi possível carregar o aplicativo</div>
-          <div style="font-size:13px;color:#64748b;max-width:420px">Os arquivos do app não foram carregados. Verifique sua conexão e tente novamente.</div>
-          <button onclick="try{Object.keys(localStorage).filter(function(k){return k.indexOf('sb-')===0}).forEach(function(k){localStorage.removeItem(k)})}catch(e){};location.reload()" style="margin-top:4px;padding:10px 18px;border-radius:10px;background:#2563eb;color:#fff;border:none;font-weight:600;cursor:pointer">Recarregar</button>
-        </div>
-        <style>@keyframes bootspin{to{transform:rotate(360deg)}}</style>
-      </div>
-    </div>
-    <script>
-      (function(){
-        setTimeout(function(){
-          var root = document.getElementById('root');
-          if (!root) return;
-          if (root.getAttribute('data-app-mounted') === '1') return;
-          var err = document.getElementById('boot-fallback-error');
-          if (err) err.style.display = 'flex';
-        }, 8000);
-      })();
-    </script>
+    <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
