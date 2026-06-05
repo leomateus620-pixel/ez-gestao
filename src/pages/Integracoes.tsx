@@ -55,16 +55,16 @@ export default function Integracoes() {
 
       <div className="grid gap-3 md:grid-cols-3">
         <div className="liquid-stat-card" style={{ '--stat-color': 'var(--menu-emerald)' } as CSSProperties}>
-          <div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/48">Ativos</p><Wifi className="h-4 w-4 text-success" /></div>
-          <p className="mt-2 text-3xl font-black tracking-tight">{activeConnectors}</p><p className="text-xs text-foreground/55">Conectores prontos para uso</p>
+          <div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/66">Ativos</p><Wifi className="h-4 w-4 text-success" /></div>
+          <p className="mt-2 text-3xl font-black tracking-tight">{activeConnectors}</p><p className="text-xs text-foreground/70">Conectores prontos para uso</p>
         </div>
         <div className="liquid-stat-card" style={{ '--stat-color': 'var(--menu-blue)' } as CSSProperties}>
-          <div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/48">Execuções hoje</p><Activity className="h-4 w-4 text-primary" /></div>
-          <p className="mt-2 text-3xl font-black tracking-tight">{runsToday}</p><p className="text-xs text-foreground/55">Volume monitorado no dia</p>
+          <div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/66">Execuções hoje</p><Activity className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-3xl font-black tracking-tight">{runsToday}</p><p className="text-xs text-foreground/70">Volume monitorado no dia</p>
         </div>
         <div className="liquid-stat-card" style={{ '--stat-color': 'var(--menu-cyan)' } as CSSProperties}>
-          <div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/48">Sucesso médio</p><Zap className="h-4 w-4 text-cyan-600" /></div>
-          <p className="mt-2 text-3xl font-black tracking-tight">{averageSuccess}%</p><p className="text-xs text-foreground/55">Confiabilidade dos conectores</p>
+          <div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/66">Sucesso médio</p><Zap className="h-4 w-4 text-cyan-600" /></div>
+          <p className="mt-2 text-3xl font-black tracking-tight">{averageSuccess}%</p><p className="text-xs text-foreground/70">Confiabilidade dos conectores</p>
         </div>
       </div>
 
@@ -141,7 +141,7 @@ export default function Integracoes() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border text-[11px] text-foreground/50 uppercase tracking-wider">
+                <tr className="border-b border-border text-[11px] text-foreground/68 uppercase tracking-wider">
                   <th className="text-left p-3 font-semibold">Conector</th>
                   <th className="text-left p-3 font-semibold">Tipo</th>
                   <th className="text-left p-3 font-semibold">Versão</th>
@@ -168,16 +168,16 @@ export default function Integracoes() {
                         )}
                       </div>
                     </td>
-                    <td className="p-3 text-foreground/60 text-[12px]">{tipoLabels[connector.tipo]}</td>
-                    <td className="p-3 font-mono text-[11px] text-foreground/50">{connector.versao}</td>
+                    <td className="p-3 text-foreground/72 text-[12px]">{tipoLabels[connector.tipo]}</td>
+                    <td className="p-3 font-mono text-[11px] text-foreground/68">{connector.versao}</td>
                     <td className="p-3 text-right">
                       <span className={`font-semibold ${stats.taxaSucesso >= 90 ? 'text-success' : stats.taxaSucesso >= 70 ? 'text-warning' : 'text-destructive'}`}>
                         {stats.taxaSucesso.toFixed(0)}%
                       </span>
                     </td>
-                    <td className="p-3 text-right text-foreground/60">{connector.tempoMedio.toFixed(1)}s</td>
-                    <td className="p-3 text-right text-foreground/60">{stats.total}</td>
-                    <td className="p-3 text-right text-[11px] text-foreground/50">
+                    <td className="p-3 text-right text-foreground/72">{connector.tempoMedio.toFixed(1)}s</td>
+                    <td className="p-3 text-right text-foreground/72">{stats.total}</td>
+                    <td className="p-3 text-right text-[11px] text-foreground/68">
                       {new Date(connector.ultimoTeste).toLocaleDateString('pt-BR')}
                     </td>
                     <td className="p-3 text-right text-[11px]">

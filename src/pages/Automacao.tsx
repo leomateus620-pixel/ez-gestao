@@ -157,11 +157,11 @@ export default function Automacao() {
           <h2 className="section-title mb-3">Gargalos</h2>
           <div className="space-y-3">
             <div>
-              <p className="text-[11px] text-foreground/50 mb-2">Tempo Médio por Conector</p>
+              <p className="text-[11px] text-foreground/68 mb-2">Tempo Médio por Conector</p>
               <div className="space-y-2">
                 {state.connectors.filter(c => c.status === 'ativo' && c.tempoMedio > 0).sort((a, b) => b.tempoMedio - a.tempoMedio).map(c => (
                   <div key={c.id} className="flex items-center gap-2">
-                    <span className="text-[11px] text-foreground/60 w-28 truncate">{c.nome}</span>
+                    <span className="text-[11px] text-foreground/72 w-28 truncate">{c.nome}</span>
                     <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${c.tempoMedio > 10 ? 'bg-destructive' : c.tempoMedio > 5 ? 'bg-warning' : 'bg-success'}`}
@@ -175,11 +175,11 @@ export default function Automacao() {
             </div>
             {topTipologias.length > 0 && (
               <div>
-                <p className="text-[11px] text-foreground/50 mb-2">Top Exceções por Tipo</p>
+                <p className="text-[11px] text-foreground/68 mb-2">Top Exceções por Tipo</p>
                 <div className="space-y-1.5">
                   {topTipologias.map(([tipo, count]) => (
                     <div key={tipo} className="flex items-center justify-between text-[11px]">
-                      <span className="text-foreground/60">{tipologiaLabels[tipo as ExceptionTipologia]}</span>
+                      <span className="text-foreground/72">{tipologiaLabels[tipo as ExceptionTipologia]}</span>
                       <span className="font-semibold text-foreground/80">{count}</span>
                     </div>
                   ))}
@@ -197,19 +197,19 @@ export default function Automacao() {
                 <Shield className="h-4 w-4 text-success" />
               </div>
               <p className="text-2xl font-bold text-foreground">{productivity.autoRate}%</p>
-              <p className="text-[10px] text-foreground/45">Automação sem intervenção</p>
+              <p className="text-[10px] text-foreground/64">Automação sem intervenção</p>
             </div>
             <div className="text-center p-4 rounded-lg bg-muted/50">
               <div className="flex items-center justify-center gap-1.5 mb-1">
                 <TrendingUp className="h-4 w-4 text-primary" />
               </div>
               <p className="text-2xl font-bold text-foreground">{productivity.avgDuration.toFixed(1)}s</p>
-              <p className="text-[10px] text-foreground/45">Tempo médio de execução</p>
+              <p className="text-[10px] text-foreground/64">Tempo médio de execução</p>
             </div>
           </div>
 
           <div className="mt-4">
-            <p className="text-[11px] text-foreground/50 mb-2">Quick Actions</p>
+            <p className="text-[11px] text-foreground/68 mb-2">Quick Actions</p>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1" onClick={handleExecutarLote} disabled={running}>
                 <Play className="h-3 w-3" /> Executar Lote
@@ -244,9 +244,9 @@ export default function Automacao() {
                       {cb.estado === 'open' ? 'Aberto' : 'Testando'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-foreground/50">{cb.falhasConsecutivas} falhas consecutivas</p>
+                  <p className="text-[11px] text-foreground/68">{cb.falhasConsecutivas} falhas consecutivas</p>
                   {cb.proximoTeste && (
-                    <p className="text-[10px] text-foreground/40 mt-1">
+                    <p className="text-[10px] text-foreground/72 mt-1">
                       Próximo teste: {new Date(cb.proximoTeste).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   )}
@@ -295,10 +295,10 @@ export default function Automacao() {
                   <RunStatusBadge status={run.status} />
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">{empresa?.nomeFantasia || run.empresaId}</p>
-                    <p className="text-[11px] text-foreground/50">{connector?.nome || run.connectorId}</p>
+                    <p className="text-[11px] text-foreground/68">{connector?.nome || run.connectorId}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 text-[11px] text-foreground/50">
+                <div className="flex items-center gap-4 text-[11px] text-foreground/68">
                   {run.erroDetalhes && (
                     <span className="text-destructive/70 truncate max-w-[200px] hidden lg:inline">{run.erroDetalhes}</span>
                   )}
@@ -323,7 +323,7 @@ export default function Automacao() {
                 }`}>
                   {batch.status === 'executando' ? 'Em execução' : 'Agendado'}
                 </span>
-                <span className="text-[10px] text-foreground/40">
+                <span className="text-[10px] text-foreground/72">
                   {new Date(batch.agendadoPara).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>

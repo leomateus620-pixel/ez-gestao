@@ -69,12 +69,12 @@ export default function Classifica() {
         <div key={label} className="liquid-stat-card" style={{ '--stat-color': color } as CSSProperties}>
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/48">{label}</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/66">{label}</p>
               <p className="mt-2 text-3xl font-black tracking-tight text-foreground">{String(value)}</p>
             </div>
             <div className="rounded-2xl border border-white/60 bg-white/55 p-2 text-primary shadow-inner backdrop-blur-xl"><Icon className="h-4 w-4" /></div>
           </div>
-          <p className="mt-1 text-xs font-medium text-foreground/55">{caption}</p>
+          <p className="mt-1 text-xs font-medium text-foreground/70">{caption}</p>
         </div>
       ))}
     </div>
@@ -89,7 +89,7 @@ export default function Classifica() {
       <TabsContent value="revisao"><GlassCard className="p-4 space-y-2">{queue.map((q) => <div key={q.id} className="flex items-center justify-between rounded-xl border border-amber-200/70 bg-amber-50/45 p-3"><span className="text-sm font-medium">{q.reason}</span><div className="flex gap-2"><Button size="sm" variant="outline">Corrigir classificação</Button><Button size="sm">Criar regra</Button></div></div>)}</GlassCard></TabsContent>
       <TabsContent value="regras"><GlassCard className="p-4 space-y-2">{rules.map((r) => <div key={r.id} className="rounded-xl border border-white/50 bg-white/45 p-3 text-sm">{r.rule_name} · prioridade {r.priority}</div>)}</GlassCard></TabsContent>
       <TabsContent value="logs"><GlassCard className="p-4 space-y-2">{logs.map((l) => <div key={l.id} className="rounded-xl border border-white/50 bg-white/45 p-3 text-sm">{new Date(l.created_at).toLocaleString('pt-BR')} · {l.level} · {l.message}</div>)}</GlassCard></TabsContent>
-      <TabsContent value="drive"><GlassCard className="p-4 space-y-2"><div className="text-sm font-medium">Pasta do Drive integrada reutilizando conexão existente.</div><div className="flex gap-2"><Badge variant="outline">Última sincronização: {logs[0]?.created_at ? new Date(logs[0].created_at).toLocaleString('pt-BR') : 'n/a'}</Badge><Button size="sm" variant="outline" onClick={syncNow}><RefreshCw className="h-3 w-3 mr-1" />Rodar sincronização agora</Button></div><div className="text-xs text-foreground/60">Último erro: {logs.find((l) => l.level === 'error')?.message ?? 'nenhum'}</div></GlassCard></TabsContent>
+      <TabsContent value="drive"><GlassCard className="p-4 space-y-2"><div className="text-sm font-medium">Pasta do Drive integrada reutilizando conexão existente.</div><div className="flex gap-2"><Badge variant="outline">Última sincronização: {logs[0]?.created_at ? new Date(logs[0].created_at).toLocaleString('pt-BR') : 'n/a'}</Badge><Button size="sm" variant="outline" onClick={syncNow}><RefreshCw className="h-3 w-3 mr-1" />Rodar sincronização agora</Button></div><div className="text-xs text-foreground/72">Último erro: {logs.find((l) => l.level === 'error')?.message ?? 'nenhum'}</div></GlassCard></TabsContent>
     </Tabs>
   </div>;
 }

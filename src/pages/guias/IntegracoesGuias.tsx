@@ -58,7 +58,7 @@ function ConnectorCard({ integration }: { integration: IntegracaoGuia }) {
           </div>
           <div>
             <p className="text-sm font-semibold">{providerLabels[integration.provider]}</p>
-            <p className="text-xs text-foreground/50">
+            <p className="text-xs text-foreground/68">
               {providerDescriptions[integration.provider] ?? integration.provider.replace(/_/g, ' ')}
             </p>
           </div>
@@ -68,12 +68,12 @@ function ConnectorCard({ integration }: { integration: IntegracaoGuia }) {
         </Badge>
       </div>
       {integration.provider === 'google_drive' && (
-        <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-xs text-foreground/65">
+        <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-xs text-foreground/76">
           <p>`a enviar`: {integration.sourceFolderId || 'Não configurada'}</p>
           <p className="mt-1">`enviados`: {integration.sentFolderId || 'Não configurada'}</p>
         </div>
       )}
-      <p className="text-xs text-foreground/50">
+      <p className="text-xs text-foreground/68">
         {integration.lastCheckAt ? `Última verificação: ${formatDateTime(integration.lastCheckAt)}` : 'Nenhuma verificação executada.'}
       </p>
       {integration.lastError && <p className="rounded-lg bg-destructive/10 p-2 text-xs text-destructive">{integration.lastError}</p>}
@@ -122,7 +122,7 @@ export default function IntegracoesGuias() {
             <ShieldCheck className="mt-0.5 h-5 w-5 text-success" />
             <div>
               <p className="text-sm font-semibold">Segredos protegidos no servidor</p>
-              <p className="mt-1 max-w-2xl text-xs leading-relaxed text-foreground/60">
+              <p className="mt-1 max-w-2xl text-xs leading-relaxed text-foreground/72">
                 OAuth refresh token, credenciais Vision e token Twilio nunca são enviados ao frontend.
                 URLs de documento para WhatsApp expiram e o webhook exige assinatura Twilio válida.
               </p>

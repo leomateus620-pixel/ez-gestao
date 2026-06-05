@@ -61,15 +61,15 @@ function GuidesTable({ guides }: { guides: Guia[] }) {
                 <span className="max-w-64 truncate font-medium">{guide.fileName}</span>
               </div>
             </TableCell>
-            <TableCell className="text-xs text-foreground/65">
+            <TableCell className="text-xs text-foreground/76">
               {guide.cnpjDetectado ? formatCNPJ(guide.cnpjDetectado) : 'Pendente'}
             </TableCell>
             <TableCell className="text-xs">
               {guide.tipoGuia || 'A extrair'}
-              {guide.competencia && <span className="block text-foreground/50">{guide.competencia}</span>}
+              {guide.competencia && <span className="block text-foreground/68">{guide.competencia}</span>}
             </TableCell>
             <TableCell><GuideBadge status={guide.status} /></TableCell>
-            <TableCell className="text-xs text-foreground/60">{formatDateTime(guide.receivedAt)}</TableCell>
+            <TableCell className="text-xs text-foreground/72">{formatDateTime(guide.receivedAt)}</TableCell>
             <TableCell>
               <Button asChild size="icon" variant="ghost" className="h-8 w-8">
                 <Link to={`/guias/${guide.id}`} aria-label="Abrir detalhe"><ArrowRight className="h-4 w-4" /></Link>
@@ -122,7 +122,7 @@ export default function Guias({ view }: { view: GuideView }) {
       {view !== 'excecoes' && (
         <GlassCard variant="elevated" className="overflow-hidden p-0">
           {isLoading ? (
-            <div className="flex items-center justify-center gap-2 p-16 text-sm text-foreground/60">
+            <div className="flex items-center justify-center gap-2 p-16 text-sm text-foreground/72">
               <Loader2 className="h-4 w-4 animate-spin" /> Carregando guias
             </div>
           ) : (view === 'fila' ? pending : sent).length ? (
@@ -153,8 +153,8 @@ export default function Guias({ view }: { view: GuideView }) {
                       <Badge variant="outline">{entry.severity}</Badge>
                     </div>
                     <p className="mt-1 text-sm text-foreground/70">{entry.reason}</p>
-                    <p className="mt-2 text-xs text-foreground/55">Acao recomendada: {entry.actionRecommended || 'Análise manual.'}</p>
-                    <p className="mt-1 text-[11px] text-foreground/45">{formatDate(entry.createdAt)}</p>
+                    <p className="mt-2 text-xs text-foreground/70">Acao recomendada: {entry.actionRecommended || 'Análise manual.'}</p>
+                    <p className="mt-1 text-[11px] text-foreground/64">{formatDate(entry.createdAt)}</p>
                   </div>
                 </div>
                 <div className="flex gap-2">

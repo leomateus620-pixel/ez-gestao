@@ -37,7 +37,7 @@ export default function Configuracoes() {
             <ShieldCheck className="mt-0.5 h-5 w-5 text-success" />
             <div>
               <p className="text-sm font-semibold">Modo automático seguro</p>
-              <p className="mt-1 text-xs text-foreground/60">
+              <p className="mt-1 text-xs text-foreground/72">
                 Envio ocorre somente com CNPJ único, empresa ativa, contato válido, consentimento aplicável e conector ativo.
               </p>
             </div>
@@ -55,7 +55,7 @@ export default function Configuracoes() {
               </div>
               <div>
                 <p className="text-sm font-semibold">{control.title}</p>
-                <p className="mt-1 text-xs leading-relaxed text-foreground/60">{control.description}</p>
+                <p className="mt-1 text-xs leading-relaxed text-foreground/72">{control.description}</p>
               </div>
             </div>
           </GlassCard>
@@ -64,10 +64,10 @@ export default function Configuracoes() {
 
       <GlassCard variant="subtle">
         <div className="flex items-center gap-3">
-          <Lock className="h-4 w-4 text-foreground/50" />
+          <Lock className="h-4 w-4 text-foreground/68" />
           <div>
             <p className="text-sm font-medium">Administrador único com Supabase Auth</p>
-            <p className="text-xs text-foreground/60">Acesso anonimo foi removido das tabelas operacionais e as acoes manuais exigem sessão autenticada.</p>
+            <p className="text-xs text-foreground/72">Acesso anonimo foi removido das tabelas operacionais e as acoes manuais exigem sessão autenticada.</p>
           </div>
         </div>
       </GlassCard>

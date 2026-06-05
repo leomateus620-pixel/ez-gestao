@@ -50,7 +50,7 @@ export function ConfidenceBreakdown({ confianca, scores }: ConfidenceBreakdownPr
         </div>
         <div>
           <p className={`text-sm font-semibold ${cfg.color}`}>{cfg.label}</p>
-          <p className="text-[10px] text-foreground/40">{total}/{max} critérios atendidos</p>
+          <p className="text-[10px] text-foreground/72">{total}/{max} critérios atendidos</p>
         </div>
         <div className="ml-auto text-right">
           <p className={`text-lg font-bold ${cfg.color}`}>{pct}%</p>
@@ -64,7 +64,7 @@ export function ConfidenceBreakdown({ confianca, scores }: ConfidenceBreakdownPr
       <div className="space-y-1.5">
         {Object.entries(s).map(([key, passed]) => (
           <div key={key} className="flex items-center justify-between text-[11px]">
-            <span className="text-foreground/60">{criteriaLabels[key] || key}</span>
+            <span className="text-foreground/72">{criteriaLabels[key] || key}</span>
             <span className={passed ? 'text-success font-medium' : 'text-destructive/70 font-medium'}>
               {passed ? '✓' : '✗'}
             </span>

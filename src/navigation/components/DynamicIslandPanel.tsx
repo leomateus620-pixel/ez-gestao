@@ -4,7 +4,7 @@ export function DynamicIslandPanel({ children, className }: { children: React.Re
   return (
     <div
       className={cn(
-        'relative overflow-hidden rounded-[30px] border border-white/80 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),hsl(var(--brand-warm-canvas)/0.96)_50%,hsl(var(--brand-warm-surface)/0.94))] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-1px_0_rgba(211,209,209,0.5),0_18px_55px_-28px_hsl(var(--brand-warm-shadow)/0.62),0_0_0_1px_rgba(255,255,255,0.58)] backdrop-blur-md transition-all duration-300 before:pointer-events-none before:absolute before:inset-x-8 before:top-0 before:h-px before:bg-white/90 after:pointer-events-none after:absolute after:-right-12 after:-top-16 after:h-32 after:w-32 after:rounded-full after:bg-primary/12 after:blur-2xl',
+        'relative overflow-hidden rounded-[30px] border border-white/80 bg-[linear-gradient(145deg,rgba(255,255,255,0.98),hsl(var(--brand-warm-canvas)/0.96)_50%,hsl(var(--brand-warm-surface)/0.94))] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.98),inset_0_-1px_0_rgba(211,209,209,0.5),0_18px_55px_-34px_hsl(var(--brand-warm-shadow)/0.46),0_0_0_1px_rgba(255,255,255,0.58)] backdrop-blur-md transition-all duration-300 before:pointer-events-none before:absolute before:inset-x-8 before:top-0 before:h-px before:bg-white/90 after:pointer-events-none after:absolute after:-right-12 after:-top-16 after:h-32 after:w-32 after:rounded-full after:bg-primary/[0.07] after:blur-2xl',
         className,
       )}
     >

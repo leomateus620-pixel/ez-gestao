@@ -58,8 +58,8 @@ export function ExceptionCard({ exception, onResolve, onRequeue, onDiscard, onAs
           <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${crit.bg} ${crit.color} font-medium`}>
             {tipologiaLabels[exception.tipologia]}
           </span>
-          <span className="text-[10px] text-foreground/40">·</span>
-          <span className="text-[10px] text-foreground/40">{statusLabels[exception.statusExcecao]}</span>
+          <span className="text-[10px] text-foreground/72">·</span>
+          <span className="text-[10px] text-foreground/72">{statusLabels[exception.statusExcecao]}</span>
         </div>
 
         {isActive && (
@@ -112,17 +112,17 @@ export function ExceptionCard({ exception, onResolve, onRequeue, onDiscard, onAs
 
       {/* Metadata grid */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] mb-3">
-        <div className="flex items-center gap-1.5 text-foreground/55">
+        <div className="flex items-center gap-1.5 text-foreground/70">
           <Building2 className="h-3 w-3 shrink-0" />
           <span className="truncate">{exception.cnpj}</span>
         </div>
-        <div className="text-foreground/55">
+        <div className="text-foreground/70">
           CND: <span className="font-medium text-foreground/70">{exception.cndTipo}</span>
         </div>
-        <div className="text-foreground/55">
+        <div className="text-foreground/70">
           Via: <span className="font-medium text-foreground/70">{exception.connectorNome}</span>
         </div>
-        <div className="text-foreground/55">
+        <div className="text-foreground/70">
           Tentativas: <span className="font-medium text-foreground/70">{exception.tentativas}</span>
         </div>
       </div>
@@ -130,7 +130,7 @@ export function ExceptionCard({ exception, onResolve, onRequeue, onDiscard, onAs
       {/* SLA + date + responsavel */}
       <div className="flex items-center justify-between text-[10px]">
         <div className="flex items-center gap-3">
-          <span className={`flex items-center gap-1 ${sla.expired ? 'text-destructive font-semibold' : 'text-foreground/40'}`}>
+          <span className={`flex items-center gap-1 ${sla.expired ? 'text-destructive font-semibold' : 'text-foreground/72'}`}>
             <Clock className="h-3 w-3" />
             {sla.text}
           </span>
@@ -139,7 +139,7 @@ export function ExceptionCard({ exception, onResolve, onRequeue, onDiscard, onAs
           </span>
         </div>
         {exception.responsavel && (
-          <span className="text-foreground/50 font-medium">{exception.responsavel}</span>
+          <span className="text-foreground/68 font-medium">{exception.responsavel}</span>
         )}
       </div>
 
