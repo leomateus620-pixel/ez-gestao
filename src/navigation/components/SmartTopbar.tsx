@@ -1,4 +1,5 @@
 import { Bell, LogOut, Search, User2, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { DynamicIslandPanel } from '@/navigation/components/DynamicIslandPanel';
 import { ContextualQuickActions } from '@/navigation/components/ContextualQuickActions';
@@ -7,7 +8,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useNavigationUiState } from '@/navigation/state/NavigationStateProvider';
 import { useAuth } from '@/auth/AuthProvider';
 
-export function SmartTopbar({ counters }: { counters: MenuCounters }) {
+export function SmartTopbar({ counters, isHidden = false }: { counters: MenuCounters; isHidden?: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { session, signOut } = useAuth();
@@ -15,8 +16,17 @@ export function SmartTopbar({ counters }: { counters: MenuCounters }) {
   const model = resolveContextualMenu({ pathname: location.pathname, isMobile: false, counters });
   const activeMenu = model.visiblePrimary.find((m) => m.id === model.activeMenuId);
 
+  const shouldCollapse = isHidden && !activeTopbarPanel;
+
   return (
-    <header className="sticky top-0 z-30 border-b border-white/35 bg-background/50 px-4 py-3 backdrop-blur-2xl">
+    <header
+      className={cn(
+        'sticky top-0 z-30 overflow-hidden border-b border-white/35 bg-background/50 px-4 backdrop-blur-2xl transition-[max-height,padding,opacity,transform] duration-300 ease-out will-change-transform',
+        shouldCollapse
+          ? 'max-h-0 -translate-y-4 py-0 opacity-0 pointer-events-none'
+          : 'max-h-96 translate-y-0 py-3 opacity-100',
+      )}
+    >
       <DynamicIslandPanel className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 px-5 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className="hidden h-10 w-1.5 rounded-full bg-gradient-to-b from-primary via-blue-500 to-accent shadow-[0_0_24px_rgba(37,99,235,0.36)] sm:block" />

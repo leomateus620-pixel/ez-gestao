@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useDataStore } from '@/data/DataProvider';
 import { useAutomation } from '@/data/AutomationProvider';
@@ -12,6 +12,9 @@ function ShellContent({ children }: { children: React.ReactNode }) {
   const { pendingExceptions } = useAutomation();
   const { metrics } = useGuides();
   const containerRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const lastScrollTopRef = useRef(0);
+  const [isTopbarHidden, setIsTopbarHidden] = useState(false);
   const location = useLocation();
   const { closeAllPanels } = useNavigationUiState();
 
@@ -27,7 +30,22 @@ function ShellContent({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     closeAllPanels();
+    setIsTopbarHidden(false);
+    lastScrollTopRef.current = 0;
+    if (mainRef.current) mainRef.current.scrollTop = 0;
   }, [location.pathname, closeAllPanels]);
+
+  const handleMainScroll = useCallback(() => {
+    const main = mainRef.current;
+    if (!main) return;
+
+    const currentScrollTop = main.scrollTop;
+    const isScrollingDown = currentScrollTop > lastScrollTopRef.current;
+    const isPastTopbar = currentScrollTop > 72;
+
+    setIsTopbarHidden(isPastTopbar && isScrollingDown);
+    lastScrollTopRef.current = Math.max(currentScrollTop, 0);
+  }, []);
 
   useEffect(() => {
     const onKeydown = (event: KeyboardEvent) => {
@@ -50,11 +68,17 @@ function ShellContent({ children }: { children: React.ReactNode }) {
   }, [closeAllPanels]);
 
   return (
-    <div ref={containerRef} className="min-h-screen flex w-full">
+    <div ref={containerRef} className="flex h-screen w-full overflow-hidden">
       <SmartSidebar counters={counters} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <SmartTopbar counters={counters} />
-        <main className="liquid-stage flex-1 overflow-auto p-4 md:p-6 lg:p-8">{children}</main>
+        <SmartTopbar counters={counters} isHidden={isTopbarHidden} />
+        <main
+          ref={mainRef}
+          className="liquid-stage min-h-0 flex-1 overflow-auto p-4 md:p-6 lg:p-8"
+          onScroll={handleMainScroll}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );
