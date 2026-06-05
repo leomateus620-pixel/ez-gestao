@@ -38,7 +38,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
   }, [setHoveredMenuId]);
 
   return (
-    <aside className="relative w-[92px] border-r border-white/45 bg-[linear-gradient(180deg,rgba(255,255,255,0.62),rgba(238,243,255,0.46)),radial-gradient(circle_at_50%_0%,rgba(37,99,235,0.16),transparent_44%)] px-3 py-4 shadow-[inset_-1px_0_0_rgba(255,255,255,0.72)] backdrop-blur-2xl">
+    <aside className="relative z-50 w-[92px] border-r border-white/45 bg-[linear-gradient(180deg,rgba(255,255,255,0.62),rgba(238,243,255,0.46)),radial-gradient(circle_at_50%_0%,rgba(37,99,235,0.16),transparent_44%)] px-3 py-4 shadow-[inset_-1px_0_0_rgba(255,255,255,0.72)] backdrop-blur-2xl">
       <div className="mb-5 flex justify-center">
         <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary via-blue-500 to-violet-500 p-[1px] shadow-[0_16px_34px_-22px_rgba(37,99,235,0.9)]">
           <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white/72 text-[11px] font-black tracking-tight text-primary backdrop-blur-xl">EZ</div>
@@ -73,7 +73,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
       </nav>
 
       {preview && (
-        <DynamicIslandPanel className="absolute left-[92px] top-4 z-40 w-[340px] animate-in fade-in zoom-in-95 duration-200 p-4">
+        <DynamicIslandPanel className="absolute left-[92px] top-4 z-[70] w-[340px] animate-in fade-in zoom-in-95 duration-200 bg-[linear-gradient(145deg,#ffffff,#f8fbff_52%,#eef4ff)] p-4 backdrop-blur-none">
           <div className="flex items-start gap-3">
             <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-lg', menuAccent[preview.id] ?? 'from-primary to-accent')}>
               <preview.icon className="h-5 w-5" />
