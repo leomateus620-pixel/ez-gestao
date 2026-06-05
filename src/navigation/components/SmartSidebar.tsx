@@ -7,6 +7,7 @@ import { useNavigationUiState } from '@/navigation/state/NavigationStateProvider
 import { menuRegistry } from '@/navigation/menu-registry';
 import { preloadRoute } from '@/navigation/route-preload';
 import { cn } from '@/lib/utils';
+import { BrandLogo } from '@/components/BrandLogo';
 
 const menuAccent: Record<string, string> = {
   dashboard: 'from-brand-orange-deep/90 via-sidebar-primary/85 to-brand-orange-light/75',
@@ -53,7 +54,9 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
     <aside className="relative z-50 w-[92px] border-r border-sidebar-border/70 bg-[linear-gradient(180deg,hsl(var(--brand-warm-canvas)/0.84),hsl(var(--brand-warm-surface)/0.66)),radial-gradient(circle_at_50%_0%,hsl(var(--brand-orange-light)/0.10),transparent_44%),radial-gradient(circle_at_50%_100%,hsl(var(--brand-metal-blue)/0.08),transparent_48%)] px-3 py-4 shadow-[inset_-1px_0_0_rgba(255,255,255,0.78),0_20px_60px_-44px_hsl(var(--brand-warm-shadow))] backdrop-blur-2xl">
       <div className="mb-5 flex justify-center">
         <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-brand-orange-deep via-primary to-brand-orange-light p-[1px] shadow-[0_16px_34px_-22px_hsl(var(--brand-warm-shadow))]">
-          <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white/78 text-[11px] font-black tracking-tight text-sidebar-primary backdrop-blur-xl">EZ</div>
+          <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white/78 p-1 backdrop-blur-xl">
+            <BrandLogo className="h-full w-full" />
+          </div>
         </div>
       </div>
 

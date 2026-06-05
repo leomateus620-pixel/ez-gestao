@@ -1,35 +1,19 @@
-## Problema identificado
+## Trocar a logo do projeto pela logo real
 
-O domínio publicado `ez-gestao.lovable.app` está retornando um HTML com apenas:
+A logo anexada (letra "Z" laranja com detalhe cromado) vai substituir os badges quadrados com o texto "EZ" que existem hoje no app, além do favicon.
 
-```html
-<div id="root"></div>
-```
+### O que muda visualmente
+- **Tela de Login** (`src/pages/Login.tsx`) — quadrado gradiente com "EZ" → logo real.
+- **Sidebar nova** (`src/navigation/components/SmartSidebar.tsx`) — badge "EZ" no topo → logo real.
+- **Sidebar legada** (`src/components/AppSidebar.tsx`) — badge "EZ" → logo real (mantém o texto "EZ Gestão" ao lado).
+- **Favicon / aba do navegador** (`index.html`) — `favicon.ico` padrão → logo real.
 
-sem o script JavaScript do React. Por isso o app nunca monta, o login não aparece e as proteções adicionadas em `main.tsx`/`AuthProvider` não chegam a executar. O problema está antes da autenticação: é carregamento/publicação do bundle.
+### Como será feito (técnico)
+1. Subir `favicon_logo_1024_transparente.png` como asset de CDN via `lovable-assets` → gera `src/assets/ez-logo.png.asset.json`.
+2. Criar um pequeno componente `src/components/BrandLogo.tsx` que renderiza `<img>` com a logo + `alt="EZ Gestão"`, aceitando `className` para tamanho (usado em 32px no sidebar/topbar e 48px no login).
+3. Trocar os três badges "EZ" pelo `<BrandLogo />` mantendo o mesmo tamanho do quadrado atual (sem alterar layout, espaçamento ou tipografia ao redor).
+4. Copiar a logo também para `public/favicon.png`, remover `public/favicon.ico` (se existir) e atualizar `<link rel="icon">` no `index.html`.
 
-## Plano de correção
-
-1. **Adicionar fallback estático no `index.html`**
-   - Inserir uma tela inicial mínima dentro de `#root`, antes do React carregar.
-   - Se o script do app não for injetado/carregado, o usuário verá uma mensagem clara com botão de recarregar, em vez de tela branca.
-
-2. **Adicionar detector de bundle não carregado**
-   - Incluir um pequeno script inline no `index.html` que, após alguns segundos, verifica se o React substituiu o conteúdo inicial.
-   - Se não substituiu, exibe: “Não foi possível carregar os arquivos do aplicativo”.
-   - Isso cobre exatamente o caso atual: HTML publicado sem assets JS.
-
-3. **Marcar montagem bem-sucedida no `main.tsx`**
-   - Quando o React iniciar, gravar um atributo simples no `#root` indicando que o app montou.
-   - Assim o fallback do `index.html` não aparece quando o app carregar corretamente.
-
-4. **Ajustar fallback de erro fatal**
-   - Manter o fallback já criado, mas fazê-lo também marcar o estado como erro carregado, evitando conflito com o detector do `index.html`.
-
-5. **Validar no preview/publicado**
-   - Verificar que, se o bundle carregar, aparece login/app normalmente.
-   - Se o bundle não carregar, aparece uma tela de erro acionável em vez de branco.
-
-## Observação importante
-
-Essa correção elimina a tela branca e torna o erro visível. Como o HTML publicado atualmente parece estar sem scripts, depois da implementação pode ser necessário **publicar novamente** para o domínio `ez-gestao.lovable.app` receber o novo `index.html` e os assets corretos.
+### Fora do escopo
+- Não muda paleta, tipografia, layout, nem o texto "EZ Gestão".
+- Não mexe em lógica de autenticação, dados ou rotas.

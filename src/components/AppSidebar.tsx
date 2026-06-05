@@ -18,6 +18,7 @@ import { useAutomation } from '@/data/AutomationProvider';
 import { useGuides } from '@/features/guias/GuideProvider';
 import { useFeatureFlag } from '@/features/consulta/hooks/useLookup';
 import { cn } from '@/lib/utils';
+import { BrandLogo } from '@/components/BrandLogo';
 
 const primaryItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
@@ -86,7 +87,9 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sidebar-primary/85 to-accent/80 text-xs font-bold text-white shadow-lg shadow-primary/15">EZ</div>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/70 p-1 shadow-lg shadow-primary/15 backdrop-blur-xl">
+            <BrandLogo className="h-full w-full" />
+          </div>
           {!collapsed && (
             <div className="animate-fade-in">
               <h1 className="text-sm font-bold tracking-tight text-sidebar-foreground">EZ Gestão</h1>
