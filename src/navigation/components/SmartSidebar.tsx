@@ -7,6 +7,7 @@ import { useNavigationUiState } from '@/navigation/state/NavigationStateProvider
 import { menuRegistry } from '@/navigation/menu-registry';
 import { preloadRoute } from '@/navigation/route-preload';
 import { cn } from '@/lib/utils';
+import { BrandLogo } from '@/components/BrandLogo';
 
 const menuAccent: Record<string, string> = {
   dashboard: 'from-brand-orange-deep/90 via-sidebar-primary/85 to-brand-orange-light/75',

@@ -18,6 +18,7 @@ import { useAutomation } from '@/data/AutomationProvider';
 import { useGuides } from '@/features/guias/GuideProvider';
 import { useFeatureFlag } from '@/features/consulta/hooks/useLookup';
 import { cn } from '@/lib/utils';
+import { BrandLogo } from '@/components/BrandLogo';
 
 const primaryItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
