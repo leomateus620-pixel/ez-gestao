@@ -1,19 +1,10 @@
-## Trocar a logo do projeto pela logo real
+## Remover o fundo laranja atrás da logo
 
-A logo anexada (letra "Z" laranja com detalhe cromado) vai substituir os badges quadrados com o texto "EZ" que existem hoje no app, além do favicon.
+A logo (Z laranja) está dentro de um container com gradiente/borda laranja no `SmartSidebar` — é isso que cria o "quadrado laranja" ao redor. Vou tirar esse container para a logo flutuar direto sobre o sidebar.
 
-### O que muda visualmente
-- **Tela de Login** (`src/pages/Login.tsx`) — quadrado gradiente com "EZ" → logo real.
-- **Sidebar nova** (`src/navigation/components/SmartSidebar.tsx`) — badge "EZ" no topo → logo real.
-- **Sidebar legada** (`src/components/AppSidebar.tsx`) — badge "EZ" → logo real (mantém o texto "EZ Gestão" ao lado).
-- **Favicon / aba do navegador** (`index.html`) — `favicon.ico` padrão → logo real.
-
-### Como será feito (técnico)
-1. Subir `favicon_logo_1024_transparente.png` como asset de CDN via `lovable-assets` → gera `src/assets/ez-logo.png.asset.json`.
-2. Criar um pequeno componente `src/components/BrandLogo.tsx` que renderiza `<img>` com a logo + `alt="EZ Gestão"`, aceitando `className` para tamanho (usado em 32px no sidebar/topbar e 48px no login).
-3. Trocar os três badges "EZ" pelo `<BrandLogo />` mantendo o mesmo tamanho do quadrado atual (sem alterar layout, espaçamento ou tipografia ao redor).
-4. Copiar a logo também para `public/favicon.png`, remover `public/favicon.ico` (se existir) e atualizar `<link rel="icon">` no `index.html`.
+### Mudança
+- **`src/navigation/components/SmartSidebar.tsx`** — remover o wrapper externo `bg-gradient-to-br from-brand-orange-deep via-primary to-brand-orange-light p-[1px]` e o inner `bg-white/78`. A logo passa a ser renderizada direto (`<BrandLogo />`) dentro de um container 40×40 transparente.
 
 ### Fora do escopo
-- Não muda paleta, tipografia, layout, nem o texto "EZ Gestão".
-- Não mexe em lógica de autenticação, dados ou rotas.
+- Login e AppSidebar legado já usam fundo branco translúcido — não precisam mudar. Se quiser que eu remova o branco deles também, é só pedir.
+- Não muda a cor da própria logo (Z continua laranja).
