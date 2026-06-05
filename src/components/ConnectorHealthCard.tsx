@@ -35,17 +35,17 @@ export function ConnectorHealthCard({ connector, healthLog, runsToday = 0, onCli
 
   return (
     <div
-      className="glass-card p-4 cursor-pointer hover:border-primary/20 transition-all group"
+      className="glass-card group cursor-pointer p-4 transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_48px_-34px_hsl(var(--brand-warm-shadow)/0.7)]"
       onClick={onClick}
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2.5">
-          <div className={`p-2 rounded-lg ${s.bg}`}>
+          <div className={`rounded-2xl border border-white/60 p-2 shadow-inner ${s.bg}`}>
             <StatusIcon className={`h-4 w-4 ${s.color}`} />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-foreground">{connector.nome}</h3>
-            <p className="text-[11px] text-foreground/50">{tipoLabels[connector.tipo]}</p>
+            <h3 className="font-display text-sm font-extrabold tracking-tight text-foreground">{connector.nome}</h3>
+            <p className="text-[11px] text-foreground/68">{tipoLabels[connector.tipo]}</p>
           </div>
         </div>
         {h && (
@@ -54,22 +54,22 @@ export function ConnectorHealthCard({ connector, healthLog, runsToday = 0, onCli
       </div>
 
       <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-lg bg-muted/50 p-2">
+        <div className="rounded-2xl border border-white/50 bg-white/45 p-2 shadow-inner">
           <p className="text-lg font-bold text-foreground">{connector.taxaSucesso.toFixed(0)}%</p>
-          <p className="text-[10px] text-foreground/50">Sucesso</p>
+          <p className="text-[10px] text-foreground/68">Sucesso</p>
         </div>
-        <div className="rounded-lg bg-muted/50 p-2">
+        <div className="rounded-2xl border border-white/50 bg-white/45 p-2 shadow-inner">
           <p className="text-lg font-bold text-foreground">{connector.tempoMedio.toFixed(1)}s</p>
-          <p className="text-[10px] text-foreground/50">Tempo</p>
+          <p className="text-[10px] text-foreground/68">Tempo</p>
         </div>
-        <div className="rounded-lg bg-muted/50 p-2">
+        <div className="rounded-2xl border border-white/50 bg-white/45 p-2 shadow-inner">
           <p className="text-lg font-bold text-foreground">{runsToday}</p>
-          <p className="text-[10px] text-foreground/50">Hoje</p>
+          <p className="text-[10px] text-foreground/68">Hoje</p>
         </div>
       </div>
 
       {healthLog && (
-        <div className="mt-3 flex items-center gap-1.5 text-[10px] text-foreground/40">
+        <div className="mt-3 flex items-center gap-1.5 text-[10px] text-foreground/72">
           <Clock className="h-3 w-3" />
           <span>Último check: {new Date(healthLog.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
           <span className="mx-1">·</span>

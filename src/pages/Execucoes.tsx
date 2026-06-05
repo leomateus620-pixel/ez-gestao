@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Eye, RotateCcw, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAutomation } from '@/data/AutomationProvider';
 import { useDataStore } from '@/data/DataProvider';
@@ -15,7 +15,8 @@ import { useToast } from '@/hooks/use-toast';
 const PAGE_SIZE = 15;
 
 export default function Execucoes() {
-  const { state } = useAutomation();
+  const { state, enableHeavyData } = useAutomation();
+  useEffect(() => { enableHeavyData(); }, [enableHeavyData]);
   const { state: dataState } = useDataStore();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -96,7 +97,7 @@ export default function Execucoes() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-[11px] text-foreground/50 uppercase tracking-wider">
+              <tr className="border-b border-border text-[11px] text-foreground/68 uppercase tracking-wider">
                 <th className="text-left p-3 font-semibold">Empresa</th>
                 <th className="text-left p-3 font-semibold">Conector</th>
                 <th className="text-left p-3 font-semibold">Status</th>
@@ -120,16 +121,16 @@ export default function Execucoes() {
                       <tr className="hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => setExpandedRow(isExpanded ? null : run.id)}>
                         <td className="p-3">
                           <p className="font-medium text-foreground">{empresa?.nomeFantasia || run.empresaId}</p>
-                          <p className="text-[10px] text-foreground/40">{empresa?.cnpj}</p>
+                          <p className="text-[10px] text-foreground/72">{empresa?.cnpj}</p>
                         </td>
                         <td className="p-3 text-foreground/70 text-[12px]">{connector?.nome}</td>
                         <td className="p-3"><RunStatusBadge status={run.status} /></td>
                         <td className="p-3"><ConfidenceBadge level={run.confianca} /></td>
-                        <td className="p-3 text-right text-foreground/60 text-[12px]">{run.duracao ? `${run.duracao.toFixed(1)}s` : '—'}</td>
-                        <td className="p-3 text-right text-foreground/60 text-[12px]">
+                        <td className="p-3 text-right text-foreground/72 text-[12px]">{run.duracao ? `${run.duracao.toFixed(1)}s` : '—'}</td>
+                        <td className="p-3 text-right text-foreground/72 text-[12px]">
                           {run.tentativa}{retryPolicy ? `/${retryPolicy.maxTentativas}` : ''}
                         </td>
-                        <td className="p-3 text-right text-foreground/50 text-[11px]">
+                        <td className="p-3 text-right text-foreground/68 text-[11px]">
                           {new Date(run.inicioExecucao).toLocaleDateString('pt-BR')}
                           <br />
                           {new Date(run.inicioExecucao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
@@ -141,7 +142,7 @@ export default function Execucoes() {
                                 {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                               </Button>
                             </CollapsibleTrigger>
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => navigate(`/execucoes/${run.id}`)}>
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => navigate(`/execuções/${run.id}`)}>
                               <Eye className="h-3.5 w-3.5" />
                             </Button>
                           </div>
@@ -153,11 +154,11 @@ export default function Execucoes() {
                             <div className="p-4 bg-muted/20 border-t border-border/30">
                               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                 <div>
-                                  <p className="text-[11px] font-semibold text-foreground/60 mb-2">Timeline</p>
+                                  <p className="text-[11px] font-semibold text-foreground/72 mb-2">Timeline</p>
                                   {run.steps.length > 0 ? (
                                     <ExecutionTimeline steps={run.steps} />
                                   ) : (
-                                    <p className="text-[11px] text-foreground/40 italic">Sem etapas (agendado)</p>
+                                    <p className="text-[11px] text-foreground/72 italic">Sem etapas (agendado)</p>
                                   )}
                                 </div>
                                 <div className="space-y-2">
@@ -168,8 +169,8 @@ export default function Execucoes() {
                                     </div>
                                   )}
                                   <div className="p-3 rounded-lg bg-muted/50">
-                                    <p className="text-[11px] font-semibold text-foreground/60 mb-1">Resultado</p>
-                                    <p className="text-[11px] font-mono text-foreground/50">{run.resultadoBruto || '—'}</p>
+                                    <p className="text-[11px] font-semibold text-foreground/72 mb-1">Resultado</p>
+                                    <p className="text-[11px] font-mono text-foreground/68">{run.resultadoBruto || '—'}</p>
                                     <p className="text-[11px] text-foreground/70 mt-1">→ {run.statusNormalizado || '—'}</p>
                                   </div>
                                   <div className="flex gap-2">
@@ -179,7 +180,7 @@ export default function Execucoes() {
                                     <Button size="sm" variant="outline" className="h-7 text-[11px] gap-1" onClick={() => toast({ title: 'Enviado para exceção' })}>
                                       <AlertTriangle className="h-3 w-3" /> Criar Exceção
                                     </Button>
-                                    <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => navigate(`/execucoes/${run.id}`)}>
+                                    <Button size="sm" variant="ghost" className="h-7 text-[11px]" onClick={() => navigate(`/execuções/${run.id}`)}>
                                       Ver detalhe →
                                     </Button>
                                   </div>

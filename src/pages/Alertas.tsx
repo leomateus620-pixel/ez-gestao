@@ -53,7 +53,7 @@ export default function Alertas() {
   ativos.forEach(a => { if (grouped[a.prioridade]) grouped[a.prioridade].push(a); });
 
   const prioLabels: Record<string, string> = { critica: 'Críticas', alta: 'Alta Prioridade', media: 'Média Prioridade', baixa: 'Baixa Prioridade' };
-  const prioColors: Record<string, string> = { critica: 'text-destructive', alta: 'text-warning', media: 'text-info', baixa: 'text-foreground/50' };
+  const prioColors: Record<string, string> = { critica: 'text-destructive', alta: 'text-warning', media: 'text-info', baixa: 'text-foreground/68' };
 
   const renderAlerta = (alerta: Alerta) => {
     const empresa = state.empresas.find(e => e.id === alerta.empresaId);
@@ -67,8 +67,8 @@ export default function Alertas() {
                 <p className={cn('text-sm font-medium', alerta.resolvido && 'line-through')}>{alerta.titulo}</p>
                 <StatusBadge status={alerta.prioridade} variant="prioridade" dot={false} className="text-[10px]" />
               </div>
-              <p className="text-[11px] text-foreground/60 mt-0.5">{alerta.descricao}</p>
-              <div className="flex gap-3 text-[11px] text-foreground/55 mt-1.5">
+              <p className="text-[11px] text-foreground/72 mt-0.5">{alerta.descricao}</p>
+              <div className="flex gap-3 text-[11px] text-foreground/70 mt-1.5">
                 <span className="cursor-pointer hover:underline" onClick={() => navigate(`/empresas/${alerta.empresaId}`)}>{empresa?.nomeFantasia}</span>
                 <span>{formatDate(alerta.criadoEm)}</span>
               </div>

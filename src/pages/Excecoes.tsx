@@ -57,7 +57,7 @@ export default function Excecoes() {
           { key: 'critica', label: 'Críticas', count: countByCriticidade.critica, color: 'bg-destructive/10 text-destructive border-destructive/20' },
           { key: 'alta', label: 'Altas', count: countByCriticidade.alta, color: 'bg-warning/10 text-warning border-warning/20' },
           { key: 'media', label: 'Médias', count: countByCriticidade.media, color: 'bg-info/10 text-info border-info/20' },
-          { key: 'baixa', label: 'Baixas', count: countByCriticidade.baixa, color: 'bg-muted text-foreground/60 border-border' },
+          { key: 'baixa', label: 'Baixas', count: countByCriticidade.baixa, color: 'bg-muted text-foreground/72 border-border' },
         ].map(pill => (
           <button
             key={pill.key}
@@ -98,7 +98,7 @@ export default function Excecoes() {
       {filtered.length === 0 ? (
         <div className="glass-card p-12 text-center">
           <AlertTriangle className="h-10 w-10 text-foreground/20 mx-auto mb-3" />
-          <p className="text-foreground/50 text-sm">Nenhuma exceção encontrada</p>
+          <p className="text-foreground/68 text-sm">Nenhuma exceção encontrada</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

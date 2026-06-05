@@ -10,22 +10,49 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.lookup-dispatcher]
-verify_jwt = false
+verify_jwt = true
 
 [functions.lookup-status]
-verify_jwt = false
+verify_jwt = true
 
 [functions.lookup-retry]
-verify_jwt = false
+verify_jwt = true
 
 [functions.provider-health-summary]
-verify_jwt = false
+verify_jwt = true
 
 [functions.dry-run-zimmermann]
-verify_jwt = false
+verify_jwt = true
 
 [functions.solve-captcha]
 verify_jwt = false
 
 [functions.dry-run-zimmermann-cancel]
+verify_jwt = true
+
+[functions.run-guide-scan-now]
+verify_jwt = true
+
+[functions.integracoes-status]
 verify_jwt = false
+
+[functions.bootstrap-test-folder]
+verify_jwt = true
+
+[functions.create-empresa-folder]
+verify_jwt = false
+
+[functions.upload-empresa-doc]
+verify_jwt = false
+
+[functions.dispatch-empresa-guias]
+verify_jwt = false
+
+[functions.fator-r-drive-sync]
+verify_jwt = true
+
+[functions.fator-r-send-alert]
+verify_jwt = false
+
+[functions.fator-r-process-upload]
+verify_jwt = true

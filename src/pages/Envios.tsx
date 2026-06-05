@@ -70,13 +70,13 @@ export default function Envios() {
                       <p className="text-sm font-medium">{empresa?.nomeFantasia}</p>
                       <StatusBadge status={envio.status} dot={false} />
                     </div>
-                    <div className="flex flex-wrap gap-x-3 text-[11px] text-foreground/60">
+                    <div className="flex flex-wrap gap-x-3 text-[11px] text-foreground/72">
                       <span>{envio.destinatario}</span>
                       <span>{formatDateTime(envio.dataEnvio)}</span>
                       <span>{docs.length} documento(s)</span>
                       <span>por {envio.usuario}</span>
                     </div>
-                    {envio.mensagem && <p className="text-[11px] text-foreground/55 mt-1 italic line-clamp-1">{envio.mensagem}</p>}
+                    {envio.mensagem && <p className="text-[11px] text-foreground/70 mt-1 italic line-clamp-1">{envio.mensagem}</p>}
                   </div>
                 </div>
               </div>
