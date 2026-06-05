@@ -2,7 +2,12 @@ import type { Config } from "tailwindcss";
 
 export default {
   darkMode: ["class"],
-  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  content: [
+    "./pages/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+    "./app/**/*.{ts,tsx}",
+    "./src/**/*.{ts,tsx}",
+  ],
   prefix: "",
   theme: {
     container: {
@@ -14,8 +19,9 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ["Inter", "system-ui", "sans-serif"],
+        display: ["Manrope", "Inter", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -62,6 +68,17 @@ export default {
         info: {
           DEFAULT: "hsl(var(--info))",
           foreground: "hsl(var(--info-foreground))",
+        },
+        brand: {
+          orange: "hsl(var(--brand-orange))",
+          "orange-light": "hsl(var(--brand-orange-light))",
+          "orange-deep": "hsl(var(--brand-orange-deep))",
+          "warm-shadow": "hsl(var(--brand-warm-shadow))",
+          "metal-blue": "hsl(var(--brand-metal-blue))",
+          "metal-light": "hsl(var(--brand-metal-light))",
+          "premium-dark": "hsl(var(--brand-premium-dark))",
+          "warm-surface": "hsl(var(--brand-warm-surface))",
+          "warm-canvas": "hsl(var(--brand-warm-canvas))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",

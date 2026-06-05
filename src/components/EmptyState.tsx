@@ -15,10 +15,10 @@ export function EmptyState({ icon: Icon, title, description, actionLabel, onActi
   return (
     <div className={cn('glass-card flex flex-col items-center justify-center py-16 px-6 text-center', className)}>
       <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60 mb-4">
-        <Icon className="h-7 w-7 text-muted-foreground/50" />
+        <Icon className="h-7 w-7 text-muted-foreground/75" />
       </div>
       <p className="text-sm font-medium text-foreground">{title}</p>
-      {description && <p className="text-xs text-foreground/55 mt-1.5 max-w-xs">{description}</p>}
+      {description && <p className="text-xs text-foreground/70 mt-1.5 max-w-xs">{description}</p>}
       {actionLabel && onAction && (
         <Button size="sm" className="mt-4 gap-1.5" onClick={onAction}>
           {actionLabel}

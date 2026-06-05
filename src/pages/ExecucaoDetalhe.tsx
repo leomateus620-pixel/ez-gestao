@@ -27,7 +27,7 @@ export default function ExecucaoDetalhe() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <p className="text-foreground/60 mb-2">Execução não encontrada</p>
+          <p className="text-foreground/72 mb-2">Execução não encontrada</p>
           <Button variant="outline" size="sm" onClick={() => navigate('/execucoes')}>Voltar</Button>
         </div>
       </div>
@@ -64,12 +64,12 @@ export default function ExecucaoDetalhe() {
               <ConfidenceBadge level={run.confianca} />
             </div>
             <h1 className="text-xl font-bold text-foreground">{empresa?.nomeFantasia || run.empresaId}</h1>
-            <p className="text-sm text-foreground/50">{empresa?.cnpj} · {connector?.nome}</p>
+            <p className="text-sm text-foreground/68">{empresa?.cnpj} · {connector?.nome}</p>
             {cndItem && (
-              <p className="text-sm text-foreground/60 mt-1">{tipoLabels[cndItem.tipo] || cndItem.tipo}</p>
+              <p className="text-sm text-foreground/72 mt-1">{tipoLabels[cndItem.tipo] || cndItem.tipo}</p>
             )}
           </div>
-          <div className="flex flex-col items-end gap-1 text-[11px] text-foreground/50">
+          <div className="flex flex-col items-end gap-1 text-[11px] text-foreground/68">
             <div className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> Início: {new Date(run.inicioExecucao).toLocaleString('pt-BR')}</div>
             {run.fimExecucao && <div>Fim: {new Date(run.fimExecucao).toLocaleString('pt-BR')}</div>}
             {run.duracao && <div>Duração: {run.duracao.toFixed(1)}s</div>}
@@ -102,21 +102,21 @@ export default function ExecucaoDetalhe() {
             {run.steps.length > 0 ? (
               <ExecutionTimeline steps={run.steps} />
             ) : (
-              <p className="text-sm text-foreground/50 italic">Nenhuma etapa registrada (execução agendada)</p>
+              <p className="text-sm text-foreground/68 italic">Nenhuma etapa registrada (execução agendada)</p>
             )}
           </div>
 
           {/* Motor de Decisão */}
           <div className="glass-card p-5">
             <div className="flex items-center gap-2 mb-3">
-              <Shield className="h-4 w-4 text-foreground/60" />
+              <Shield className="h-4 w-4 text-foreground/72" />
               <h2 className="section-title">Motor de Decisão</h2>
             </div>
             <div className={`p-3 rounded-lg bg-muted/50 border border-border/50`}>
               <p className={`text-sm font-semibold ${decisionExplanation.color} mb-1`}>
                 {decisionExplanation.action}
               </p>
-              <p className="text-[11px] text-foreground/60 leading-relaxed">
+              <p className="text-[11px] text-foreground/72 leading-relaxed">
                 {decisionExplanation.reason}
               </p>
             </div>
@@ -130,11 +130,11 @@ export default function ExecucaoDetalhe() {
             <h2 className="section-title mb-3">Resultado</h2>
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between items-start">
-                <span className="text-foreground/50">Status bruto</span>
+                <span className="text-foreground/68">Status bruto</span>
                 <span className="font-mono text-[11px] text-foreground/70 bg-muted px-2 py-0.5 rounded max-w-[60%] text-right break-all">{run.resultadoBruto || '—'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-foreground/50">Status normalizado</span>
+                <span className="text-foreground/68">Status normalizado</span>
                 <span className="font-medium text-foreground">{run.statusNormalizado || '—'}</span>
               </div>
             </div>
@@ -149,7 +149,7 @@ export default function ExecucaoDetalhe() {
               <h2 className="section-title mb-3">Evidências</h2>
               <ul className="space-y-1.5">
                 {run.evidencias.map((ev, i) => (
-                  <li key={i} className="flex items-center gap-2 text-sm text-foreground/60">
+                  <li key={i} className="flex items-center gap-2 text-sm text-foreground/72">
                     <FileText className="h-3.5 w-3.5 text-foreground/35" />
                     {ev}
                   </li>
@@ -175,7 +175,7 @@ export default function ExecucaoDetalhe() {
                   <p className="text-success">✓ CND atualizada automaticamente ({tipoLabels[cndItem.tipo] || cndItem.tipo})</p>
                 )}
                 {run.status === 'sucesso' && run.confianca === 'alta' && (
-                  <p className="text-foreground/60">✓ Alerta de vencimento recalculado</p>
+                  <p className="text-foreground/72">✓ Alerta de vencimento recalculado</p>
                 )}
                 {relatedExceptions.map(exc => (
                   <p key={exc.id} className="text-warning">⚠ Exceção criada: {exc.motivo}</p>
@@ -194,7 +194,7 @@ export default function ExecucaoDetalhe() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-foreground">{empresa.nomeFantasia}</p>
-                  <p className="text-[11px] text-foreground/50">{empresa.razaoSocial}</p>
+                  <p className="text-[11px] text-foreground/68">{empresa.razaoSocial}</p>
                 </div>
               </div>
             </div>
