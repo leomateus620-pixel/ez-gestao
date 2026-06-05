@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -171,6 +171,8 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
   const dispatches = useMemo(() => dispatchQuery.data || [], [dispatchQuery.data]);
   const exceptions = useMemo(() => exceptionsQuery.data || [], [exceptionsQuery.data]);
   const integrations = useMemo(() => integrationsQuery.data || [], [integrationsQuery.data]);
+  const enableEvents = useCallback(() => setEventsEnabled(true), []);
+
   const metrics = useMemo(() => ({
     waiting: guides.filter((guide) => ['aguardando', 'lendo', 'ocr', 'identificada', 'enviando'].includes(guide.status)).length,
     sent: guides.filter((guide) => guide.status === 'enviada').length,
@@ -193,7 +195,7 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
       isScanning: scan.isPending,
       runScan: () => scan.mutate(),
       resolveException: (id) => resolve.mutate(id),
-      enableEvents: () => setEventsEnabled(true),
+      enableEvents,
     }}>
       {children}
     </GuideContext.Provider>

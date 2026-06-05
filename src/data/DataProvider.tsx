@@ -442,14 +442,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const dispatch = useCallback(() => {}, []);
+  const enableLogs = useCallback(() => setLogsEnabled(true), []);
+  const enableAuditTrail = useCallback(() => setAuditEnabled(true), []);
 
   const value = useMemo(() => ({
     state, isLoading, dispatch, addEmpresa, updateEmpresa, addDocumento, addEnvio, addLog,
     resolveAlerta, markAlertaLido, resolveAllAlertas, markAllAlertasLidos, cnpjExists, generateChecklistForRegime,
-    enableLogs: () => setLogsEnabled(true),
-    enableAuditTrail: () => setAuditEnabled(true),
-  }), [state, isLoading, addEmpresa, updateEmpresa, addDocumento, addEnvio, addLog,
-    resolveAlerta, markAlertaLido, resolveAllAlertas, markAllAlertasLidos, cnpjExists, generateChecklistForRegime]);
+    enableLogs,
+    enableAuditTrail,
+  }), [state, isLoading, dispatch, addEmpresa, updateEmpresa, addDocumento, addEnvio, addLog,
+    resolveAlerta, markAlertaLido, resolveAllAlertas, markAllAlertasLidos, cnpjExists, generateChecklistForRegime, enableLogs, enableAuditTrail]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

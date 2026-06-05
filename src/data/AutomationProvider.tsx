@@ -204,15 +204,16 @@ export function AutomationProvider({ children }: { children: React.ReactNode }) 
   , [connectors]);
 
   const dispatch = useCallback(() => {}, []);
+  const enableHeavyData = useCallback(() => setHeavyEnabled(true), []);
 
   const value = useMemo(() => ({
     state, isLoading, dispatch, addRun, updateRun, addException, resolveException, requeueException,
     discardException, assignException, updateConnectorStatus, pendingExceptions, criticalExceptions,
     exceptionsByTipologia, unstableConnectors,
-    enableHeavyData: () => setHeavyEnabled(true),
-  }), [state, isLoading, addRun, updateRun, addException, resolveException, requeueException,
+    enableHeavyData,
+  }), [state, isLoading, dispatch, addRun, updateRun, addException, resolveException, requeueException,
     discardException, assignException, updateConnectorStatus, pendingExceptions, criticalExceptions,
-    exceptionsByTipologia, unstableConnectors]);
+    exceptionsByTipologia, unstableConnectors, enableHeavyData]);
 
   return <AutomationContext.Provider value={value}>{children}</AutomationContext.Provider>;
 }
