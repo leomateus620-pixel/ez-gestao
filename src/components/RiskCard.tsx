@@ -12,7 +12,7 @@ const variantConfig = {
   critical: { icon: AlertTriangle, color: 'text-destructive', bg: 'bg-destructive/10', border: 'border-destructive/20' },
   warning: { icon: TrendingDown, color: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/20' },
   info: { icon: Clock, color: 'text-info', bg: 'bg-info/10', border: 'border-info/20' },
-  neutral: { icon: Wifi, color: 'text-foreground/72', bg: 'bg-muted', border: 'border-border' },
+  neutral: { icon: Wifi, color: 'text-foreground/60', bg: 'bg-muted', border: 'border-border' },
 };
 
 export function RiskCard({ title, value, subtitle, variant, onClick }: RiskCardProps) {
@@ -31,7 +31,7 @@ export function RiskCard({ title, value, subtitle, variant, onClick }: RiskCardP
         <span className={`text-2xl font-bold ${value > 0 ? cfg.color : 'text-foreground/30'}`}>{value}</span>
       </div>
       <p className="text-xs font-semibold text-foreground">{title}</p>
-      <p className="text-[10px] text-foreground/64 mt-0.5">{subtitle}</p>
+      <p className="text-[10px] text-foreground/45 mt-0.5">{subtitle}</p>
     </div>
   );
 }
