@@ -9,15 +9,15 @@ import { preloadRoute } from '@/navigation/route-preload';
 import { cn } from '@/lib/utils';
 
 const menuAccent: Record<string, string> = {
-  dashboard: 'from-sky-500 to-blue-600',
-  guias: 'from-violet-500 to-indigo-600',
-  empresas: 'from-emerald-500 to-teal-600',
-  integracoes: 'from-cyan-500 to-blue-500',
-  'fator-r': 'from-amber-400 to-orange-500',
-  classifica: 'from-fuchsia-500 to-violet-600',
-  whatsapp: 'from-green-500 to-emerald-600',
-  configuracoes: 'from-slate-500 to-slate-700',
-  'legacy-consulta': 'from-blue-500 to-slate-600',
+  dashboard: 'from-brand-orange-deep via-primary to-brand-orange-light',
+  guias: 'from-brand-orange-deep via-primary to-brand-metal-blue',
+  empresas: 'from-brand-orange-deep via-primary to-emerald-500',
+  integracoes: 'from-brand-metal-blue via-primary to-brand-orange-light',
+  'fator-r': 'from-brand-orange-deep via-primary to-brand-orange-light',
+  classifica: 'from-brand-orange-deep via-primary to-brand-metal-blue',
+  whatsapp: 'from-brand-orange-deep via-primary to-emerald-500',
+  configuracoes: 'from-brand-warm-shadow via-brand-orange-deep to-brand-metal-blue',
+  'legacy-consulta': 'from-brand-metal-blue via-primary to-brand-orange-light',
 };
 
 export function SmartSidebar({ counters }: { counters: MenuCounters }) {
@@ -38,9 +38,9 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
   }, [setHoveredMenuId]);
 
   return (
-    <aside className="relative z-50 w-[92px] border-r border-white/45 bg-[linear-gradient(180deg,rgba(255,255,255,0.62),rgba(238,243,255,0.46)),radial-gradient(circle_at_50%_0%,rgba(37,99,235,0.16),transparent_44%)] px-3 py-4 shadow-[inset_-1px_0_0_rgba(255,255,255,0.72)] backdrop-blur-2xl">
+    <aside className="relative z-50 w-[92px] border-r border-white/55 bg-[linear-gradient(180deg,hsl(var(--brand-warm-canvas)/0.76),hsl(var(--brand-warm-surface)/0.58)),radial-gradient(circle_at_50%_0%,hsl(var(--brand-orange-light)/0.18),transparent_44%),radial-gradient(circle_at_50%_100%,hsl(var(--brand-metal-blue)/0.10),transparent_48%)] px-3 py-4 shadow-[inset_-1px_0_0_rgba(255,255,255,0.78),0_20px_60px_-44px_hsl(var(--brand-warm-shadow))] backdrop-blur-2xl">
       <div className="mb-5 flex justify-center">
-        <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary via-blue-500 to-violet-500 p-[1px] shadow-[0_16px_34px_-22px_rgba(37,99,235,0.9)]">
+        <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-brand-orange-deep via-primary to-brand-orange-light p-[1px] shadow-[0_16px_34px_-22px_hsl(var(--brand-warm-shadow))]">
           <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white/72 text-[11px] font-black tracking-tight text-primary backdrop-blur-xl">EZ</div>
         </div>
       </div>
@@ -57,13 +57,13 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                 onFocus={() => previewRoute(item.id, item.route)}
                 className={cn(
                   'group relative w-full rounded-[22px] p-1.5 transition-[background-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
-                  active ? 'bg-white/68 shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_14px_32px_-22px_rgba(37,99,235,0.9)] ring-1 ring-primary/25' : 'hover:bg-white/48 hover:shadow-sm',
+                  active ? 'bg-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_14px_32px_-22px_hsl(var(--brand-warm-shadow))] ring-1 ring-primary/28' : 'hover:bg-brand-warm-surface/58 hover:shadow-sm',
                 )}
                 aria-label={item.a11yLabel}
                 aria-current={active ? 'page' : undefined}
               >
                 <span className={cn('absolute -left-1.5 top-1/2 h-7 w-1 -translate-y-1/2 rounded-full bg-gradient-to-b opacity-0 transition', accent, active && 'opacity-100')} />
-                <span className={cn('absolute inset-1 rounded-[18px] bg-gradient-to-br opacity-0 blur-md transition', accent, active ? 'opacity-20' : 'group-hover:opacity-12')} />
+                <span className={cn('absolute inset-1 rounded-[18px] bg-gradient-to-br opacity-0 blur-md transition', accent, active ? 'opacity-24' : 'group-hover:opacity-14')} />
                 <MenuIconRenderer Icon={item.icon} active={active} menuId={item.id} />
                 {item.badgeKey && counters[item.badgeKey] > 0 && <span className="absolute right-1 top-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">{counters[item.badgeKey]}</span>}
               </button>
@@ -96,7 +96,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                     onMouseEnter={() => preloadRoute(child.route)}
                     onFocus={() => preloadRoute(child.route)}
                     onClick={() => navigateTo(child.route)}
-                    className={cn('flex items-center justify-between rounded-2xl border px-3 py-2 text-left text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', isActive ? 'border-primary/30 bg-primary/12 text-foreground' : 'border-slate-200/80 bg-white/88 text-foreground/82 hover:border-primary/20 hover:bg-white')}
+                    className={cn('flex items-center justify-between rounded-2xl border px-3 py-2 text-left text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', isActive ? 'border-primary/30 bg-primary/12 text-foreground' : 'border-primary/10 bg-white/88 text-foreground/82 hover:border-primary/24 hover:bg-brand-warm-surface/78')}
                     aria-current={isActive ? 'page' : undefined}
                   >
                     <span>{child.label}</span>
@@ -108,7 +108,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
           )}
 
           {!!model.legacy.length && (
-            <div className="mt-3 border-t border-slate-200/80 pt-2">
+            <div className="mt-3 border-t border-primary/10 pt-2">
               <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground/58">Legado</p>
               {model.legacy.map((legacy) => (
                 <button
@@ -117,7 +117,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                   onMouseEnter={() => preloadRoute(legacy.route)}
                   onFocus={() => preloadRoute(legacy.route)}
                   onClick={() => navigateTo(legacy.route)}
-                  className="w-full rounded-xl px-2 py-1.5 text-left text-xs font-medium text-foreground/74 transition hover:bg-white hover:text-foreground/90"
+                  className="w-full rounded-xl px-2 py-1.5 text-left text-xs font-medium text-foreground/74 transition hover:bg-brand-warm-surface/78 hover:text-foreground/90"
                 >
                   {legacy.label}
                 </button>

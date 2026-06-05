@@ -215,10 +215,10 @@ export default function Empresas() {
         {paginatedEmpresas.map((empresa, i) => {
           const resumo = resumos[empresa.id];
           return (
-            <div key={empresa.id} className={cn('glass-card group cursor-pointer p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_48px_-34px_rgba(37,99,235,0.7)]', i % 2 === 1 && 'bg-card/45')} onClick={() => navigate(`/empresas/${empresa.id}`)}>
+            <div key={empresa.id} className={cn('glass-card group cursor-pointer p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_48px_-34px_hsl(var(--brand-warm-shadow)/0.7)]', i % 2 === 1 && 'bg-card/45')} onClick={() => navigate(`/empresas/${empresa.id}`)}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0 flex-1">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/60 bg-gradient-to-br from-emerald-400/20 via-cyan-400/12 to-blue-500/18 text-sm font-black text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/60 bg-gradient-to-br from-brand-orange-light/22 via-primary/12 to-brand-metal-blue/18 text-sm font-black text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
                     {empresa.nomeFantasia.substring(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">

@@ -21,7 +21,7 @@ export function SmartTopbar({ counters, isHidden = false }: { counters: MenuCoun
   return (
     <header
       className={cn(
-        'sticky top-0 z-30 overflow-hidden border-b border-white/35 bg-background/50 px-4 backdrop-blur-2xl transition-[max-height,padding,opacity,transform] duration-300 ease-out will-change-transform',
+        'sticky top-0 z-30 overflow-hidden border-b border-primary/10 bg-background/55 px-4 backdrop-blur-2xl transition-[max-height,padding,opacity,transform] duration-300 ease-out will-change-transform',
         shouldCollapse
           ? 'max-h-0 -translate-y-4 py-0 opacity-0 pointer-events-none'
           : 'max-h-96 translate-y-0 py-3 opacity-100',
@@ -29,7 +29,7 @@ export function SmartTopbar({ counters, isHidden = false }: { counters: MenuCoun
     >
       <DynamicIslandPanel className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 px-5 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="hidden h-10 w-1.5 rounded-full bg-gradient-to-b from-primary via-blue-500 to-accent shadow-[0_0_24px_rgba(37,99,235,0.36)] sm:block" />
+          <span className="hidden h-10 w-1.5 rounded-full bg-gradient-to-b from-brand-orange-deep via-primary to-brand-orange-light shadow-[0_0_24px_hsl(var(--brand-orange)/0.32)] sm:block" />
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary/62">Contexto ativo</p>
             <p className="truncate font-display text-sm font-extrabold tracking-tight text-foreground">{activeMenu?.label ?? 'Painel'}</p>
@@ -38,9 +38,9 @@ export function SmartTopbar({ counters, isHidden = false }: { counters: MenuCoun
 
         <div className="hidden xl:block"><ContextualQuickActions actions={model.quickActions} /></div>
 
-        <div className="flex items-center gap-1 rounded-full border border-white/45 bg-white/35 p-1 shadow-inner backdrop-blur-xl">
+        <div className="flex items-center gap-1 rounded-full border border-primary/10 bg-white/42 p-1 shadow-inner backdrop-blur-xl">
           <Button size="icon" variant="ghost" className="h-9 w-9 rounded-full" onClick={() => setActiveTopbarPanel(activeTopbarPanel === 'search' ? undefined : 'search')} aria-label="Busca global"><Search className="h-4 w-4" /></Button>
-          <Button size="icon" variant="ghost" className="relative h-9 w-9 rounded-full" onClick={() => setActiveTopbarPanel(activeTopbarPanel === 'notifications' ? undefined : 'notifications')} aria-label="Notificações"><Bell className="h-4 w-4" />{counters.alerts > 0 && <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border border-white bg-rose-500" />}</Button>
+          <Button size="icon" variant="ghost" className="relative h-9 w-9 rounded-full" onClick={() => setActiveTopbarPanel(activeTopbarPanel === 'notifications' ? undefined : 'notifications')} aria-label="Notificações"><Bell className="h-4 w-4" />{counters.alerts > 0 && <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full border border-white bg-primary" />}</Button>
           <Button size="icon" variant="ghost" className="h-9 w-9 rounded-full" onClick={() => setActiveTopbarPanel(activeTopbarPanel === 'profile' ? undefined : 'profile')} aria-label="Perfil"><User2 className="h-4 w-4" /></Button>
         </div>
       </DynamicIslandPanel>
@@ -55,7 +55,7 @@ export function SmartTopbar({ counters, isHidden = false }: { counters: MenuCoun
 
             {activeTopbarPanel === 'search' && (
               <div className="space-y-2">
-                <input className="h-10 w-full rounded-2xl border border-white/55 bg-white/55 px-3 text-sm outline-none ring-primary/40 backdrop-blur-xl focus:ring-2" placeholder="Buscar em dashboard, guias, empresas e integrações..." />
+                <input className="h-10 w-full rounded-2xl border border-primary/15 bg-white/65 px-3 text-sm outline-none ring-primary/40 backdrop-blur-xl focus:ring-2" placeholder="Buscar em dashboard, guias, empresas e integrações..." />
                 <p className="text-xs text-foreground/55">Dica: você pode digitar nome da empresa, CNPJ ou módulo.</p>
               </div>
             )}
