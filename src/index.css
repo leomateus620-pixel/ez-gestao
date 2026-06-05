@@ -7,18 +7,24 @@
 @layer base {
   :root {
     /* EZ Gestão brand palette sourced from the office logo. */
-    --brand-orange: 28 98% 49%;
-    --brand-orange-light: 37 96% 55%;
-    --brand-orange-deep: 23 97% 40%;
-    --brand-warm-shadow: 21 89% 28%;
+    --brand-orange: 27 88% 47%;
+    --brand-orange-light: 35 86% 54%;
+    --brand-orange-deep: 24 82% 38%;
+    --brand-orange-soft: 31 62% 91%;
+    --brand-orange-muted: 29 54% 78%;
+    --brand-warm-shadow: 22 70% 24%;
     --brand-metal-blue: 214 36% 55%;
     --brand-metal-light: 0 2% 82%;
     --brand-premium-dark: 0 0% 3%;
-    --brand-warm-surface: 33 100% 96%;
-    --brand-warm-canvas: 35 100% 98%;
+    --brand-warm-surface: 34 72% 96%;
+    --brand-warm-canvas: 36 80% 98%;
 
     --background: var(--brand-warm-canvas);
     --foreground: 222 47% 10%;
+    --text-secondary: 220 16% 27%;
+    --text-tertiary: 220 12% 40%;
+    --surface-readable: 0 0% 100% / 0.88;
+    --surface-readable-muted: 34 72% 96% / 0.66;
 
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
@@ -29,11 +35,11 @@
     --primary: var(--brand-orange);
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 33 100% 94%;
+    --secondary: var(--brand-orange-soft);
     --secondary-foreground: 24 86% 18%;
 
-    --muted: 32 52% 94%;
-    --muted-foreground: 220 9% 36%;
+    --muted: 32 44% 93%;
+    --muted-foreground: var(--text-tertiary);
 
     --accent: var(--brand-metal-blue);
     --accent-foreground: 0 0% 100%;
@@ -56,31 +62,38 @@
 
     --radius: 0.75rem;
 
-    --sidebar-background: 28 62% 98%;
+    --sidebar-background: 30 46% 98%;
     --sidebar-foreground: 222 47% 13%;
-    --sidebar-primary: var(--brand-orange);
+    --sidebar-primary: 27 82% 43%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 31 100% 92%;
-    --sidebar-accent-foreground: 24 86% 18%;
-    --sidebar-border: 31 72% 84%;
+    --sidebar-accent: var(--brand-orange-soft);
+    --sidebar-accent-foreground: 24 74% 16%;
+    --sidebar-border: 31 48% 84%;
     --sidebar-ring: var(--brand-orange);
+    --sidebar-active-bg: 0 0% 100% / 0.78;
+    --sidebar-active-glow: 22 70% 24% / 0.1;
+    --sidebar-active-halo: var(--brand-orange) / 0.1;
 
-    --glass-bg: 0 0% 100% / 0.78;
-    --glass-border: 31 72% 86% / 0.82;
-    --glass-shadow: 21 89% 28% / 0.14;
+    --glass-bg: var(--surface-readable);
+    --glass-border: 31 46% 84% / 0.9;
+    --glass-shadow: 22 70% 24% / 0.12;
     --glass-highlight: 0 0% 100% / 0.94;
-    --glass-glow: var(--brand-orange) / 0.16;
+    --glass-glow: var(--brand-orange) / 0.1;
     --menu-blue: var(--brand-metal-blue);
-    --menu-violet: 24 96% 48%;
+    --menu-violet: 27 78% 45%;
     --menu-cyan: 214 36% 55%;
     --menu-emerald: 156 72% 36%;
-    --menu-amber: var(--brand-orange-light);
+    --menu-amber: 35 76% 50%;
     --menu-rose: 348 83% 58%;
   }
 
   .dark {
     --background: var(--brand-premium-dark);
     --foreground: 33 100% 96%;
+    --text-secondary: 33 54% 88%;
+    --text-tertiary: 31 24% 78%;
+    --surface-readable: 24 31% 9% / 0.74;
+    --surface-readable-muted: 24 28% 13% / 0.78;
 
     --card: 24 31% 8%;
     --card-foreground: 33 100% 96%;
@@ -95,7 +108,7 @@
     --secondary-foreground: 33 100% 94%;
 
     --muted: 24 28% 13%;
-    --muted-foreground: 31 22% 72%;
+    --muted-foreground: var(--text-tertiary);
 
     --accent: var(--brand-metal-blue);
     --accent-foreground: 0 0% 100%;
@@ -124,12 +137,15 @@
     --sidebar-accent-foreground: 33 100% 94%;
     --sidebar-border: 24 38% 16%;
     --sidebar-ring: var(--brand-orange-light);
+    --sidebar-active-bg: 24 40% 14% / 0.82;
+    --sidebar-active-glow: 0 0% 0% / 0.32;
+    --sidebar-active-halo: var(--brand-orange-light) / 0.12;
 
-    --glass-bg: 24 31% 9% / 0.74;
+    --glass-bg: var(--surface-readable);
     --glass-border: 31 88% 58% / 0.18;
     --glass-shadow: 0 0% 0% / 0.42;
     --glass-highlight: 33 100% 96% / 0.05;
-    --glass-glow: var(--brand-orange-light) / 0.18;
+    --glass-glow: var(--brand-orange-light) / 0.12;
   }
 }
 
@@ -146,12 +162,12 @@
     background-image:
       radial-gradient(
         circle at 12% 7%,
-        hsl(var(--brand-orange-light) / 0.16),
+        hsl(var(--brand-orange-light) / 0.1),
         transparent 28rem
       ),
       radial-gradient(
         circle at 86% 4%,
-        hsl(var(--brand-orange) / 0.1),
+        hsl(var(--brand-orange) / 0.06),
         transparent 30rem
       ),
       radial-gradient(
@@ -225,12 +241,12 @@
     background-image:
       radial-gradient(
         circle at 2% 3%,
-        hsl(var(--brand-orange-light) / 0.13),
+        hsl(var(--brand-orange-light) / 0.08),
         transparent 24rem
       ),
       radial-gradient(
         circle at 92% 14%,
-        hsl(var(--brand-orange) / 0.08),
+        hsl(var(--brand-orange) / 0.05),
         transparent 28rem
       ),
       radial-gradient(
@@ -261,8 +277,8 @@
     @apply glass-card p-5 min-h-[120px] flex flex-col justify-between;
     background-image: linear-gradient(
       145deg,
-      hsl(0 0% 100% / 0.88),
-      hsl(var(--brand-warm-surface) / 0.68)
+      hsla(var(--surface-readable)),
+      hsla(var(--surface-readable-muted))
     );
   }
 
@@ -303,12 +319,12 @@
     background:
       linear-gradient(
         135deg,
-        hsl(0 0% 100% / 0.86),
-        hsl(var(--brand-warm-surface) / 0.68)
+        hsla(var(--surface-readable)),
+        hsla(var(--surface-readable-muted))
       ),
       radial-gradient(
         circle at 0% 0%,
-        hsl(var(--brand-orange-light) / 0.14),
+        hsl(var(--brand-orange-light) / 0.08),
         transparent 18rem
       ),
       radial-gradient(
@@ -316,7 +332,7 @@
         hsl(var(--brand-metal-blue) / 0.1),
         transparent 18rem
       );
-    border-color: hsl(var(--brand-orange) / 0.16);
+    border-color: hsl(var(--brand-orange) / 0.12);
     backdrop-filter: blur(28px) saturate(180%);
     box-shadow:
       inset 0 1px 0 hsl(0 0% 100% / 0.86),
@@ -327,10 +343,10 @@
     @apply relative overflow-hidden rounded-2xl border p-4;
     background: linear-gradient(
       145deg,
-      hsl(0 0% 100% / 0.82),
-      hsl(var(--brand-warm-surface) / 0.58)
+      hsla(var(--surface-readable)),
+      hsla(var(--surface-readable-muted))
     );
-    border-color: hsl(var(--brand-orange) / 0.14);
+    border-color: hsl(var(--brand-orange) / 0.1);
     box-shadow:
       inset 0 1px 0 hsl(0 0% 100% / 0.9),
       0 14px 34px -26px hsl(222 47% 11% / 0.38);
@@ -344,7 +360,7 @@
     width: 8rem;
     height: 8rem;
     border-radius: 9999px;
-    background: hsl(var(--stat-color, var(--primary)) / 0.18);
+    background: hsl(var(--stat-color, var(--primary)) / 0.12);
     filter: blur(24px);
   }
 

@@ -9,11 +9,11 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-gradient-to-r from-brand-orange-deep via-primary to-brand-orange-light text-primary-foreground shadow-[0_12px_28px_-18px_hsl(var(--brand-warm-shadow))] hover:-translate-y-0.5 hover:shadow-[0_16px_34px_-20px_hsl(var(--brand-orange))]",
+        default: "bg-gradient-to-r from-brand-orange-deep via-primary/95 to-brand-orange-light text-primary-foreground shadow-[0_10px_24px_-18px_hsl(var(--brand-warm-shadow))] hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-22px_hsl(var(--brand-warm-shadow))]",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline: "border border-input bg-white/68 shadow-[inset_0_1px_0_rgba(255,255,255,0.86)] backdrop-blur-xl hover:-translate-y-0.5 hover:border-primary/25 hover:bg-brand-warm-surface/80 hover:text-foreground",
-        secondary: "bg-secondary/80 text-secondary-foreground backdrop-blur hover:bg-secondary hover:text-brand-orange-deep",
-        ghost: "hover:bg-primary/8 hover:text-primary",
+        secondary: "bg-[hsl(var(--brand-orange-soft))] text-secondary-foreground backdrop-blur hover:bg-[hsl(var(--brand-orange-muted))] hover:text-sidebar-accent-foreground",
+        ghost: "text-[hsl(var(--text-secondary))] hover:bg-[hsla(var(--surface-readable-muted))] hover:text-sidebar-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

@@ -373,9 +373,9 @@ export default function FatorR() {
         ['Não se aplica', stats.notApplicable, 'Sem enquadramento', 'var(--menu-cyan)'],
       ].map(([label, value, caption, color]) => (
         <div key={String(label)} className="liquid-stat-card" style={{ '--stat-color': color } as CSSProperties}>
-          <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/48">{label}</div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/66">{label}</div>
           <div className="mt-2 text-3xl font-black tracking-tight text-foreground">{String(value)}</div>
-          <p className="text-xs font-medium text-foreground/55">{caption}</p>
+          <p className="text-xs font-medium text-foreground/70">{caption}</p>
         </div>
       ))}
     </div>

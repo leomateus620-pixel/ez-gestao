@@ -105,13 +105,13 @@ export function EmpresaAutomacaoCards({ empresaId }: { empresaId: string }) {
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><Folder className="h-4 w-4" /></div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold">Pasta no Drive</h3>
-            <p className="text-[11px] text-foreground/55">Diretório dedicado da empresa</p>
+            <p className="text-[11px] text-foreground/70">Diretório dedicado da empresa</p>
           </div>
         </div>
         {empresa.drive_folder_id ? (
           <div className="space-y-2">
             <div className="flex items-center gap-1.5 text-[11px] text-success"><CheckCircle2 className="h-3 w-3" /> Pasta configurada</div>
-            <p className="text-[10px] font-mono text-foreground/55 truncate" title={empresa.drive_folder_id}>{empresa.drive_folder_id}</p>
+            <p className="text-[10px] font-mono text-foreground/70 truncate" title={empresa.drive_folder_id}>{empresa.drive_folder_id}</p>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" className="flex-1 text-xs gap-1.5" asChild>
                 <a href={driveUrl!} target="_blank" rel="noreferrer"><ExternalLink className="h-3 w-3" /> Abrir</a>
@@ -138,7 +138,7 @@ export function EmpresaAutomacaoCards({ empresaId }: { empresaId: string }) {
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10 text-accent"><Upload className="h-4 w-4" /></div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold">Documentos da pasta</h3>
-            <p className="text-[11px] text-foreground/55">{guias.length} PDF(s) carregado(s)</p>
+            <p className="text-[11px] text-foreground/70">{guias.length} PDF(s) carregado(s)</p>
           </div>
         </div>
         <Button size="sm" className="w-full gap-1.5 text-xs" onClick={() => fileRef.current?.click()} disabled={uploading || !empresa.drive_folder_id}>
@@ -147,13 +147,13 @@ export function EmpresaAutomacaoCards({ empresaId }: { empresaId: string }) {
         </Button>
         <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-thin">
           {guias.length === 0 ? (
-            <p className="text-[11px] text-foreground/45 text-center py-2">Nenhum documento</p>
+            <p className="text-[11px] text-foreground/64 text-center py-2">Nenhum documento</p>
           ) : guias.map(g => (
             <div key={g.id} className="flex items-center gap-2 rounded-md border border-border/40 bg-background/40 px-2 py-1.5">
-              <FileText className="h-3 w-3 text-foreground/60 shrink-0" />
+              <FileText className="h-3 w-3 text-foreground/72 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-medium truncate">{g.file_name}</p>
-                <p className="text-[10px] text-foreground/55">
+                <p className="text-[10px] text-foreground/70">
                   {g.tipo_guia || 'Aguardando análise'}
                   {g.valor != null && ` • ${fmtBRL(g.valor)}`}
                   {g.vencimento && ` • venc. ${fmtDate(g.vencimento)}`}
@@ -161,7 +161,7 @@ export function EmpresaAutomacaoCards({ empresaId }: { empresaId: string }) {
               </div>
               <span className={cn('text-[9px] px-1.5 py-0.5 rounded',
                 g.status === 'enviada' ? 'bg-success/15 text-success' :
-                g.status === 'identificada' ? 'bg-info/15 text-info' : 'bg-muted text-foreground/60')}>{g.status}</span>
+                g.status === 'identificada' ? 'bg-info/15 text-info' : 'bg-muted text-foreground/72')}>{g.status}</span>
             </div>
           ))}
         </div>
@@ -173,11 +173,11 @@ export function EmpresaAutomacaoCards({ empresaId }: { empresaId: string }) {
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-success/10 text-success"><Send className="h-4 w-4" /></div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold">Disparar guias</h3>
-            <p className="text-[11px] text-foreground/55">Envia todos os PDFs por e-mail</p>
+            <p className="text-[11px] text-foreground/70">Envia todos os PDFs por e-mail</p>
           </div>
         </div>
         <div className="space-y-1.5">
-          <label className="text-[10px] text-foreground/60 uppercase tracking-wide">Destinatário</label>
+          <label className="text-[10px] text-foreground/72 uppercase tracking-wide">Destinatário</label>
           <Input value={destinatario} onChange={(e) => setDestinatario(e.target.value)} placeholder="email@exemplo.com" className="h-8 text-xs" />
         </div>
         <div className="flex gap-2">
@@ -189,7 +189,7 @@ export function EmpresaAutomacaoCards({ empresaId }: { empresaId: string }) {
           </Button>
         </div>
         {ultimoEnvio && (
-          <div className="text-[10px] text-foreground/55 border-t border-border/30 pt-2 space-y-0.5">
+          <div className="text-[10px] text-foreground/70 border-t border-border/30 pt-2 space-y-0.5">
             <p>Último envio: {new Date(ultimoEnvio.created_at).toLocaleString('pt-BR')}</p>
             <p>Para: {ultimoEnvio.destinatario}</p>
             {ultimoEnvio.provider_message_id && <p className="font-mono truncate">msg: {ultimoEnvio.provider_message_id}</p>}

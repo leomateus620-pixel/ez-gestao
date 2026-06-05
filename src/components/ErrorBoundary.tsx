@@ -63,11 +63,11 @@ export class ErrorBoundary extends Component<Props, State> {
             <AlertTriangle className="h-8 w-8 text-destructive" />
           </div>
           <h2 className="text-lg font-semibold mb-1">Algo deu errado</h2>
-          <p className="text-sm text-foreground/60 mb-4 max-w-md text-center">
+          <p className="text-sm text-foreground/72 mb-4 max-w-md text-center">
             Ocorreu um erro inesperado ao carregar esta área. Você pode tentar
             novamente ou recarregar a página.
           </p>
-          <p className="text-xs text-foreground/40 mb-4 font-mono max-w-md text-center truncate">
+          <p className="text-xs text-foreground/72 mb-4 font-mono max-w-md text-center truncate">
             {this.state.error?.message}
           </p>
           <div className="flex gap-2">

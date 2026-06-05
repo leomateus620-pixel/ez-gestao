@@ -38,17 +38,17 @@ export default function GuiaDetalhe() {
         <GlassCard variant="elevated" className="lg:col-span-2">
           <h2 className="text-sm font-semibold">Identificação e metadados</h2>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <div><p className="text-xs text-foreground/50">CNPJ detectado</p><p className="mt-1 font-mono text-sm">{guide.cnpjDetectado ? formatCNPJ(guide.cnpjDetectado) : 'Não identificado'}</p></div>
-            <div><p className="text-xs text-foreground/50">Origem da identificação</p><p className="mt-1 text-sm capitalize">{guide.matchSource.replace('_', ' ')}</p></div>
-            <div><p className="text-xs text-foreground/50">Tipo da guia</p><p className="mt-1 text-sm">{guide.tipoGuia || 'Não extraído'}</p></div>
-            <div><p className="text-xs text-foreground/50">Competencia</p><p className="mt-1 text-sm">{guide.competencia || 'Não extraida'}</p></div>
-            <div><p className="text-xs text-foreground/50">Vencimento</p><p className="mt-1 text-sm">{formatDate(guide.vencimento)}</p></div>
-            <div><p className="text-xs text-foreground/50">Valor</p><p className="mt-1 text-sm">{guide.valor == null ? 'Não extraído' : `R$ ${guide.valor.toFixed(2).replace('.', ',')}`}</p></div>
+            <div><p className="text-xs text-foreground/68">CNPJ detectado</p><p className="mt-1 font-mono text-sm">{guide.cnpjDetectado ? formatCNPJ(guide.cnpjDetectado) : 'Não identificado'}</p></div>
+            <div><p className="text-xs text-foreground/68">Origem da identificação</p><p className="mt-1 text-sm capitalize">{guide.matchSource.replace('_', ' ')}</p></div>
+            <div><p className="text-xs text-foreground/68">Tipo da guia</p><p className="mt-1 text-sm">{guide.tipoGuia || 'Não extraído'}</p></div>
+            <div><p className="text-xs text-foreground/68">Competencia</p><p className="mt-1 text-sm">{guide.competencia || 'Não extraida'}</p></div>
+            <div><p className="text-xs text-foreground/68">Vencimento</p><p className="mt-1 text-sm">{formatDate(guide.vencimento)}</p></div>
+            <div><p className="text-xs text-foreground/68">Valor</p><p className="mt-1 text-sm">{guide.valor == null ? 'Não extraído' : `R$ ${guide.valor.toFixed(2).replace('.', ',')}`}</p></div>
           </div>
           {guide.textoExtraidoPreview && (
             <div className="mt-5 rounded-xl border border-border/50 bg-muted/30 p-4">
-              <p className="text-xs font-medium text-foreground/55">Trecho extraído para auditoria</p>
-              <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-xs text-foreground/65">{guide.textoExtraidoPreview}</p>
+              <p className="text-xs font-medium text-foreground/70">Trecho extraído para auditoria</p>
+              <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-xs text-foreground/76">{guide.textoExtraidoPreview}</p>
             </div>
           )}
         </GlassCard>
@@ -58,14 +58,14 @@ export default function GuiaDetalhe() {
           {company ? (
             <div className="mt-4 space-y-3">
               <div className="flex items-center gap-2"><Building2 className="h-4 w-4 text-primary" /><span className="text-sm font-medium">{company.nomeFantasia}</span></div>
-              <div className="flex items-center gap-2 text-sm text-foreground/65">
+              <div className="flex items-center gap-2 text-sm text-foreground/76">
                 {company.canalPreferido === 'whatsapp' ? <MessageCircle className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
                 {company.canalPreferido === 'whatsapp' ? company.whatsappPrincipal : company.emailPrincipal}
               </div>
               <Badge variant="outline">{company.canalPreferido || 'Sem canal preferido'}</Badge>
-              {dispatch && <p className="text-xs text-foreground/55">Entrega: <span className="capitalize">{dispatch.status}</span></p>}
+              {dispatch && <p className="text-xs text-foreground/70">Entrega: <span className="capitalize">{dispatch.status}</span></p>}
             </div>
-          ) : <p className="mt-4 text-sm text-foreground/55">Empresa ainda não vinculada.</p>}
+          ) : <p className="mt-4 text-sm text-foreground/70">Empresa ainda não vinculada.</p>}
         </GlassCard>
       </div>
 
@@ -76,7 +76,7 @@ export default function GuiaDetalhe() {
             {guideExceptions.map((entry) => (
               <div key={entry.id} className="rounded-lg bg-background/45 p-3">
                 <p className="text-sm">{entry.reason}</p>
-                <p className="mt-1 text-xs text-foreground/55">{entry.actionRecommended}</p>
+                <p className="mt-1 text-xs text-foreground/70">{entry.actionRecommended}</p>
               </div>
             ))}
           </div>
@@ -86,12 +86,12 @@ export default function GuiaDetalhe() {
       <GlassCard>
         <div className="flex items-center gap-2 text-sm font-semibold"><Clock className="h-4 w-4" /> Auditoria do fluxo</div>
         <div className="mt-4 space-y-3">
-          {timeline.length === 0 ? <p className="text-sm text-foreground/55">Nenhum evento registrado ainda.</p> : timeline.map((entry) => (
+          {timeline.length === 0 ? <p className="text-sm text-foreground/70">Nenhum evento registrado ainda.</p> : timeline.map((entry) => (
             <div key={entry.id} className="flex gap-3 text-sm">
               <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
               <div>
                 <p>{entry.message}</p>
-                <p className="text-xs text-foreground/50">{formatDateTime(entry.createdAt)}</p>
+                <p className="text-xs text-foreground/68">{formatDateTime(entry.createdAt)}</p>
               </div>
             </div>
           ))}

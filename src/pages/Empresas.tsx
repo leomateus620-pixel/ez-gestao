@@ -157,9 +157,9 @@ export default function Empresas() {
           ['WhatsApp', porWhatsApp, 'Preferência mobile', 'var(--menu-violet)'],
         ].map(([label, value, caption, color]) => (
           <div key={String(label)} className="liquid-stat-card" style={{ '--stat-color': color } as CSSProperties}>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/48">{label}</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/66">{label}</p>
             <p className="mt-2 text-3xl font-black tracking-tight text-foreground">{String(value)}</p>
-            <p className="text-xs font-medium text-foreground/55">{caption}</p>
+            <p className="text-xs font-medium text-foreground/70">{caption}</p>
           </div>
         ))}
       </div>
@@ -226,8 +226,8 @@ export default function Empresas() {
                       <p className="truncate font-display text-base font-extrabold tracking-tight text-foreground">{empresa.nomeFantasia}</p>
                       <StatusBadge status={empresa.status} variant="empresa" />
                     </div>
-                    <p className="truncate text-xs font-medium text-foreground/58">{empresa.razaoSocial}</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium text-foreground/62">
+                    <p className="truncate text-xs font-medium text-foreground/70">{empresa.razaoSocial}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium text-foreground/72">
                       <span className="font-mono">{formatCNPJ(empresa.cnpj)}</span>
                       <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{empresa.municipio}/{empresa.estado}</span>
                       <span className="hidden sm:inline">{getRegimeLabel(empresa.regimeTributario)}</span>
@@ -335,7 +335,7 @@ export default function Empresas() {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-medium">Comunicação ativa</p>
-                    <p className="text-[11px] text-foreground/55">Permite que validações iniciem envios automáticos.</p>
+                    <p className="text-[11px] text-foreground/70">Permite que validações iniciem envios automáticos.</p>
                   </div>
                   <Switch checked={form.comunicacaoAtiva} onCheckedChange={checked => setForm(f => ({ ...f, comunicacaoAtiva: checked }))} />
                 </div>
@@ -343,7 +343,7 @@ export default function Empresas() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-medium">E-mail validado</p>
-                      <p className="text-[11px] text-foreground/55">Sem validação, a guia vai para exceção.</p>
+                      <p className="text-[11px] text-foreground/70">Sem validação, a guia vai para exceção.</p>
                     </div>
                     <Switch checked={form.emailValidado} onCheckedChange={checked => setForm(f => ({ ...f, emailValidado: checked }))} />
                   </div>
@@ -351,7 +351,7 @@ export default function Empresas() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-medium">Opt-in WhatsApp registrado</p>
-                      <p className="text-[11px] text-foreground/55">Obrigatório para envio por template utilitário.</p>
+                      <p className="text-[11px] text-foreground/70">Obrigatório para envio por template utilitário.</p>
                     </div>
                     <Switch checked={form.whatsappOptIn} onCheckedChange={checked => setForm(f => ({ ...f, whatsappOptIn: checked }))} />
                   </div>

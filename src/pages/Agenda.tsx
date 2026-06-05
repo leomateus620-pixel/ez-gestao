@@ -65,7 +65,7 @@ export default function Agenda() {
             <div key={group}>
               <div className="flex items-center gap-2 mb-2 px-1">
                 <h3 className={cn('text-xs font-semibold uppercase tracking-wider', groupColors[group])}>{group}</h3>
-                <span className="text-[10px] text-foreground/50">({groupItems.length})</span>
+                <span className="text-[10px] text-foreground/68">({groupItems.length})</span>
               </div>
               <div className="space-y-1.5">
                 {groupItems.map(item => (
@@ -76,7 +76,7 @@ export default function Agenda() {
                       </span>
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{item.empresa.nomeFantasia} — {getCNDTipoLabel(item.cnd.tipo)}</p>
-                        <p className="text-[11px] text-foreground/60">Vencimento: {formatDate(item.cnd.dataVencimento)}</p>
+                        <p className="text-[11px] text-foreground/72">Vencimento: {formatDate(item.cnd.dataVencimento)}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -114,7 +114,7 @@ export default function Agenda() {
                   <div className="flex items-center justify-between gap-2">
                     <div>
                       <p className="text-sm font-medium">{item.empresa.nomeFantasia} — {getCNDTipoLabel(item.cnd.tipo)}</p>
-                      <p className="text-[11px] text-foreground/60">{formatDate(item.cnd.dataVencimento)} • {item.label}</p>
+                      <p className="text-[11px] text-foreground/72">{formatDate(item.cnd.dataVencimento)} • {item.label}</p>
                     </div>
                     <StatusBadge status={item.cnd.status} />
                   </div>

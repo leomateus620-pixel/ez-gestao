@@ -40,7 +40,7 @@ function EmailChips({ emails, onChange }: { emails: string[]; onChange: (next: s
       {emails.map((email) => (
         <span key={email} className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/60 px-2 py-0.5 text-xs text-foreground shadow-inner dark:border-slate-700 dark:bg-slate-800">
           {email}
-          <button type="button" onClick={() => onChange(emails.filter((e) => e !== email))} className="text-foreground/60 hover:text-foreground">
+          <button type="button" onClick={() => onChange(emails.filter((e) => e !== email))} className="text-foreground/72 hover:text-foreground">
             <X className="h-3 w-3" />
           </button>
         </span>

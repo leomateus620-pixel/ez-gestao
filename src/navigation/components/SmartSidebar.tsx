@@ -9,15 +9,15 @@ import { preloadRoute } from '@/navigation/route-preload';
 import { cn } from '@/lib/utils';
 
 const menuAccent: Record<string, string> = {
-  dashboard: 'from-brand-orange-deep via-primary to-brand-orange-light',
-  guias: 'from-brand-orange-deep via-primary to-brand-metal-blue',
-  empresas: 'from-brand-orange-deep via-primary to-emerald-500',
-  integracoes: 'from-brand-metal-blue via-primary to-brand-orange-light',
-  'fator-r': 'from-brand-orange-deep via-primary to-brand-orange-light',
-  classifica: 'from-brand-orange-deep via-primary to-brand-metal-blue',
-  whatsapp: 'from-brand-orange-deep via-primary to-emerald-500',
-  configuracoes: 'from-brand-warm-shadow via-brand-orange-deep to-brand-metal-blue',
-  'legacy-consulta': 'from-brand-metal-blue via-primary to-brand-orange-light',
+  dashboard: 'from-brand-orange-deep/90 via-sidebar-primary/85 to-brand-orange-light/75',
+  guias: 'from-brand-orange-deep/86 via-sidebar-primary/74 to-brand-metal-blue/70',
+  empresas: 'from-brand-orange-deep/82 via-sidebar-primary/70 to-emerald-500/68',
+  integracoes: 'from-brand-metal-blue/82 via-sidebar-primary/64 to-brand-orange-light/70',
+  'fator-r': 'from-brand-orange-deep/88 via-sidebar-primary/76 to-brand-orange-light/72',
+  classifica: 'from-brand-orange-deep/84 via-sidebar-primary/70 to-brand-metal-blue/72',
+  whatsapp: 'from-brand-orange-deep/82 via-sidebar-primary/68 to-emerald-500/66',
+  configuracoes: 'from-brand-warm-shadow/86 via-brand-orange-deep/72 to-brand-metal-blue/72',
+  'legacy-consulta': 'from-brand-metal-blue/82 via-sidebar-primary/62 to-brand-orange-light/66',
 };
 
 export function SmartSidebar({ counters }: { counters: MenuCounters }) {
@@ -38,10 +38,10 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
   }, [setHoveredMenuId]);
 
   return (
-    <aside className="relative z-50 w-[92px] border-r border-white/55 bg-[linear-gradient(180deg,hsl(var(--brand-warm-canvas)/0.76),hsl(var(--brand-warm-surface)/0.58)),radial-gradient(circle_at_50%_0%,hsl(var(--brand-orange-light)/0.18),transparent_44%),radial-gradient(circle_at_50%_100%,hsl(var(--brand-metal-blue)/0.10),transparent_48%)] px-3 py-4 shadow-[inset_-1px_0_0_rgba(255,255,255,0.78),0_20px_60px_-44px_hsl(var(--brand-warm-shadow))] backdrop-blur-2xl">
+    <aside className="relative z-50 w-[92px] border-r border-sidebar-border/70 bg-[linear-gradient(180deg,hsl(var(--brand-warm-canvas)/0.84),hsl(var(--brand-warm-surface)/0.66)),radial-gradient(circle_at_50%_0%,hsl(var(--brand-orange-light)/0.10),transparent_44%),radial-gradient(circle_at_50%_100%,hsl(var(--brand-metal-blue)/0.08),transparent_48%)] px-3 py-4 shadow-[inset_-1px_0_0_rgba(255,255,255,0.78),0_20px_60px_-44px_hsl(var(--brand-warm-shadow))] backdrop-blur-2xl">
       <div className="mb-5 flex justify-center">
         <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-brand-orange-deep via-primary to-brand-orange-light p-[1px] shadow-[0_16px_34px_-22px_hsl(var(--brand-warm-shadow))]">
-          <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white/72 text-[11px] font-black tracking-tight text-primary backdrop-blur-xl">EZ</div>
+          <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white/78 text-[11px] font-black tracking-tight text-sidebar-primary backdrop-blur-xl">EZ</div>
         </div>
       </div>
 
@@ -57,14 +57,14 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                 onFocus={() => previewRoute(item.id, item.route)}
                 className={cn(
                   'group relative w-full rounded-[22px] p-1.5 transition-[background-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
-                  active ? 'bg-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_14px_32px_-22px_hsl(var(--brand-warm-shadow))] ring-1 ring-primary/28' : 'hover:bg-brand-warm-surface/58 hover:shadow-sm',
+                  active ? 'bg-[hsla(var(--sidebar-active-bg))] shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_12px_26px_-24px_hsla(var(--sidebar-active-glow))] ring-1 ring-sidebar-primary/18' : 'hover:bg-[hsla(var(--surface-readable-muted))] hover:shadow-sm',
                 )}
                 aria-label={item.a11yLabel}
                 aria-current={active ? 'page' : undefined}
               >
-                <span className={cn('absolute -left-1.5 top-1/2 h-7 w-1 -translate-y-1/2 rounded-full bg-gradient-to-b opacity-0 transition', accent, active && 'opacity-100')} />
-                <span className={cn('absolute inset-1 rounded-[18px] bg-gradient-to-br opacity-0 blur-md transition', accent, active ? 'opacity-24' : 'group-hover:opacity-14')} />
-                <MenuIconRenderer Icon={item.icon} active={active} menuId={item.id} />
+                <span className={cn('absolute -left-1.5 top-1/2 h-6 w-0.5 -translate-y-1/2 rounded-full bg-sidebar-primary opacity-0 transition', active && 'opacity-75')} />
+                <span className={cn('absolute inset-1 rounded-[18px] bg-[hsla(var(--sidebar-active-halo))] opacity-0 blur-md transition', active ? 'opacity-100' : 'group-hover:opacity-70')} />
+                <MenuIconRenderer Icon={item.icon} active={active} />
                 {item.badgeKey && counters[item.badgeKey] > 0 && <span className="absolute right-1 top-1 rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">{counters[item.badgeKey]}</span>}
               </button>
             </div>
@@ -75,12 +75,12 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
       {preview && (
         <DynamicIslandPanel className="absolute left-[92px] top-4 z-[70] w-[340px] animate-in fade-in zoom-in-95 duration-200 p-4">
           <div className="flex items-start gap-3">
-            <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-lg', menuAccent[preview.id] ?? 'from-primary to-accent')}>
+            <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-[0_12px_26px_-18px_hsl(var(--brand-warm-shadow))]', menuAccent[preview.id] ?? 'from-primary to-accent')}>
               <preview.icon className="h-5 w-5" />
             </div>
             <div className="min-w-0">
               <p className="text-sm font-extrabold tracking-tight text-foreground">{preview.label}</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-foreground/78">{preview.shortDescription}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-foreground/82">{preview.shortDescription}</p>
             </div>
           </div>
           {!!preview.children?.length && (
@@ -96,11 +96,11 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                     onMouseEnter={() => preloadRoute(child.route)}
                     onFocus={() => preloadRoute(child.route)}
                     onClick={() => navigateTo(child.route)}
-                    className={cn('flex items-center justify-between rounded-2xl border px-3 py-2 text-left text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', isActive ? 'border-primary/30 bg-primary/12 text-foreground' : 'border-primary/10 bg-white/88 text-foreground/82 hover:border-primary/24 hover:bg-brand-warm-surface/78')}
+                    className={cn('flex items-center justify-between rounded-2xl border px-3 py-2 text-left text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', isActive ? 'border-sidebar-primary/24 bg-[hsla(var(--sidebar-active-bg))] text-foreground' : 'border-border/70 bg-[hsla(var(--surface-readable))] text-[hsl(var(--text-secondary))] hover:border-sidebar-primary/20 hover:bg-[hsla(var(--surface-readable-muted))]')}
                     aria-current={isActive ? 'page' : undefined}
                   >
                     <span>{child.label}</span>
-                    {child.badgeKey && counters[child.badgeKey] > 0 && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] text-primary">{counters[child.badgeKey]}</span>}
+                    {child.badgeKey && counters[child.badgeKey] > 0 && <span className="rounded-full bg-sidebar-accent px-2 py-0.5 text-[10px] font-semibold text-sidebar-accent-foreground">{counters[child.badgeKey]}</span>}
                   </button>
                 );
               })}
@@ -109,7 +109,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
 
           {!!model.legacy.length && (
             <div className="mt-3 border-t border-primary/10 pt-2">
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground/58">Legado</p>
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[hsl(var(--text-tertiary))]">Legado</p>
               {model.legacy.map((legacy) => (
                 <button
                   key={legacy.id}
@@ -117,7 +117,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                   onMouseEnter={() => preloadRoute(legacy.route)}
                   onFocus={() => preloadRoute(legacy.route)}
                   onClick={() => navigateTo(legacy.route)}
-                  className="w-full rounded-xl px-2 py-1.5 text-left text-xs font-medium text-foreground/74 transition hover:bg-brand-warm-surface/78 hover:text-foreground/90"
+                  className="w-full rounded-xl px-2 py-1.5 text-left text-xs font-medium text-[hsl(var(--text-secondary))] transition hover:bg-[hsla(var(--surface-readable-muted))] hover:text-foreground"
                 >
                   {legacy.label}
                 </button>

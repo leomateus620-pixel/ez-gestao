@@ -31,7 +31,7 @@ export function SmartTopbar({ counters, isHidden = false }: { counters: MenuCoun
         <div className="flex min-w-0 items-center gap-3">
           <span className="hidden h-10 w-1.5 rounded-full bg-gradient-to-b from-brand-orange-deep via-primary to-brand-orange-light shadow-[0_0_24px_hsl(var(--brand-orange)/0.32)] sm:block" />
           <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary/62">Contexto ativo</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-sidebar-primary/75">Contexto ativo</p>
             <p className="truncate font-display text-sm font-extrabold tracking-tight text-foreground">{activeMenu?.label ?? 'Painel'}</p>
           </div>
         </div>
@@ -56,7 +56,7 @@ export function SmartTopbar({ counters, isHidden = false }: { counters: MenuCoun
             {activeTopbarPanel === 'search' && (
               <div className="space-y-2">
                 <input className="h-10 w-full rounded-2xl border border-primary/15 bg-white/65 px-3 text-sm outline-none ring-primary/40 backdrop-blur-xl focus:ring-2" placeholder="Buscar em dashboard, guias, empresas e integrações..." />
-                <p className="text-xs text-foreground/55">Dica: você pode digitar nome da empresa, CNPJ ou módulo.</p>
+                <p className="text-xs text-[hsl(var(--text-tertiary))]">Dica: você pode digitar nome da empresa, CNPJ ou módulo.</p>
               </div>
             )}
 
@@ -70,7 +70,7 @@ export function SmartTopbar({ counters, isHidden = false }: { counters: MenuCoun
             {activeTopbarPanel === 'profile' && (
               <div className="space-y-2">
                 <p className="text-sm font-semibold">{session?.user.email}</p>
-                <p className="text-xs text-foreground/60">Administrador</p>
+                <p className="text-xs text-[hsl(var(--text-tertiary))]">Administrador</p>
                 <Button variant="outline" className="w-full justify-start" onClick={() => signOut()}><LogOut className="mr-2 h-4 w-4" />Sair</Button>
               </div>
             )}
