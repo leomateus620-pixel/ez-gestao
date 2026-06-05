@@ -73,7 +73,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
       </nav>
 
       {preview && (
-        <DynamicIslandPanel className="absolute left-[92px] top-4 z-[70] w-[340px] animate-in fade-in zoom-in-95 duration-200 bg-[linear-gradient(145deg,#ffffff,#f8fbff_52%,#eef4ff)] p-4 backdrop-blur-none">
+        <DynamicIslandPanel className="absolute left-[92px] top-4 z-[70] w-[340px] animate-in fade-in zoom-in-95 duration-200 p-4">
           <div className="flex items-start gap-3">
             <div className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow-lg', menuAccent[preview.id] ?? 'from-primary to-accent')}>
               <preview.icon className="h-5 w-5" />
