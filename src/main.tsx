@@ -7,10 +7,10 @@ function renderFatalFallback(message: string) {
   const el = document.getElementById("root");
   if (!el) return;
   el.innerHTML = `
-    <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-family:system-ui,-apple-system,sans-serif;padding:24px;text-align:center;color:#1f2937;background:#f8fafc">
+    <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-family:system-ui,-apple-system,sans-serif;padding:24px;text-align:center;color:#1f2937;background:#fffbf5">
       <div style="font-size:18px;font-weight:600">Não foi possível iniciar o app</div>
       <div style="font-size:13px;color:#6b7280;max-width:420px">${message}</div>
-      <button onclick="try{Object.keys(localStorage).filter(k=>k.startsWith('sb-')).forEach(k=>localStorage.removeItem(k))}catch(e){};location.reload()" style="margin-top:8px;padding:10px 18px;border-radius:10px;background:#2563eb;color:#fff;border:none;font-weight:600;cursor:pointer">Recarregar</button>
+      <button onclick="try{Object.keys(localStorage).filter(k=>k.startsWith('sb-')).forEach(k=>localStorage.removeItem(k))}catch(e){};location.reload()" style="margin-top:8px;padding:10px 18px;border-radius:10px;background:#FA7602;color:#fff;border:none;font-weight:600;cursor:pointer">Recarregar</button>
     </div>`;
 }
 

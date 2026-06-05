@@ -35,7 +35,7 @@ export function ConnectorHealthCard({ connector, healthLog, runsToday = 0, onCli
 
   return (
     <div
-      className="glass-card group cursor-pointer p-4 transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_48px_-34px_rgba(37,99,235,0.7)]"
+      className="glass-card group cursor-pointer p-4 transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_48px_-34px_hsl(var(--brand-warm-shadow)/0.7)]"
       onClick={onClick}
     >
       <div className="flex items-start justify-between mb-3">

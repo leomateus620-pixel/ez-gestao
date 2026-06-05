@@ -12,7 +12,7 @@ export function PageHeader({ title, subtitle, children, className }: PageHeaderP
   return (
     <div className={cn('page-accent-panel flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between', className)}>
       <div className="relative z-10 flex min-w-0 items-start gap-3">
-        <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/60 bg-white/60 text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_30px_-18px_rgba(37,99,235,0.8)] backdrop-blur-xl">
+        <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/60 bg-white/60 text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_12px_30px_-18px_hsl(var(--brand-warm-shadow)/0.8)] backdrop-blur-xl">
           <Sparkles className="h-5 w-5" />
         </div>
         <div className="min-w-0">
