@@ -80,7 +80,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-extrabold tracking-tight text-foreground">{preview.label}</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-foreground/65">{preview.shortDescription}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-foreground/78">{preview.shortDescription}</p>
             </div>
           </div>
           {!!preview.children?.length && (
@@ -96,7 +96,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                     onMouseEnter={() => preloadRoute(child.route)}
                     onFocus={() => preloadRoute(child.route)}
                     onClick={() => navigateTo(child.route)}
-                    className={cn('flex items-center justify-between rounded-2xl border px-3 py-2 text-left text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', isActive ? 'border-primary/25 bg-primary/10 text-foreground' : 'border-white/40 bg-white/40 text-foreground/70 hover:bg-white/65')}
+                    className={cn('flex items-center justify-between rounded-2xl border px-3 py-2 text-left text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50', isActive ? 'border-primary/30 bg-primary/12 text-foreground' : 'border-slate-200/80 bg-white/88 text-foreground/82 hover:border-primary/20 hover:bg-white')}
                     aria-current={isActive ? 'page' : undefined}
                   >
                     <span>{child.label}</span>
@@ -108,8 +108,8 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
           )}
 
           {!!model.legacy.length && (
-            <div className="mt-3 border-t border-white/50 pt-2">
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground/45">Legado</p>
+            <div className="mt-3 border-t border-slate-200/80 pt-2">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-foreground/58">Legado</p>
               {model.legacy.map((legacy) => (
                 <button
                   key={legacy.id}
@@ -117,7 +117,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                   onMouseEnter={() => preloadRoute(legacy.route)}
                   onFocus={() => preloadRoute(legacy.route)}
                   onClick={() => navigateTo(legacy.route)}
-                  className="w-full rounded-xl px-2 py-1.5 text-left text-xs text-foreground/60 transition hover:bg-white/55 hover:text-foreground/80"
+                  className="w-full rounded-xl px-2 py-1.5 text-left text-xs font-medium text-foreground/74 transition hover:bg-white hover:text-foreground/90"
                 >
                   {legacy.label}
                 </button>
