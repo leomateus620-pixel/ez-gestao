@@ -30,11 +30,12 @@ export default function Envios() {
 
   const paginatedEnvios = useMemo(() => enviosFiltrados.slice(0, page * ITEMS_PER_PAGE), [enviosFiltrados, page]);
   const hasMore = paginatedEnvios.length < enviosFiltrados.length;
+  const handleNovoEnvio = () => toast.info('Novo Envio', { description: 'Fluxo assistido disponível na Fase 2.' });
 
   return (
     <div className="space-y-6 animate-slide-in">
       <PageHeader title="Envios" subtitle="Histórico de envios por e-mail e WhatsApp">
-        <Button className="gap-2" onClick={() => toast.info('Novo Envio', { description: 'Fluxo assistido disponível na Fase 2.' })}><Plus className="h-4 w-4" />Novo Envio</Button>
+        <Button className="gap-2" onClick={handleNovoEnvio}><Plus className="h-4 w-4" />Novo Envio</Button>
       </PageHeader>
 
       <div className="filter-bar">
@@ -89,7 +90,7 @@ export default function Envios() {
           </div>
         )}
         {enviosFiltrados.length === 0 && (
-          <EmptyState icon={Send} title="Nenhum envio encontrado" description="Crie um novo envio para começar." actionLabel="Novo Envio" onAction={() => {}} />
+          <EmptyState icon={Send} title="Nenhum envio encontrado" description="Crie um novo envio para começar." actionLabel="Novo Envio" onAction={handleNovoEnvio} />
         )}
       </div>
     </div>

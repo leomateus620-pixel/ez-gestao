@@ -23,11 +23,20 @@ export interface ContextualMenuResult {
 
 const topLevel = menuRegistry.filter((item) => item.group === 'principal');
 
+export function routeMatchesPath(pathname: string, route: string) {
+  if (route === '/') return pathname === '/';
+  return pathname === route || pathname.startsWith(`${route}/`);
+}
+
 export function resolveContextualMenu(context: NavigationContextInput): ContextualMenuResult {
-  const active = menuRegistry.find((item) => item.route === '/' ? context.pathname === '/' : context.pathname.startsWith(item.route));
+  const active = [...menuRegistry]
+    .filter((item) => routeMatchesPath(context.pathname, item.route))
+    .sort((a, b) => b.route.length - a.route.length)[0];
   const activeTop = active?.parent ? menuRegistry.find((item) => item.id === active.parent) : active;
 
-  const visiblePrimary = [...topLevel].sort((a, b) => priorityScore(a.priority) - priorityScore(b.priority));
+  const visiblePrimary = [...topLevel]
+    .filter((item) => !context.isMobile || !item.visibilityRules?.mobileHidden)
+    .sort((a, b) => priorityScore(a.priority) - priorityScore(b.priority));
   const contextualChildren = activeTop?.children
     ? activeTop.children.map((id) => menuRegistry.find((item) => item.id === id)).filter(Boolean) as MenuItemConfig[]
     : [];

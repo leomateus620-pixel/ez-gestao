@@ -16,6 +16,7 @@ import { ArrowLeft, Building2, Mail, Phone, MapPin, FileText, Send, Clock, Downl
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { EmpresaAutomacaoCards } from '@/components/EmpresaAutomacaoCards';
+import { openDocument } from '@/lib/document-actions';
 
 export default function EmpresaDetalhe() {
   const { id } = useParams();
@@ -49,6 +50,9 @@ export default function EmpresaDetalhe() {
       return acc;
     }, {});
   }, [cnds]);
+  const openCndPdf = useCallback((arquivoId: string | null) => {
+    openDocument(docs.find((doc) => doc.id === arquivoId));
+  }, [docs]);
 
   const handleUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -224,7 +228,7 @@ export default function EmpresaDetalhe() {
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               {cnd.arquivoId ? (
-                                <Button variant="outline" size="sm" className="text-xs gap-1.5 h-8"><Eye className="h-3 w-3" /> Ver PDF</Button>
+                                <Button variant="outline" size="sm" className="text-xs gap-1.5 h-8" onClick={() => openCndPdf(cnd.arquivoId)}><Eye className="h-3 w-3" /> Ver PDF</Button>
                               ) : (
                                 <Button variant="outline" size="sm" className="text-xs gap-1.5 h-8" onClick={() => fileInputRef.current?.click()}>
                                   <FileText className="h-3 w-3" /> Anexar PDF
@@ -264,8 +268,8 @@ export default function EmpresaDetalhe() {
                     </div>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8"><Eye className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8"><Download className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Abrir ${doc.nome}`} onClick={() => openDocument(doc)}><Eye className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Baixar ${doc.nome}`} onClick={() => openDocument(doc, 'download')}><Download className="h-4 w-4" /></Button>
                   </div>
                 </div>
               </div>

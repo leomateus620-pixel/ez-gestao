@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import googleDriveLogo from '@/assets/connectors/google-drive.svg';
 import gmailLogo from '@/assets/connectors/gmail.svg';
 import twilioLogo from '@/assets/connectors/twilio.svg';
+import { toast } from 'sonner';
 
 const icons: Record<IntegrationProvider, typeof FileText> = {
   google_drive: FolderInput,
@@ -113,7 +114,7 @@ export default function IntegracoesGuias() {
   return (
     <div className="space-y-6 animate-slide-in">
       <PageHeader title="Integracoes" subtitle="Conectores e seguranca do envio automático de guias.">
-        <Button disabled variant="outline">Gerenciar conexões</Button>
+        <Button variant="outline" onClick={() => toast.info('Gerenciar conexões', { description: 'As credenciais são configuradas como secrets no Supabase.' })}>Gerenciar conexões</Button>
       </PageHeader>
 
       <GlassCard variant="elevated" className="overflow-hidden">

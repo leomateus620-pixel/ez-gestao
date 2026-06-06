@@ -13,18 +13,31 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const AUTH_BOOT_TIMEOUT_MS = 3000;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 
 function toAuthErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+function getAuthStorageKey() {
+  if (!SUPABASE_URL) return null;
+  try {
+    const projectRef = new URL(SUPABASE_URL).hostname.split('.')[0];
+    return projectRef ? `sb-${projectRef}-auth-token` : null;
+  } catch {
+    return null;
+  }
 }
 
 function readCachedSession(): Session | null {
   if (typeof window === 'undefined') return null;
 
   try {
+    const authStorageKey = getAuthStorageKey();
+    if (!authStorageKey) return null;
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (!key || !key.startsWith('sb-') || !key.endsWith('-auth-token')) continue;
+      if (key !== authStorageKey) continue;
       const raw = localStorage.getItem(key);
       if (!raw) continue;
       try {

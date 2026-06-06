@@ -7,13 +7,15 @@ import { resolveContextualMenu, type MenuCounters } from '@/navigation/engine/co
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useNavigationUiState } from '@/navigation/state/NavigationStateProvider';
 import { useAuth } from '@/auth/AuthProvider';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export function SmartTopbar({ counters, isHidden = false }: { counters: MenuCounters; isHidden?: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { session, signOut } = useAuth();
   const { activeTopbarPanel, setActiveTopbarPanel } = useNavigationUiState();
-  const model = resolveContextualMenu({ pathname: location.pathname, isMobile: false, counters });
+  const model = resolveContextualMenu({ pathname: location.pathname, isMobile, counters });
   const activeMenu = model.visiblePrimary.find((m) => m.id === model.activeMenuId);
 
   const shouldCollapse = isHidden && !activeTopbarPanel;
@@ -27,7 +29,7 @@ export function SmartTopbar({ counters, isHidden = false }: { counters: MenuCoun
           : 'max-h-96 translate-y-0 py-3 opacity-100',
       )}
     >
-      <DynamicIslandPanel className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 px-5 py-3">
+      <DynamicIslandPanel className="mx-auto flex max-w-[1240px] items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
           <span className="hidden h-10 w-1.5 rounded-full bg-gradient-to-b from-brand-orange-deep via-primary to-brand-orange-light shadow-[0_0_24px_hsl(var(--brand-orange)/0.32)] sm:block" />
           <div className="min-w-0">
@@ -47,7 +49,7 @@ export function SmartTopbar({ counters, isHidden = false }: { counters: MenuCoun
 
       {activeTopbarPanel && (
         <div className="mx-auto mt-2 flex max-w-[1240px] justify-end">
-          <DynamicIslandPanel className="w-[360px] p-4">
+          <DynamicIslandPanel className="w-full max-w-[360px] p-4">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-bold uppercase tracking-wider text-primary/60">{activeTopbarPanel}</p>
               <Button size="icon" variant="ghost" className="h-7 w-7 rounded-full" onClick={() => setActiveTopbarPanel(undefined)}><X className="h-4 w-4" /></Button>

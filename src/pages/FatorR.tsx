@@ -265,8 +265,10 @@ export default function FatorR() {
       if (error || data?.ok === false) throw error ?? new Error(data?.error ?? 'Falha no processamento');
       toast.success('Pasta do Drive processada.');
       await load();
-    } catch (_error) {
-      toast.error('Não foi possível processar a pasta do Drive.');
+    } catch (error) {
+      toast.error('Não foi possível processar a pasta do Drive.', {
+        description: error instanceof Error ? error.message : 'Verifique a função fator-r-drive-sync.',
+      });
     } finally {
       setLoadingSync(false);
     }
@@ -312,19 +314,26 @@ export default function FatorR() {
     const raw = value.includes('%')
       ? Number(value.replace('%', '').replace(',', '.')) / 100
       : Number(value.replace(',', '.'));
-    if (!Number.isFinite(raw)) return;
+    if (!Number.isFinite(raw)) {
+      toast.error('Fator R inválido', { description: 'Informe um decimal como 0,31 ou um percentual como 31%.' });
+      return;
+    }
 
     const { data: userData } = await supabase.auth.getUser();
     const oldData = { fator_r_value: result.fator_r_value, fator_r_percent: result.fator_r_percent, status: result.status };
     const status: FatorRStatus = raw <= 0.28 ? 'critical' : raw <= 0.32 ? 'attention' : 'safe';
     const newData = { fator_r_value: raw, fator_r_percent: raw * 100, status, reason, manual: true };
 
-    await (supabase as any)
+    const { error: updateError } = await (supabase as any)
       .from('fator_r_monthly_results')
       .update({ ...newData, metadata: { ...(result.metadata ?? {}), manual_review_recommended: false, updated_by_ui: true } })
       .eq('id', result.id);
+    if (updateError) {
+      toast.error('Falha ao atualizar Fator R', { description: updateError.message });
+      return;
+    }
 
-    await (supabase as any).from('fator_r_audit_logs').insert({
+    const { error: auditError } = await (supabase as any).from('fator_r_audit_logs').insert({
       entity_type: 'fator_r_monthly_results',
       entity_id: result.id,
       action: 'manual_adjustment',
@@ -332,8 +341,13 @@ export default function FatorR() {
       new_data: newData,
       user_id: userData.user?.id ?? null,
     });
+    if (auditError) {
+      toast.error('Ajuste salvo sem auditoria', { description: auditError.message });
+      return;
+    }
 
     await load();
+    toast.success('Fator R ajustado com auditoria');
   };
 
   const folderId = (import.meta.env.VITE_FATOR_R_DRIVE_FOLDER_ID as string | undefined) || null;
