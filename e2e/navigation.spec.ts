@@ -347,6 +347,48 @@ test('nao duplica fallback nem historico em hover, cliques rapidos e clique repe
   expect(repeatedSnapshot.urlChanges, 'repeated click on active menu should not push history').toHaveLength(0);
 });
 
+test('sidebar expansivo recolhe com delay apos clique e cancela fechamento ao retornar mouse ou foco', async ({ page }) => {
+  await page.goto('/');
+  await installNavigationMonitor(page);
+  await expect(page.getByRole('heading', { name: /Envio de Guias/i })).toBeVisible();
+
+  const sidebar = page.getByTestId('smart-sidebar');
+  const guiasButton = page.getByLabel('Abrir modulo de guias');
+
+  await expect(sidebar).toHaveAttribute('data-expanded', 'false');
+  await guiasButton.hover();
+  await expect(sidebar).toHaveAttribute('data-expanded', 'true');
+
+  await guiasButton.click();
+  await expect(page).toHaveURL('/guias');
+  await expect(page.getByRole('heading', { name: /Fila de Guias/i })).toBeVisible();
+  await expect(sidebar).toHaveAttribute('data-expanded', 'true');
+  await page.waitForTimeout(120);
+  await expect(sidebar).toHaveAttribute('data-expanded', 'true');
+  await expect(sidebar).toHaveAttribute('data-expanded', 'false', { timeout: 1_200 });
+
+  await sidebar.hover();
+  await expect(sidebar).toHaveAttribute('data-expanded', 'true');
+  await page.mouse.move(900, 300);
+  await page.waitForTimeout(120);
+  await sidebar.hover();
+  await page.waitForTimeout(300);
+  await expect(sidebar).toHaveAttribute('data-expanded', 'true');
+
+  await page.mouse.move(900, 300);
+  await expect(sidebar).toHaveAttribute('data-expanded', 'false', { timeout: 1_200 });
+  await page.getByLabel('Abrir empresas').focus();
+  await expect(sidebar).toHaveAttribute('data-expanded', 'true');
+
+  await resetNavigationMonitor(page);
+  await page.getByLabel('Abrir empresas').click();
+  await expect(page).toHaveURL('/empresas');
+  await expect(page.getByRole('heading', { name: /Empresas/i })).toBeVisible();
+  const snapshot = await navigationSnapshot(page);
+  expect(snapshot.loadingMounts, 'delayed sidebar collapse should not duplicate loading fallback').toBeLessThanOrEqual(1);
+  expect(snapshot.urlChanges.filter((path) => path === '/empresas')).toHaveLength(1);
+});
+
 test('mantem navegacao utilizavel em viewport mobile sem preload agressivo por touchmove', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/envios');
