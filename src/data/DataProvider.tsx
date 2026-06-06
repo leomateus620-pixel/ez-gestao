@@ -1,21 +1,17 @@
-import React, { createContext, useContext, useCallback, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { createContext, useCallback, useContext, useMemo } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { Empresa, CNDItem, Documento, Envio, Alerta, LogAcesso, AuditEntry, RegimeTributario } from '@/data/types';
-import { recalcularTodosStatus } from '@/lib/status-utils';
+import type { Alerta, AuditEntry, Documento, Empresa, Envio, LogAcesso } from '@/data/types';
 
 interface DataState {
   empresas: Empresa[];
-  cnds: CNDItem[];
   documentos: Documento[];
   envios: Envio[];
   alertas: Alerta[];
   logs: LogAcesso[];
   auditTrail: AuditEntry[];
 }
-
-// ── Mappers: DB row → frontend type ──
 
 function mapEmpresa(row: any): Empresa {
   return {
@@ -42,29 +38,12 @@ function mapEmpresa(row: any): Empresa {
   };
 }
 
-function mapCND(row: any): CNDItem {
-  return {
-    id: row.id,
-    empresaId: row.empresa_id,
-    tipo: row.tipo,
-    status: row.status,
-    dataEmissao: row.data_emissao,
-    dataVencimento: row.data_vencimento,
-    origem: row.origem,
-    arquivoId: row.arquivo_id,
-    observacao: row.observacao,
-    responsavel: row.responsavel,
-    historico: [],
-  };
-}
-
 function mapDocumento(row: any): Documento {
   return {
     id: row.id,
     empresaId: row.empresa_id,
-    cndItemId: row.cnd_item_id,
     nome: row.nome,
-    tipo: row.tipo,
+    categoria: row.categoria ?? row.tipo ?? 'outro',
     dataUpload: row.data_upload,
     responsavel: row.responsavel,
     validade: row.validade,
@@ -94,8 +73,7 @@ function mapAlerta(row: any): Alerta {
   return {
     id: row.id,
     empresaId: row.empresa_id,
-    cndItemId: row.cnd_item_id,
-    tipo: row.tipo,
+    tipo: row.tipo ?? 'operacional',
     prioridade: row.prioridade,
     titulo: row.titulo,
     descricao: row.descricao,
@@ -134,18 +112,10 @@ function mapAudit(row: any): AuditEntry {
   };
 }
 
-// ── Fetch functions ──
-
 async function fetchEmpresas() {
   const { data, error } = await supabase.from('empresas').select('*').order('created_at', { ascending: false });
   if (error) throw error;
   return (data || []).map(mapEmpresa);
-}
-
-async function fetchCNDs() {
-  const { data, error } = await supabase.from('cnd_items').select('*').order('created_at', { ascending: false });
-  if (error) throw error;
-  return recalcularTodosStatus((data || []).map(mapCND));
 }
 
 async function fetchDocumentos() {
@@ -178,8 +148,6 @@ async function fetchAuditTrail() {
   return (data || []).map(mapAudit);
 }
 
-// ── Context ──
-
 interface DataContextValue {
   state: DataState;
   isLoading: boolean;
@@ -194,7 +162,6 @@ interface DataContextValue {
   resolveAllAlertas: () => void;
   markAllAlertasLidos: () => void;
   cnpjExists: (cnpj: string, excludeId?: string) => boolean;
-  generateChecklistForRegime: (empresaId: string, regime: RegimeTributario, responsavel: string) => void;
   enableLogs: () => void;
   enableAuditTrail: () => void;
 }
@@ -210,26 +177,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [logsEnabled, setLogsEnabled] = React.useState(false);
   const [auditEnabled, setAuditEnabled] = React.useState(false);
 
-  const { data: empresas = [], isLoading: loadingE } = useQuery({ queryKey: ['empresas'], queryFn: fetchEmpresas });
-  const { data: cnds = [], isLoading: loadingC } = useQuery({ queryKey: ['cnds'], queryFn: fetchCNDs });
-  const { data: documentos = [], isLoading: loadingD } = useQuery({ queryKey: ['documentos'], queryFn: fetchDocumentos });
-  const { data: envios = [], isLoading: loadingEn } = useQuery({ queryKey: ['envios'], queryFn: fetchEnvios });
-  const { data: alertas = [], isLoading: loadingA } = useQuery({ queryKey: ['alertas'], queryFn: fetchAlertas });
-  const { data: logs = [], isLoading: loadingL } = useQuery({ queryKey: ['logs'], queryFn: fetchLogs, enabled: logsEnabled });
+  const { data: empresas = [], isLoading: loadingEmpresas } = useQuery({ queryKey: ['empresas'], queryFn: fetchEmpresas });
+  const { data: documentos = [], isLoading: loadingDocumentos } = useQuery({ queryKey: ['documentos'], queryFn: fetchDocumentos });
+  const { data: envios = [], isLoading: loadingEnvios } = useQuery({ queryKey: ['envios'], queryFn: fetchEnvios });
+  const { data: alertas = [], isLoading: loadingAlertas } = useQuery({ queryKey: ['alertas'], queryFn: fetchAlertas });
+  const { data: logs = [], isLoading: loadingLogs } = useQuery({ queryKey: ['logs'], queryFn: fetchLogs, enabled: logsEnabled });
   const { data: auditTrail = [] } = useQuery({ queryKey: ['auditTrail'], queryFn: fetchAuditTrail, enabled: auditEnabled });
 
-  const isLoading = loadingE || loadingC || loadingD || loadingEn || loadingA || (logsEnabled && loadingL);
+  const isLoading = loadingEmpresas || loadingDocumentos || loadingEnvios || loadingAlertas || (logsEnabled && loadingLogs);
 
   const state = useMemo<DataState>(() => ({
-    empresas, cnds, documentos, envios, alertas, logs, auditTrail,
-  }), [empresas, cnds, documentos, envios, alertas, logs, auditTrail]);
+    empresas,
+    documentos,
+    envios,
+    alertas,
+    logs,
+    auditTrail,
+  }), [empresas, documentos, envios, alertas, logs, auditTrail]);
 
   const cnpjExists = useCallback((cnpj: string, excludeId?: string) => {
     const normalized = cnpj.replace(/\D/g, '');
-    return empresas.some(e => e.cnpj.replace(/\D/g, '') === normalized && e.id !== excludeId);
+    return empresas.some((empresa) => empresa.cnpj.replace(/\D/g, '') === normalized && empresa.id !== excludeId);
   }, [empresas]);
-
-  // ── Mutations ──
 
   const addEmpresaMutation = useMutation({
     mutationFn: async (empresa: Empresa) => {
@@ -295,9 +264,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     mutationFn: async (doc: Documento) => {
       const { error } = await supabase.from('documentos').insert({
         empresa_id: doc.empresaId,
-        cnd_item_id: doc.cndItemId,
         nome: doc.nome,
-        tipo: doc.tipo,
+        categoria: doc.categoria,
         responsavel: doc.responsavel,
         validade: doc.validade,
         observacao: doc.observacao,
@@ -329,9 +297,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['envios'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['envios'] }),
     onError: (e) => toast.error('Erro ao registrar envio', { description: errMsg(e) }),
   });
 
@@ -392,40 +358,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     onError: (e) => toast.error('Erro ao marcar alertas', { description: errMsg(e) }),
   });
 
-  const generateChecklistMutation = useMutation({
-    mutationFn: async (params: { empresaId: string; regime: RegimeTributario; responsavel: string }) => {
-      const baseTypes: Array<{ tipo: CNDItem['tipo'] }> = [
-        { tipo: 'receita_federal' },
-        { tipo: 'fgts' },
-        { tipo: 'trabalhista' },
-      ];
-      if (params.regime !== 'mei') {
-        baseTypes.push({ tipo: 'sefaz' });
-        baseTypes.push({ tipo: 'municipal' });
-      }
-      const inserts = baseTypes.map(bt => ({
-        empresa_id: params.empresaId,
-        tipo: bt.tipo,
-        status: 'pendente' as const,
-        responsavel: params.responsavel,
-      }));
-      const { error } = await supabase.from('cnd_items').insert(inserts);
-      if (error) throw error;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cnds'] }),
-    onError: (e) => toast.error('Erro ao gerar checklist', { description: errMsg(e) }),
-  });
-
-  // ── Wrappers ──
-
   const addEmpresa = useCallback((empresa: Empresa): boolean => {
     if (cnpjExists(empresa.cnpj)) {
-      toast.error('CNPJ já cadastrado');
+      toast.error('CNPJ ja cadastrado');
       return false;
     }
     addEmpresaMutation.mutate(empresa);
     return true;
-  }, [cnpjExists, addEmpresaMutation]);
+  }, [addEmpresaMutation, cnpjExists]);
 
   const updateEmpresa = useCallback((empresa: Empresa) => updateEmpresaMutation.mutate(empresa), [updateEmpresaMutation]);
   const addDocumento = useCallback((doc: Documento) => addDocumentoMutation.mutate(doc), [addDocumentoMutation]);
@@ -435,23 +375,43 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const markAlertaLido = useCallback((id: string) => markAlertaLidoMutation.mutate(id), [markAlertaLidoMutation]);
   const resolveAllAlertas = useCallback(() => resolveAllAlertasMutation.mutate(), [resolveAllAlertasMutation]);
   const markAllAlertasLidos = useCallback(() => markAllAlertasLidosMutation.mutate(), [markAllAlertasLidosMutation]);
-  const generateChecklistForRegime = useCallback(
-    (empresaId: string, regime: RegimeTributario, responsavel: string) =>
-      generateChecklistMutation.mutate({ empresaId, regime, responsavel }),
-    [generateChecklistMutation]
-  );
-
   const dispatch = useCallback(() => {}, []);
   const enableLogs = useCallback(() => setLogsEnabled(true), []);
   const enableAuditTrail = useCallback(() => setAuditEnabled(true), []);
 
   const value = useMemo(() => ({
-    state, isLoading, dispatch, addEmpresa, updateEmpresa, addDocumento, addEnvio, addLog,
-    resolveAlerta, markAlertaLido, resolveAllAlertas, markAllAlertasLidos, cnpjExists, generateChecklistForRegime,
+    state,
+    isLoading,
+    dispatch,
+    addEmpresa,
+    updateEmpresa,
+    addDocumento,
+    addEnvio,
+    addLog,
+    resolveAlerta,
+    markAlertaLido,
+    resolveAllAlertas,
+    markAllAlertasLidos,
+    cnpjExists,
     enableLogs,
     enableAuditTrail,
-  }), [state, isLoading, dispatch, addEmpresa, updateEmpresa, addDocumento, addEnvio, addLog,
-    resolveAlerta, markAlertaLido, resolveAllAlertas, markAllAlertasLidos, cnpjExists, generateChecklistForRegime, enableLogs, enableAuditTrail]);
+  }), [
+    state,
+    isLoading,
+    dispatch,
+    addEmpresa,
+    updateEmpresa,
+    addDocumento,
+    addEnvio,
+    addLog,
+    resolveAlerta,
+    markAlertaLido,
+    resolveAllAlertas,
+    markAllAlertasLidos,
+    cnpjExists,
+    enableLogs,
+    enableAuditTrail,
+  ]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

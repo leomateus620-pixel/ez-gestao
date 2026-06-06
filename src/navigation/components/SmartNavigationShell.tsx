@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useDataStore } from '@/data/DataProvider';
-import { useAutomation } from '@/data/AutomationProvider';
 import { useGuides } from '@/features/guias/GuideProvider';
 import { NavigationStateProvider, useNavigationUiState } from '@/navigation/state/NavigationStateProvider';
 import { SmartSidebar } from '@/navigation/components/SmartSidebar';
@@ -9,7 +8,6 @@ import { SmartTopbar } from '@/navigation/components/SmartTopbar';
 
 function ShellContent({ children }: { children: React.ReactNode }) {
   const { state } = useDataStore();
-  const { pendingExceptions } = useAutomation();
   const { metrics } = useGuides();
   const containerRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
@@ -23,9 +21,8 @@ function ShellContent({ children }: { children: React.ReactNode }) {
       guidesWaiting: metrics.waiting,
       guideExceptions: metrics.reviewing,
       alerts: state.alertas.filter((a) => !a.lido && !a.resolvido).length,
-      legacyExceptions: pendingExceptions,
     }),
-    [metrics.waiting, metrics.reviewing, pendingExceptions, state.alertas],
+    [metrics.waiting, metrics.reviewing, state.alertas],
   );
 
   useEffect(() => {

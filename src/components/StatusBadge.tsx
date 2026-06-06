@@ -4,26 +4,26 @@ import { getStatusLabel } from '@/lib/formatters';
 
 interface StatusBadgeProps {
   status: string;
-  variant?: 'cnd' | 'empresa' | 'prioridade';
+  variant?: 'status' | 'empresa' | 'prioridade';
   className?: string;
   dot?: boolean;
 }
 
-export function StatusBadge({ status, variant = 'cnd', className, dot = true }: StatusBadgeProps) {
+export function StatusBadge({ status, variant = 'status', className, dot = true }: StatusBadgeProps) {
   const colorFn = variant === 'empresa' ? getEmpresaStatusColor :
                   variant === 'prioridade' ? getAlertaPrioridadeColor :
                   getStatusColor;
 
-  const isPulsing = status === 'vencida' || status === 'critica' || status === 'erro';
+  const isPulsing = status === 'critica' || status === 'erro' || status === 'falhou';
 
   return (
     <span className={cn('status-badge border', colorFn(status), className)}>
       {dot && (
         <span className={cn(
           'h-1.5 w-1.5 rounded-full shrink-0',
-          status === 'valida' || status === 'ativa' ? 'bg-success' :
-          status === 'vencendo' || status === 'pausada' || status === 'alta' ? 'bg-warning' :
-          status === 'vencida' || status === 'erro' || status === 'critica' ? 'bg-destructive' :
+          status === 'entregue' || status === 'lido' || status === 'ativa' || status === 'enviada' ? 'bg-success' :
+          status === 'pausada' || status === 'alta' || status === 'revisao' ? 'bg-warning' :
+          status === 'erro' || status === 'critica' || status === 'falhou' ? 'bg-destructive' :
           'bg-muted-foreground',
           isPulsing && 'animate-pulse-soft'
         )} />

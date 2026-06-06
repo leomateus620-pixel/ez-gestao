@@ -70,26 +70,22 @@ export function getRegimeLabel(regime: string): string {
   return labels[regime] || regime;
 }
 
-export function getCNDTipoLabel(tipo: string): string {
+export function getDocumentoCategoriaLabel(categoria: string): string {
   const labels: Record<string, string> = {
-    receita_federal: 'Receita Federal',
-    fgts: 'FGTS',
-    sefaz: 'SEFAZ',
-    municipal: 'Municipal',
-    trabalhista: 'Trabalhista',
-    personalizada: 'Personalizada',
+    guia: 'Guia',
+    nota_fiscal: 'Nota fiscal',
+    fator_r: 'Fator R',
+    contrato: 'Contrato',
+    comprovante: 'Comprovante',
+    outro: 'Outro',
   };
-  return labels[tipo] || tipo;
+  return labels[categoria] || categoria;
 }
 
 export function getStatusLabel(status: string): string {
   const labels: Record<string, string> = {
-    valida: 'Válida',
-    vencendo: 'Vencendo',
-    vencida: 'Vencida',
     pendente: 'Pendente',
     erro: 'Erro',
-    nao_aplicavel: 'N/A',
     ativa: 'Ativa',
     pausada: 'Pausada',
     arquivada: 'Arquivada',

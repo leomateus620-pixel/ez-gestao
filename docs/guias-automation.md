@@ -73,4 +73,4 @@ criptografado em uma tabela sem política de leitura para clientes.
   `insufficient_pdf_signals`.
 - `guia_envios.idempotency_key` evita envio duplicado.
 - Segredos não são expostos ao frontend; logs guardam somente payload sanitizado.
-- As telas e funções CND permanecem separadas no grupo `Consulta CND (legado)`.
+- O legado de consultas fiscais foi removido; este documento cobre apenas o fluxo de guias.

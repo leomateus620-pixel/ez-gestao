@@ -4,7 +4,6 @@ export interface MenuCounters {
   guidesWaiting: number;
   guideExceptions: number;
   alerts: number;
-  legacyExceptions: number;
 }
 
 export interface NavigationContextInput {
@@ -17,7 +16,6 @@ export interface ContextualMenuResult {
   activeMenuId?: string;
   visiblePrimary: MenuItemConfig[];
   contextualChildren: MenuItemConfig[];
-  legacy: MenuItemConfig[];
   quickActions: QuickAction[];
 }
 
@@ -42,13 +40,11 @@ export function resolveContextualMenu(context: NavigationContextInput): Contextu
     : [];
 
   const quickActions = activeTop?.quickActions ?? [];
-  const legacy = menuRegistry.filter((item) => item.group === 'legacy');
 
   return {
     activeMenuId: activeTop?.id,
     visiblePrimary,
     contextualChildren,
-    legacy,
     quickActions,
   };
 }

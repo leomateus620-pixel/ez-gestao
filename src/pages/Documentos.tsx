@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useDataStore } from '@/data/DataProvider';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
-import { formatDate, getCNDTipoLabel } from '@/lib/formatters';
+import { formatDate, getDocumentoCategoriaLabel } from '@/lib/formatters';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ export default function Documentos() {
     return state.documentos.filter(d => {
       const empresa = state.empresas.find(e => e.id === d.empresaId);
       const matchBusca = !busca || d.nome.toLowerCase().includes(busca.toLowerCase()) || empresa?.nomeFantasia.toLowerCase().includes(busca.toLowerCase());
-      const matchTipo = filtroTipo === 'todos' || d.tipo === filtroTipo;
+      const matchTipo = filtroTipo === 'todos' || d.categoria === filtroTipo;
       return matchBusca && matchTipo;
     });
   }, [state.documentos, state.empresas, busca, filtroTipo]);
@@ -49,11 +49,12 @@ export default function Documentos() {
             <SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Todos os tipos</SelectItem>
-              <SelectItem value="receita_federal">Receita Federal</SelectItem>
-              <SelectItem value="fgts">FGTS</SelectItem>
-              <SelectItem value="sefaz">SEFAZ</SelectItem>
-              <SelectItem value="municipal">Municipal</SelectItem>
-              <SelectItem value="trabalhista">Trabalhista</SelectItem>
+              <SelectItem value="guia">Guia</SelectItem>
+              <SelectItem value="nota_fiscal">Nota fiscal</SelectItem>
+              <SelectItem value="fator_r">Fator R</SelectItem>
+              <SelectItem value="contrato">Contrato</SelectItem>
+              <SelectItem value="comprovante">Comprovante</SelectItem>
+              <SelectItem value="outro">Outro</SelectItem>
             </SelectContent>
           </Select>
           <div className="flex gap-1 border border-border/50 rounded-md p-0.5">
@@ -95,7 +96,7 @@ export default function Documentos() {
                     <p className="text-sm font-medium truncate">{doc.nome}</p>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-foreground/72">
                       <span>{empresa?.nomeFantasia}</span>
-                      <span>{getCNDTipoLabel(doc.tipo)}</span>
+                      <span>{getDocumentoCategoriaLabel(doc.categoria)}</span>
                       <span>v{doc.versao}</span>
                       <span>{doc.tamanho}</span>
                       <span>Upload: {formatDate(doc.dataUpload)}</span>

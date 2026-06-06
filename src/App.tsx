@@ -6,7 +6,6 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppLayout } from '@/components/AppLayout';
 import { DataProvider } from '@/data/DataProvider';
-import { AutomationProvider } from '@/data/AutomationProvider';
 import { GuideProvider } from '@/features/guias/GuideProvider';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -19,28 +18,16 @@ import Dashboard from './pages/Dashboard';
 
 const Empresas = lazyRetry(() => import('./pages/Empresas'));
 const EmpresaDetalhe = lazyRetry(() => import('./pages/EmpresaDetalhe'));
-const Agenda = lazyRetry(() => import('./pages/Agenda'));
-const Certidoes = lazyRetry(() => import('./pages/Certidoes'));
 const Documentos = lazyRetry(() => import('./pages/Documentos'));
 const Envios = lazyRetry(() => import('./pages/Envios'));
 const Alertas = lazyRetry(() => import('./pages/Alertas'));
 const Logs = lazyRetry(() => import('./pages/Logs'));
 const Configuracoes = lazyRetry(() => import('./pages/Configuracoes'));
-const Automacao = lazyRetry(() => import('./pages/Automacao'));
-const Execucoes = lazyRetry(() => import('./pages/Execucoes'));
-const ExecucaoDetalhe = lazyRetry(() => import('./pages/ExecucaoDetalhe'));
-const Integracoes = lazyRetry(() => import('./pages/Integracoes'));
 const FatorR = lazyRetry(() => import('./pages/FatorR'));
-const Excecoes = lazyRetry(() => import('./pages/Excecoes'));
 const Classifica = lazyRetry(() => import('./pages/Classifica'));
 const Guias = lazyRetry(() => import('./pages/guias/Guias'));
 const GuiaDetalhe = lazyRetry(() => import('./pages/guias/GuiaDetalhe'));
 const IntegracoesGuias = lazyRetry(() => import('./pages/guias/IntegracoesGuias'));
-const ConsultaIndex = lazyRetry(() => import('./pages/consulta/ConsultaIndex'));
-const ConsultaHistorico = lazyRetry(() => import('./pages/consulta/ConsultaHistorico'));
-const ConsultaExcecoes = lazyRetry(() => import('./pages/consulta/ConsultaExcecoes'));
-const ConsultaSaude = lazyRetry(() => import('./pages/consulta/ConsultaSaude'));
-const ConsultaRelatorio = lazyRetry(() => import('./pages/consulta/ConsultaRelatorio'));
 const NotFound = lazyRetry(() => import('./pages/NotFound'));
 const WhatsAppPage = lazyRetry(() => import('./pages/admin/WhatsApp'));
 
@@ -81,7 +68,7 @@ function LoadingFallback({ message = 'Carregando modulo...' }: { message?: strin
   }, []);
   return (
     <div className="liquid-stage flex min-h-[60vh] flex-col items-center justify-center gap-3 p-6 text-center">
-      <div className="h-10 w-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+      <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
       <p className="text-sm text-foreground/60">{message}</p>
       {stuck && (
         <div className="flex flex-col items-center gap-2">
@@ -98,10 +85,7 @@ function LoadingFallback({ message = 'Carregando modulo...' }: { message?: strin
 function ProvidersBoundary({ children }: { children: React.ReactNode }) {
   const client = useQueryClient();
   return (
-    <ErrorBoundary
-      label="providers"
-      onReset={() => client.resetQueries()}
-    >
+    <ErrorBoundary label="providers" onReset={() => client.resetQueries()}>
       {children}
     </ErrorBoundary>
   );
@@ -109,16 +93,18 @@ function ProvidersBoundary({ children }: { children: React.ReactNode }) {
 
 function AuthenticatedApp() {
   const { session, isLoading, error, retry } = useAuth();
+
   if (isLoading) {
-    return <LoadingFallback message="Verificando sessão..." />;
+    return <LoadingFallback message="Verificando sessao..." />;
   }
+
   if (error && !session) {
     return (
       <div className="liquid-stage flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10">
           <RefreshCw className="h-6 w-6 text-destructive" />
         </div>
-        <h2 className="text-base font-semibold">Não conseguimos iniciar o app</h2>
+        <h2 className="text-base font-semibold">Nao conseguimos iniciar o app</h2>
         <p className="max-w-md text-sm text-foreground/60">{error}</p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={retry}>Tentar novamente</Button>
@@ -127,6 +113,7 @@ function AuthenticatedApp() {
       </div>
     );
   }
+
   if (!session) {
     return <Routes><Route path="*" element={<Login />} /></Routes>;
   }
@@ -134,12 +121,11 @@ function AuthenticatedApp() {
   return (
     <ProvidersBoundary>
       <DataProvider>
-        <AutomationProvider>
-          <GuideProvider>
-            <RoutePreloader />
-            <AppLayout>
-              <ErrorBoundary label="route">
-                <Suspense fallback={<LoadingFallback />}>
+        <GuideProvider>
+          <RoutePreloader />
+          <AppLayout>
+            <ErrorBoundary label="route">
+              <Suspense fallback={<LoadingFallback />}>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/guias" element={<Guias view="fila" />} />
@@ -153,32 +139,17 @@ function AuthenticatedApp() {
                   <Route path="/fator-r" element={<FatorR />} />
                   <Route path="/classifica" element={<Classifica />} />
                   <Route path="/configuracoes" element={<Configuracoes />} />
-                  <Route path="/agenda" element={<Agenda />} />
-                  <Route path="/certidoes" element={<Certidoes />} />
                   <Route path="/documentos" element={<Documentos />} />
                   <Route path="/envios" element={<Envios />} />
                   <Route path="/alertas" element={<Alertas />} />
                   <Route path="/logs" element={<Logs />} />
-                  <Route path="/automacao" element={<Automacao />} />
-                  <Route path="/execucoes" element={<Execucoes />} />
-                  <Route path="/execucoes/:id" element={<ExecucaoDetalhe />} />
-                  <Route path="/execuções/:id" element={<ExecucaoDetalhe />} />
-                  <Route path="/legado/integracoes" element={<Integracoes />} />
-                  <Route path="/excecoes" element={<Excecoes />} />
-                  <Route path="/consulta" element={<ConsultaIndex />} />
-                  <Route path="/consulta/historico" element={<ConsultaHistorico />} />
-                  <Route path="/consulta/excecoes" element={<ConsultaExcecoes />} />
-                  <Route path="/consulta/saude" element={<ConsultaSaude />} />
-                  <Route path="/consulta/relatorios/:id" element={<ConsultaRelatorio />} />
-                  <Route path="/consulta/relatórios/:id" element={<ConsultaRelatorio />} />
                   <Route path="/whatsapp" element={<WhatsAppPage />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
-                </Suspense>
-              </ErrorBoundary>
-            </AppLayout>
-          </GuideProvider>
-        </AutomationProvider>
+              </Suspense>
+            </ErrorBoundary>
+          </AppLayout>
+        </GuideProvider>
       </DataProvider>
     </ProvidersBoundary>
   );

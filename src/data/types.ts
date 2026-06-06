@@ -1,14 +1,12 @@
 export type EmpresaStatus = 'ativa' | 'pausada' | 'arquivada';
 export type RegimeTributario = 'simples_nacional' | 'lucro_presumido' | 'lucro_real' | 'mei';
 
-export type CNDTipo = 'receita_federal' | 'fgts' | 'sefaz' | 'municipal' | 'trabalhista' | 'personalizada';
-export type CNDStatus = 'valida' | 'vencendo' | 'vencida' | 'pendente' | 'erro' | 'nao_aplicavel';
-
 export type CanalEnvio = 'email' | 'whatsapp';
 export type CanalPreferido = CanalEnvio | null;
 export type EnvioStatus = 'enviado' | 'entregue' | 'lido' | 'erro' | 'pendente';
 export type AlertaPrioridade = 'critica' | 'alta' | 'media' | 'baixa';
-export type AlertaTipo = 'vencimento_7d' | 'vencimento_3d' | 'vencimento_1d' | 'vencimento_hoje' | 'vencido' | 'sem_pdf' | 'checklist_incompleto';
+export type AlertaTipo = 'guia' | 'integracao' | 'comunicacao' | 'sistema' | 'operacional';
+export type DocumentoCategoria = 'guia' | 'nota_fiscal' | 'fator_r' | 'contrato' | 'comprovante' | 'outro';
 
 export interface Empresa {
   id: string;
@@ -33,34 +31,11 @@ export interface Empresa {
   atualizadoEm: string;
 }
 
-export interface CNDItem {
-  id: string;
-  empresaId: string;
-  tipo: CNDTipo;
-  status: CNDStatus;
-  dataEmissao: string | null;
-  dataVencimento: string | null;
-  origem: string;
-  arquivoId: string | null;
-  observacao: string;
-  responsavel: string;
-  historico: CNDHistorico[];
-}
-
-export interface CNDHistorico {
-  id: string;
-  data: string;
-  acao: string;
-  usuario: string;
-  detalhes: string;
-}
-
 export interface Documento {
   id: string;
   empresaId: string;
-  cndItemId: string | null;
   nome: string;
-  tipo: CNDTipo;
+  categoria: DocumentoCategoria;
   dataUpload: string;
   responsavel: string;
   validade: string | null;
@@ -86,7 +61,6 @@ export interface Envio {
 export interface Alerta {
   id: string;
   empresaId: string;
-  cndItemId: string | null;
   tipo: AlertaTipo;
   prioridade: AlertaPrioridade;
   titulo: string;
@@ -110,37 +84,15 @@ export interface LogAcesso {
   detalhes: string;
 }
 
-export interface DashboardMetrics {
-  vencidas: number;
-  vencendo: number;
-  pendentes: number;
-  validas: number;
-  erros: number;
-  totalCNDs: number;
-  enviados: number;
-  acessosPendentes: number;
-  empresasCriticas: number;
-}
-
 export interface AuditEntry {
   id: string;
   timestamp: string;
   userId: string;
   action: string;
-  entityType: 'empresa' | 'cnd' | 'documento' | 'envio' | 'alerta' | 'log';
+  entityType: 'empresa' | 'documento' | 'envio' | 'alerta' | 'log' | 'guia' | 'integracao';
   entityId: string;
   details: string;
   metadata?: Record<string, unknown>;
-}
-
-export interface EmpresaResumo {
-  total: number;
-  vencidas: number;
-  vencendo: number;
-  validas: number;
-  pendentes: number;
-  score: number;
-  pctValid: number;
 }
 
 export type GuiaStatus = 'aguardando' | 'lendo' | 'identificada' | 'enviando' | 'enviada' | 'erro' | 'revisao';
