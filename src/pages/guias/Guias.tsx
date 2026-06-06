@@ -83,7 +83,7 @@ function GuidesTable({ guides }: { guides: Guia[] }) {
 }
 
 export default function Guias({ view }: { view: GuideView }) {
-  const { guides, exceptions, isLoading, isScanning, runScan, resolveException } = useGuides();
+  const { guides, exceptions, isInitialLoading, isScanning, runScan, resolveException } = useGuides();
   const pending = useMemo(() =>
     guides.filter((guide) => guide.status !== 'enviada'), [guides]);
   const sent = useMemo(() =>
@@ -99,7 +99,7 @@ export default function Guias({ view }: { view: GuideView }) {
       : 'Tudo que exige revisão humana permanece rastreavel aqui.';
 
   return (
-    <div className="space-y-6 animate-slide-in">
+    <div className="space-y-6">
       <PageHeader title={title} subtitle={subtitle}>
         <Button onClick={runScan} disabled={isScanning} className="gap-2">
           {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
@@ -121,7 +121,7 @@ export default function Guias({ view }: { view: GuideView }) {
 
       {view !== 'excecoes' && (
         <GlassCard variant="elevated" className="overflow-hidden p-0">
-          {isLoading ? (
+          {isInitialLoading && guides.length === 0 ? (
             <div className="flex items-center justify-center gap-2 p-16 text-sm text-foreground/72">
               <Loader2 className="h-4 w-4 animate-spin" /> Carregando guias
             </div>

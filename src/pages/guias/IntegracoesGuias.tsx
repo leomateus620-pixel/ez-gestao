@@ -112,7 +112,7 @@ export default function IntegracoesGuias() {
   const providers: IntegrationProvider[] = ['google_drive', 'gmail', 'twilio_whatsapp', 'pdf_native_reader'];
 
   return (
-    <div className="space-y-6 animate-slide-in">
+    <div className="space-y-6">
       <PageHeader title="Integracoes" subtitle="Conectores e seguranca do envio automático de guias.">
         <Button variant="outline" onClick={() => toast.info('Gerenciar conexões', { description: 'As credenciais são configuradas como secrets no Supabase.' })}>Gerenciar conexões</Button>
       </PageHeader>

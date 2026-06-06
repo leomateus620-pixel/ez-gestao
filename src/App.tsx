@@ -105,6 +105,16 @@ function LoadingFallback({ message = 'Carregando modulo...' }: { message?: strin
   );
 }
 
+/**
+ * Lightweight Suspense fallback for lazy route transitions.
+ * Intentionally invisible: chunks are pre-warmed via hover/focus preload and
+ * pages render their own skeletons. Showing a big spinner here creates the
+ * "double load" perception (Suspense spinner + page skeleton in sequence).
+ */
+function RouteFallback() {
+  return <div aria-hidden className="min-h-[2px]" data-route-fallback />;
+}
+
 function ProvidersBoundary({ children }: { children: React.ReactNode }) {
   const client = useQueryClient();
   return (
@@ -148,7 +158,7 @@ function AuthenticatedApp() {
           <RoutePreloader />
           <AppLayout>
             <ErrorBoundary label="route">
-              <Suspense fallback={<LoadingFallback />}>
+              <Suspense fallback={<RouteFallback />}>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/guias" element={<Guias view="fila" />} />

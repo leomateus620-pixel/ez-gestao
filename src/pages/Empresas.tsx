@@ -132,7 +132,7 @@ export default function Empresas() {
   }, []);
 
   return (
-    <div className="space-y-6 animate-slide-in">
+    <div className="space-y-6">
       <PageHeader title="Empresas" subtitle={`${state.empresas.length} empresas cadastradas com canais, regimes e status em destaque.`}>
         <Button className="gap-2" onClick={() => setShowForm(true)}>
           <Plus className="h-4 w-4" /> Nova Empresa

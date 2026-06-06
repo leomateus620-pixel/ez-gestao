@@ -50,7 +50,7 @@ export default function Logs() {
   }, [paginatedLogs]);
 
   return (
-    <div className="space-y-6 animate-slide-in">
+    <div className="space-y-6">
       <PageHeader title="Logs de Acesso" subtitle="Rastreamento de envios, acessos e leituras" />
 
       <Tabs defaultValue="logs">

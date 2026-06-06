@@ -26,7 +26,7 @@ export default function Dashboard() {
   }, [guides]);
 
   return (
-    <div className="space-y-6 animate-slide-in">
+    <div className="space-y-6">
       <PageHeader title="Envio de Guias" subtitle="Automação Drive, Gmail e WhatsApp com rastreabilidade completa.">
         <Button onClick={runScan} disabled={isScanning} className="gap-2">
           <FileText className="h-4 w-4" /> {isScanning ? 'Processando...' : 'Processar agora'}

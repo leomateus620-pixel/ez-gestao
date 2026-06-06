@@ -103,6 +103,7 @@ interface GuideContextValue {
   events: GuiaEvento[];
   integrations: IntegracaoGuia[];
   isLoading: boolean;
+  isInitialLoading: boolean;
   isScanning: boolean;
   metrics: {
     waiting: number;
@@ -192,6 +193,11 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
       integrations,
       metrics,
       isLoading: guidesQuery.isLoading || dispatchQuery.isLoading || exceptionsQuery.isLoading || integrationsQuery.isLoading,
+      isInitialLoading:
+        (guidesQuery.isLoading && !guidesQuery.data) ||
+        (dispatchQuery.isLoading && !dispatchQuery.data) ||
+        (exceptionsQuery.isLoading && !exceptionsQuery.data) ||
+        (integrationsQuery.isLoading && !integrationsQuery.data),
       isScanning: scan.isPending,
       runScan: () => scan.mutate(),
       resolveException: (id) => resolve.mutate(id),
