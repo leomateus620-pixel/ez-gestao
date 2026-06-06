@@ -1,35 +1,5 @@
 project_id = "wsgphutkybxhajyicxif"
 
-[functions.cf-progress-callback]
-verify_jwt = false
-
-[functions.cf-final-callback]
-verify_jwt = false
-
-[functions.artifacts-sign]
-verify_jwt = false
-
-[functions.lookup-dispatcher]
-verify_jwt = true
-
-[functions.lookup-status]
-verify_jwt = true
-
-[functions.lookup-retry]
-verify_jwt = true
-
-[functions.provider-health-summary]
-verify_jwt = true
-
-[functions.dry-run-zimmermann]
-verify_jwt = true
-
-[functions.solve-captcha]
-verify_jwt = false
-
-[functions.dry-run-zimmermann-cancel]
-verify_jwt = true
-
 [functions.run-guide-scan-now]
 verify_jwt = true
 

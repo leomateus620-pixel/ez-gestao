@@ -1,14 +1,10 @@
 import { useState, useMemo, useCallback, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDataStore } from '@/data/DataProvider';
-import { GlassCard } from '@/components/GlassCard';
 import { StatusBadge } from '@/components/StatusBadge';
-import { HealthBar } from '@/components/HealthBar';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { formatCNPJ, getRegimeLabel, maskCNPJ, validateCNPJ, validateEmail, sanitizeInput } from '@/lib/formatters';
-import { calcularResumoEmpresa } from '@/lib/status-utils';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -21,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { CanalEnvio, Empresa, RegimeTributario } from '@/data/types';
 
-type SortField = 'nome' | 'vencidas' | 'status';
+type SortField = 'nome' | 'status';
 const ITEMS_PER_PAGE = 20;
 
 const emptyEmpresa = {
@@ -44,12 +40,6 @@ export default function Empresas() {
   const [form, setForm] = useState(emptyEmpresa);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  const resumos = useMemo(() => {
-    const map: Record<string, ReturnType<typeof calcularResumoEmpresa>> = {};
-    state.empresas.forEach(e => { map[e.id] = calcularResumoEmpresa(e.id, state.cnds); });
-    return map;
-  }, [state.empresas, state.cnds]);
-
   const empresasFiltradas = useMemo(() => {
     const filtered = state.empresas.filter(e => {
       const matchBusca = !busca ||
@@ -63,10 +53,10 @@ export default function Empresas() {
     });
     return filtered.sort((a, b) => {
       if (sortBy === 'nome') return a.nomeFantasia.localeCompare(b.nomeFantasia);
-      if (sortBy === 'vencidas') return (resumos[b.id]?.vencidas ?? 0) - (resumos[a.id]?.vencidas ?? 0);
+      if (sortBy === 'status') return a.status.localeCompare(b.status);
       return 0;
     });
-  }, [state.empresas, busca, filtroStatus, filtroRegime, sortBy, resumos]);
+  }, [state.empresas, busca, filtroStatus, filtroRegime, sortBy]);
 
   const paginatedEmpresas = useMemo(() => empresasFiltradas.slice(0, page * ITEMS_PER_PAGE), [empresasFiltradas, page]);
   const hasMore = paginatedEmpresas.length < empresasFiltradas.length;
@@ -195,7 +185,7 @@ export default function Empresas() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="nome">Nome A-Z</SelectItem>
-              <SelectItem value="vencidas">Mais vencidas</SelectItem>
+              <SelectItem value="status">Status</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -212,9 +202,7 @@ export default function Empresas() {
             </Button>
           </div>
         )}
-        {paginatedEmpresas.map((empresa, i) => {
-          const resumo = resumos[empresa.id];
-          return (
+        {paginatedEmpresas.map((empresa, i) => (
             <div key={empresa.id} className={cn('glass-card group cursor-pointer p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_22px_48px_-34px_hsl(var(--brand-warm-shadow)/0.7)]', i % 2 === 1 && 'bg-card/45')} onClick={() => navigate(`/empresas/${empresa.id}`)}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -239,22 +227,11 @@ export default function Empresas() {
                   </div>
                 </div>
                 <div className="flex items-center gap-4 sm:gap-5 shrink-0">
-                  {resumo && resumo.total > 0 && (
-                    <div className="flex flex-col items-end gap-1.5">
-                      <div className="flex gap-3">
-                        {resumo.vencidas > 0 && <span className="flex items-center gap-1 text-[11px] font-semibold text-destructive"><span className="h-1.5 w-1.5 rounded-full bg-destructive" />{resumo.vencidas}</span>}
-                        {resumo.vencendo > 0 && <span className="flex items-center gap-1 text-[11px] font-semibold text-warning"><span className="h-1.5 w-1.5 rounded-full bg-warning" />{resumo.vencendo}</span>}
-                        <span className="flex items-center gap-1 text-[11px] font-semibold text-success"><span className="h-1.5 w-1.5 rounded-full bg-success" />{resumo.validas}</span>
-                      </div>
-                      <HealthBar validas={resumo.validas} vencendo={resumo.vencendo} vencidas={resumo.vencidas} pendentes={resumo.pendentes} total={resumo.total} className="w-32" />
-                    </div>
-                  )}
                   <ArrowRight className="h-4 w-4 text-primary/45 transition-colors group-hover:text-primary" />
                 </div>
               </div>
             </div>
-          );
-        })}
+        ))}
         {hasMore && (
           <div className="flex justify-center pt-4">
             <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)}>

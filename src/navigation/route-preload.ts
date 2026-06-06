@@ -14,20 +14,10 @@ const routePreloaders: RoutePreloader[] = [
   { path: '/classifica', preload: () => import('@/pages/Classifica') },
   { path: '/whatsapp', preload: () => import('@/pages/admin/WhatsApp') },
   { path: '/configuracoes', preload: () => import('@/pages/Configuracoes') },
-  { path: '/automacao', preload: () => import('@/pages/Automacao') },
-  { path: '/agenda', preload: () => import('@/pages/Agenda') },
-  { path: '/certidoes', preload: () => import('@/pages/Certidoes') },
   { path: '/documentos', preload: () => import('@/pages/Documentos') },
   { path: '/envios', preload: () => import('@/pages/Envios') },
-  { path: '/execucoes', preload: () => import('@/pages/Execucoes') },
-  { path: '/legado/integracoes', preload: () => import('@/pages/Integracoes') },
-  { path: '/excecoes', preload: () => import('@/pages/Excecoes') },
   { path: '/alertas', preload: () => import('@/pages/Alertas') },
   { path: '/logs', preload: () => import('@/pages/Logs') },
-  { path: '/consulta/historico', preload: () => import('@/pages/consulta/ConsultaHistorico') },
-  { path: '/consulta/excecoes', preload: () => import('@/pages/consulta/ConsultaExcecoes') },
-  { path: '/consulta/saude', preload: () => import('@/pages/consulta/ConsultaSaude') },
-  { path: '/consulta', preload: () => import('@/pages/consulta/ConsultaIndex') },
 ].sort((a, b) => b.path.length - a.path.length);
 
 const routePromises = new Map<string, Promise<unknown>>();
@@ -58,6 +48,5 @@ export function preloadInitialAppRoutes() {
     '/fator-r',
     '/classifica',
     '/configuracoes',
-    '/agenda',
   ].forEach(preloadRoute);
 }

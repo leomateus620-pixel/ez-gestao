@@ -43,28 +43,14 @@ const rowsByTable: Record<string, unknown[]> = {
     created_at: now,
     updated_at: now,
   }],
-  cnd_items: [{
-    id: 'cnd-1',
-    empresa_id: 'empresa-1',
-    tipo: 'receita_federal',
-    status: 'valida',
-    data_emissao: '2026-01-01',
-    data_vencimento: '2026-12-31',
-    origem: 'manual',
-    arquivo_id: 'doc-1',
-    observacao: '',
-    responsavel: 'Admin',
-    created_at: now,
-  }],
   documentos: [{
     id: 'doc-1',
     empresa_id: 'empresa-1',
-    cnd_item_id: 'cnd-1',
-    nome: 'cnd-acme.pdf',
-    tipo: 'receita_federal',
+    nome: 'guia-acme.pdf',
+    categoria: 'guia',
     data_upload: '2026-06-01',
     responsavel: 'Admin',
-    validade: '2026-12-31',
+    validade: null,
     observacao: '',
     versao: 1,
     tamanho: '20 KB',
@@ -87,11 +73,10 @@ const rowsByTable: Record<string, unknown[]> = {
   alertas: [{
     id: 'alerta-1',
     empresa_id: 'empresa-1',
-    cnd_item_id: 'cnd-1',
-    tipo: 'vencimento_7d',
+    tipo: 'operacional',
     prioridade: 'alta',
-    titulo: 'CND vencendo',
-    descricao: 'Revisar certidao.',
+    titulo: 'Guia pendente',
+    descricao: 'Revisar envio de guia.',
     lido: false,
     resolvido: false,
     snoozed_ate: null,
@@ -99,23 +84,6 @@ const rowsByTable: Record<string, unknown[]> = {
   }],
   logs_acesso: [],
   audit_trail: [],
-  connectors: [{
-    id: 'conn-1',
-    nome: 'Receita Federal',
-    tipo: 'api',
-    orgao: 'Receita',
-    status: 'ativo',
-    versao: '1.0',
-    ultimo_teste: now,
-    taxa_sucesso: 99,
-    tempo_medio: 2,
-    config: {},
-    descricao: 'Conector e2e',
-  }],
-  connector_runs: [],
-  exceptions: [],
-  automation_batches: [],
-  health_logs: [],
   guias: [{
     id: 'guia-1',
     drive_file_id: 'drive-1',
@@ -231,21 +199,19 @@ test('navega pelos menus principais, submenus e refresh de rota interna', async 
   });
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Envio de Guias' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Envio de Guias/i })).toBeVisible();
 
   const menuItems = [
-    { label: 'Abrir dashboard', path: '/', heading: 'Envio de Guias' },
-    { label: 'Abrir módulo de guias', path: '/guias', heading: 'Fila de Guias' },
-    { label: 'Abrir empresas', path: '/empresas', heading: 'Empresas' },
-    { label: 'Abrir integrações', path: '/integracoes', heading: 'Integracoes' },
-    { label: 'Abrir módulo Fator R', path: '/fator-r', heading: 'Monitoramento de Fator R' },
-    { label: 'Abrir módulo Classifica', path: '/classifica', heading: 'Classifica' },
-    { label: 'Abrir envios', path: '/envios', heading: 'Envios' },
-    { label: 'Abrir certidões', path: '/certidoes', heading: 'Certidões / CNDs' },
-    { label: 'Abrir automação', path: '/automacao', heading: 'Central de Automação' },
-    { label: 'Abrir alertas', path: '/alertas', heading: 'Alertas' },
-    { label: 'Abrir módulo WhatsApp', path: '/whatsapp', heading: 'WhatsApp' },
-    { label: 'Abrir configurações', path: '/configuracoes', heading: 'Configuracoes' },
+    { label: 'Abrir dashboard', path: '/', heading: /Envio de Guias/i },
+    { label: 'Abrir modulo de guias', path: '/guias', heading: /Fila de Guias/i },
+    { label: 'Abrir empresas', path: '/empresas', heading: /Empresas/i },
+    { label: 'Abrir integracoes', path: '/integracoes', heading: /Integra/i },
+    { label: 'Abrir modulo Fator R', path: '/fator-r', heading: /Fator R/i },
+    { label: 'Abrir modulo Classifica', path: '/classifica', heading: /Classifica/i },
+    { label: 'Abrir envios', path: '/envios', heading: /Envios/i },
+    { label: 'Abrir alertas', path: '/alertas', heading: /Alertas/i },
+    { label: 'Abrir modulo WhatsApp', path: '/whatsapp', heading: /WhatsApp/i },
+    { label: 'Abrir configuracoes', path: '/configuracoes', heading: /Configura/i },
   ];
 
   for (const item of menuItems) {
@@ -257,32 +223,28 @@ test('navega pelos menus principais, submenus e refresh de rota interna', async 
     await expect(button).toHaveAttribute('aria-pressed', 'true');
   }
 
-  await page.getByLabel('Abrir módulo de guias').hover();
+  await page.getByLabel('Abrir modulo de guias').hover();
   await page.getByRole('button', { name: 'Enviadas' }).click();
   await expect(page).toHaveURL('/guias/enviadas');
-  await expect(page.getByRole('heading', { name: 'Guias Enviadas' })).toBeVisible();
-  await expect(page.getByLabel('Abrir módulo de guias')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('heading', { name: /Guias Enviadas/i })).toBeVisible();
+  await expect(page.getByLabel('Abrir modulo de guias')).toHaveAttribute('aria-pressed', 'true');
 
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Guias Enviadas' })).toBeVisible();
-  await expect(page.getByLabel('Abrir módulo de guias')).toHaveAttribute('aria-pressed', 'true');
-
-  await page.goto('/execucoes/exec-1');
-  await expect(page).toHaveURL('/execucoes/exec-1');
-  await expect(page.getByText('Execução não encontrada')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Guias Enviadas/i })).toBeVisible();
+  await expect(page.getByLabel('Abrir modulo de guias')).toHaveAttribute('aria-pressed', 'true');
 
   expect(consoleErrors).toEqual([]);
 });
 
-test('mantem navegação utilizavel em viewport mobile', async ({ page }) => {
+test('mantem navegacao utilizavel em viewport mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/certidoes');
+  await page.goto('/envios');
 
-  await expect(page.getByRole('heading', { name: 'Certidões / CNDs' })).toBeVisible();
-  await expect(page.getByLabel('Abrir certidões')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('heading', { name: /Envios/i })).toBeVisible();
+  await expect(page.getByLabel('Abrir envios')).toHaveAttribute('aria-pressed', 'true');
 
   await page.getByLabel('Busca global').click();
-  await expect(page.getByPlaceholder('Buscar em dashboard, guias, empresas e integrações...')).toBeVisible();
+  await expect(page.getByPlaceholder(/Buscar em dashboard, guias, empresas/i)).toBeVisible();
 
   const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
   expect(hasHorizontalOverflow).toBe(false);

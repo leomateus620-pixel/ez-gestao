@@ -18,12 +18,9 @@ const menuAccent: Record<string, string> = {
   'fator-r': 'from-brand-orange-deep/88 via-sidebar-primary/76 to-brand-orange-light/72',
   classifica: 'from-brand-orange-deep/84 via-sidebar-primary/70 to-brand-metal-blue/72',
   envios: 'from-brand-orange-deep/80 via-sidebar-primary/66 to-sky-500/66',
-  certidoes: 'from-brand-orange-deep/78 via-sidebar-primary/64 to-emerald-500/66',
-  automacao: 'from-brand-metal-blue/82 via-sidebar-primary/68 to-brand-orange-light/68',
   alertas: 'from-rose-500/82 via-sidebar-primary/68 to-brand-orange-light/70',
   whatsapp: 'from-brand-orange-deep/82 via-sidebar-primary/68 to-emerald-500/66',
   configuracoes: 'from-brand-warm-shadow/86 via-brand-orange-deep/72 to-brand-metal-blue/72',
-  'legacy-consulta': 'from-brand-metal-blue/82 via-sidebar-primary/62 to-brand-orange-light/66',
 };
 
 export function SmartSidebar({ counters }: { counters: MenuCounters }) {
@@ -127,24 +124,6 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                   </button>
                 );
               })}
-            </div>
-          )}
-
-          {!!model.legacy.length && (
-            <div className="mt-3 border-t border-primary/10 pt-2">
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-[hsl(var(--text-tertiary))]">Legado</p>
-              {model.legacy.map((legacy) => (
-                <button
-                  key={legacy.id}
-                  type="button"
-                  onMouseEnter={() => preloadRoute(legacy.route)}
-                  onFocus={() => preloadRoute(legacy.route)}
-                  onClick={() => navigateTo(legacy.route)}
-                  className="w-full rounded-xl px-2 py-1.5 text-left text-xs font-medium text-[hsl(var(--text-secondary))] transition hover:bg-[hsla(var(--surface-readable-muted))] hover:text-foreground"
-                >
-                  {legacy.label}
-                </button>
-              ))}
             </div>
           )}
         </DynamicIslandPanel>

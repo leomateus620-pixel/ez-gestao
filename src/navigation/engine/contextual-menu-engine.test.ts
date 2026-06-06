@@ -5,7 +5,6 @@ const counters = {
   guidesWaiting: 0,
   guideExceptions: 0,
   alerts: 0,
-  legacyExceptions: 0,
 };
 
 describe('resolveContextualMenu', () => {
@@ -22,11 +21,11 @@ describe('resolveContextualMenu', () => {
     expect(model.activeMenuId).toBe('guias');
   });
 
-  it('inclui as paginas operacionais principais no menu inteligente', () => {
-    const model = resolveContextualMenu({ pathname: '/certidoes', isMobile: false, counters });
+  it('inclui as paginas operacionais restantes no menu inteligente', () => {
+    const model = resolveContextualMenu({ pathname: '/envios', isMobile: false, counters });
 
-    expect(model.activeMenuId).toBe('certidoes');
-    expect(model.visiblePrimary.map((item) => item.id)).toEqual(expect.arrayContaining(['envios', 'certidoes', 'automacao', 'alertas']));
+    expect(model.activeMenuId).toBe('envios');
+    expect(model.visiblePrimary.map((item) => item.id)).toEqual(expect.arrayContaining(['envios', 'alertas', 'whatsapp']));
   });
 
   it('nao trata prefixos parecidos como rota ativa', () => {
