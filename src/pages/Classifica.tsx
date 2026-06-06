@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ClipboardCheck, FileText, FolderSync, Gauge, PackageCheck, RefreshCw, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 export default function Classifica() {
   const db = supabase as any;
@@ -43,9 +44,21 @@ export default function Classifica() {
 
   const syncNow = async () => {
     setLoadingSync(true);
-    await supabase.functions.invoke('classifica-drive-sync', { body: { trigger: 'manual' } });
-    await load();
-    setLoadingSync(false);
+    try {
+      const { error } = await supabase.functions.invoke('classifica-drive-sync', { body: { trigger: 'manual' } });
+      if (error) throw error;
+      await load();
+      toast.success('Sincronização concluída');
+    } catch (error) {
+      toast.error('Sincronização indisponível', {
+        description: error instanceof Error ? error.message : 'Verifique a função classifica-drive-sync.',
+      });
+    } finally {
+      setLoadingSync(false);
+    }
+  };
+  const notifyReviewAction = (action: string) => {
+    toast.info(action, { description: 'A edição assistida da fila de revisão ainda não foi publicada para este módulo.' });
   };
 
   const statCards = [
@@ -86,10 +99,10 @@ export default function Classifica() {
       <TabsContent value="visao-geral"><GlassCard className="p-4">Últimos arquivos processados: <span className="font-semibold text-foreground">{documents.slice(0, 5).map((d) => d.drive_file_name).join(', ') || 'Nenhum arquivo processado ainda.'}</span></GlassCard></TabsContent>
       <TabsContent value="notas"><GlassCard className="p-4 space-y-2">{documents.map((d) => <div key={d.id} className="flex justify-between rounded-xl border border-white/50 bg-white/45 p-3 text-sm"><span>{d.invoice_number} · {d.invoice_type} · {d.status}</span><Badge variant="outline">{d.drive_file_name}</Badge></div>)}</GlassCard></TabsContent>
       <TabsContent value="itens"><GlassCard className="p-4 space-y-2">{items.map((i) => <div key={i.id} className="flex justify-between rounded-xl border border-white/50 bg-white/45 p-3 text-sm"><span>{i.description} ({i.cfop}/{i.ncm})</span><Badge>{i.final_classification ?? i.suggested_classification}</Badge></div>)}</GlassCard></TabsContent>
-      <TabsContent value="revisao"><GlassCard className="p-4 space-y-2">{queue.map((q) => <div key={q.id} className="flex items-center justify-between rounded-xl border border-amber-200/70 bg-amber-50/45 p-3"><span className="text-sm font-medium">{q.reason}</span><div className="flex gap-2"><Button size="sm" variant="outline">Corrigir classificação</Button><Button size="sm">Criar regra</Button></div></div>)}</GlassCard></TabsContent>
+      <TabsContent value="revisao"><GlassCard className="p-4 space-y-2">{queue.map((q) => <div key={q.id} className="flex items-center justify-between rounded-xl border border-amber-200/70 bg-amber-50/45 p-3"><span className="text-sm font-medium">{q.reason}</span><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => notifyReviewAction('Corrigir classificação')}>Corrigir classificação</Button><Button size="sm" onClick={() => notifyReviewAction('Criar regra')}>Criar regra</Button></div></div>)}</GlassCard></TabsContent>
       <TabsContent value="regras"><GlassCard className="p-4 space-y-2">{rules.map((r) => <div key={r.id} className="rounded-xl border border-white/50 bg-white/45 p-3 text-sm">{r.rule_name} · prioridade {r.priority}</div>)}</GlassCard></TabsContent>
       <TabsContent value="logs"><GlassCard className="p-4 space-y-2">{logs.map((l) => <div key={l.id} className="rounded-xl border border-white/50 bg-white/45 p-3 text-sm">{new Date(l.created_at).toLocaleString('pt-BR')} · {l.level} · {l.message}</div>)}</GlassCard></TabsContent>
-      <TabsContent value="drive"><GlassCard className="p-4 space-y-2"><div className="text-sm font-medium">Pasta do Drive integrada reutilizando conexão existente.</div><div className="flex gap-2"><Badge variant="outline">Última sincronização: {logs[0]?.created_at ? new Date(logs[0].created_at).toLocaleString('pt-BR') : 'n/a'}</Badge><Button size="sm" variant="outline" onClick={syncNow}><RefreshCw className="h-3 w-3 mr-1" />Rodar sincronização agora</Button></div><div className="text-xs text-foreground/72">Último erro: {logs.find((l) => l.level === 'error')?.message ?? 'nenhum'}</div></GlassCard></TabsContent>
+      <TabsContent value="drive"><GlassCard className="p-4 space-y-2"><div className="text-sm font-medium">Pasta do Drive integrada reutilizando conexão existente.</div><div className="flex gap-2"><Badge variant="outline">Última sincronização: {logs[0]?.created_at ? new Date(logs[0].created_at).toLocaleString('pt-BR') : 'n/a'}</Badge><Button size="sm" variant="outline" onClick={syncNow} disabled={loadingSync}><RefreshCw className="h-3 w-3 mr-1" />Rodar sincronização agora</Button></div><div className="text-xs text-foreground/72">Último erro: {logs.find((l) => l.level === 'error')?.message ?? 'nenhum'}</div></GlassCard></TabsContent>
     </Tabs>
   </div>;
 }

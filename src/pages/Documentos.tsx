@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Search, FileText, Download, Eye, Upload, Grid, List } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { openDocument } from '@/lib/document-actions';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -30,11 +31,12 @@ export default function Documentos() {
 
   const paginatedDocs = useMemo(() => docsFiltrados.slice(0, page * ITEMS_PER_PAGE), [docsFiltrados, page]);
   const hasMore = paginatedDocs.length < docsFiltrados.length;
+  const handleUploadClick = () => toast.info('Upload', { description: 'Use o botão Upload na página da empresa.' });
 
   return (
     <div className="space-y-6 animate-slide-in">
       <PageHeader title="Documentos" subtitle="Biblioteca centralizada de PDFs">
-        <Button className="gap-2" onClick={() => toast.info('Upload', { description: 'Use o botão Upload na página da empresa.' })}><Upload className="h-4 w-4" />Upload</Button>
+        <Button className="gap-2" onClick={handleUploadClick}><Upload className="h-4 w-4" />Upload</Button>
       </PageHeader>
 
       <div className="filter-bar">
@@ -78,8 +80,8 @@ export default function Documentos() {
                 <p className="text-[10px] text-foreground/70">{empresa?.nomeFantasia}</p>
                 <p className="text-[10px] text-foreground/68">{doc.tamanho} • v{doc.versao}</p>
                 <div className="flex gap-1 mt-1">
-                  <Button variant="ghost" size="icon" className="h-7 w-7"><Eye className="h-3.5 w-3.5" /></Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7"><Download className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Abrir ${doc.nome}`} onClick={() => openDocument(doc)}><Eye className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Baixar ${doc.nome}`} onClick={() => openDocument(doc, 'download')}><Download className="h-3.5 w-3.5" /></Button>
                 </div>
               </div>
             );
@@ -102,8 +104,8 @@ export default function Documentos() {
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
-                  <Button variant="ghost" size="icon" className="h-8 w-8"><Eye className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8"><Download className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Abrir ${doc.nome}`} onClick={() => openDocument(doc)}><Eye className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Baixar ${doc.nome}`} onClick={() => openDocument(doc, 'download')}><Download className="h-4 w-4" /></Button>
                 </div>
               </div>
             </div>
@@ -115,7 +117,7 @@ export default function Documentos() {
           </div>
         )}
         {docsFiltrados.length === 0 && (
-          <EmptyState icon={FileText} title="Nenhum documento encontrado" description="Tente ajustar os filtros ou faça upload de novos documentos." actionLabel="Upload" onAction={() => {}} />
+          <EmptyState icon={FileText} title="Nenhum documento encontrado" description="Tente ajustar os filtros ou faça upload de novos documentos." actionLabel="Upload" onAction={handleUploadClick} />
         )}
       </div>
     </div>

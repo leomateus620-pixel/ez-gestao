@@ -10,6 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Search, ShieldCheck, Eye, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { openDocument } from '@/lib/document-actions';
+import { toast } from 'sonner';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -40,6 +42,11 @@ export default function Certidoes() {
     vencidas: state.cnds.filter(c => c.status === 'vencida').length,
     pendentes: state.cnds.filter(c => c.status === 'pendente').length,
   }), [state.cnds]);
+  const openCndPdf = (arquivoId: string | null) => openDocument(state.documentos.find((doc) => doc.id === arquivoId));
+  const openAttachFlow = (empresaId: string) => {
+    navigate(`/empresas/${empresaId}`);
+    toast.info('Anexar PDF', { description: 'Use o botão Upload PDF na página da empresa.' });
+  };
 
   return (
     <div className="space-y-6 animate-slide-in">
@@ -113,9 +120,9 @@ export default function Certidoes() {
                 </div>
                 <div className="flex gap-2 shrink-0">
                   {item.arquivoId ? (
-                    <Button variant="outline" size="sm" className="text-xs gap-1 h-8"><Eye className="h-3 w-3" />PDF</Button>
+                    <Button variant="outline" size="sm" className="text-xs gap-1 h-8" onClick={() => openCndPdf(item.arquivoId)}><Eye className="h-3 w-3" />PDF</Button>
                   ) : (
-                    <Button variant="outline" size="sm" className="text-xs gap-1 h-8"><FileText className="h-3 w-3" />Anexar</Button>
+                    <Button variant="outline" size="sm" className="text-xs gap-1 h-8" onClick={() => openAttachFlow(item.empresaId)}><FileText className="h-3 w-3" />Anexar</Button>
                   )}
                 </div>
               </div>

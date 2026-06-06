@@ -161,6 +161,7 @@ function AuthenticatedApp() {
                   <Route path="/logs" element={<Logs />} />
                   <Route path="/automacao" element={<Automacao />} />
                   <Route path="/execucoes" element={<Execucoes />} />
+                  <Route path="/execucoes/:id" element={<ExecucaoDetalhe />} />
                   <Route path="/execuções/:id" element={<ExecucaoDetalhe />} />
                   <Route path="/legado/integracoes" element={<Integracoes />} />
                   <Route path="/excecoes" element={<Excecoes />} />
@@ -168,6 +169,7 @@ function AuthenticatedApp() {
                   <Route path="/consulta/historico" element={<ConsultaHistorico />} />
                   <Route path="/consulta/excecoes" element={<ConsultaExcecoes />} />
                   <Route path="/consulta/saude" element={<ConsultaSaude />} />
+                  <Route path="/consulta/relatorios/:id" element={<ConsultaRelatorio />} />
                   <Route path="/consulta/relatórios/:id" element={<ConsultaRelatorio />} />
                   <Route path="/whatsapp" element={<WhatsAppPage />} />
                   <Route path="*" element={<NotFound />} />
