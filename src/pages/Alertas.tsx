@@ -92,7 +92,7 @@ export default function Alertas() {
   };
 
   return (
-    <div className="space-y-6 animate-slide-in">
+    <div className="space-y-6">
       <PageHeader title="Alertas" subtitle={`${ativos.length} alertas ativos`} />
 
       <Tabs defaultValue="ativos">

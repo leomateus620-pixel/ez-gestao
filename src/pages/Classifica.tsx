@@ -72,7 +72,7 @@ export default function Classifica() {
     ['Pendentes revisão', stats.revisao, 'Ajustes humanos', Gauge, 'var(--menu-amber)'],
   ] as const;
 
-  return <div className="space-y-5 animate-fade-in">
+  return <div className="space-y-5">
     <PageHeader title="Classifica" subtitle="Classificação automática de notas fiscais com leitura visual, confiança destacada e revisão guiada.">
       <Button onClick={syncNow} disabled={loadingSync} className="gap-2"><FolderSync className="h-4 w-4" />{loadingSync ? 'Sincronizando...' : 'Rodar sincronização agora'}</Button>
     </PageHeader>

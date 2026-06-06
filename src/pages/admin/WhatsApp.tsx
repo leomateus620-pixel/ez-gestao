@@ -62,7 +62,7 @@ export default function WhatsAppPage() {
   };
   if (!canAccess) return <div className="glass-card p-6">Acesso restrito.</div>;
 
-  return <div className="space-y-6 animate-fade-in">
+  return <div className="space-y-6">
     <PageHeader title="WhatsApp" subtitle="Integração externa whatsapp-webjs" />
     <div className="glass-card p-4 flex gap-2 flex-wrap">
       <Button variant="outline" size="sm" onClick={testConnection} disabled={testingConnection}>{testingConnection ? 'Testando...' : 'Testar conexão'}</Button>

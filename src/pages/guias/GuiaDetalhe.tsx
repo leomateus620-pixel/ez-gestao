@@ -26,7 +26,7 @@ export default function GuiaDetalhe() {
   }
 
   return (
-    <div className="space-y-6 animate-slide-in">
+    <div className="space-y-6">
       <Button variant="ghost" size="sm" asChild className="-ml-2 gap-1.5">
         <Link to="/guias/fila"><ArrowLeft className="h-4 w-4" /> Voltar</Link>
       </Button>

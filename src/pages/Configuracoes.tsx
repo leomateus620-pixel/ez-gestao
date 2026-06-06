@@ -28,7 +28,7 @@ const controls = [
 
 export default function Configuracoes() {
   return (
-    <div className="space-y-6 animate-slide-in">
+    <div className="space-y-6">
       <PageHeader title="Configuracoes" subtitle="Seguranca e operação do envio automático de guias." />
 
       <GlassCard variant="elevated">

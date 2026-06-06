@@ -353,7 +353,7 @@ export default function FatorR() {
   const folderId = (import.meta.env.VITE_FATOR_R_DRIVE_FOLDER_ID as string | undefined) || null;
   const folderUrl = folderId ? `https://drive.google.com/drive/folders/${folderId}` : null;
 
-  return <div className="space-y-5 animate-fade-in">
+  return <div className="space-y-5">
     <PageHeader title="Monitoramento de Fator R" subtitle="Acompanhamento dos PGDAS no Drive com leitura clara, cores por criticidade e alertas preventivos por e-mail.">
       <div className="flex items-center gap-2 flex-wrap justify-end">
         {folderUrl && (

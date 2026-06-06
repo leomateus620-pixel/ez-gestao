@@ -33,7 +33,7 @@ export default function Envios() {
   const handleNovoEnvio = () => toast.info('Novo Envio', { description: 'Fluxo assistido disponível na Fase 2.' });
 
   return (
-    <div className="space-y-6 animate-slide-in">
+    <div className="space-y-6">
       <PageHeader title="Envios" subtitle="Histórico de envios por e-mail e WhatsApp">
         <Button className="gap-2" onClick={handleNovoEnvio}><Plus className="h-4 w-4" />Novo Envio</Button>
       </PageHeader>
