@@ -34,7 +34,7 @@ export default function Documentos() {
   const handleUploadClick = () => toast.info('Upload', { description: 'Use o botão Upload na página da empresa.' });
 
   return (
-    <div className="space-y-6 animate-slide-in">
+    <div className="space-y-6">
       <PageHeader title="Documentos" subtitle="Biblioteca centralizada de PDFs">
         <Button className="gap-2" onClick={handleUploadClick}><Upload className="h-4 w-4" />Upload</Button>
       </PageHeader>

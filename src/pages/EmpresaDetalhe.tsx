@@ -84,7 +84,7 @@ export default function EmpresaDetalhe() {
   }
 
   return (
-    <div className="space-y-6 animate-slide-in">
+    <div className="space-y-6">
       <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={handleUpload} />
 
       <Button variant="ghost" size="sm" onClick={() => navigate('/empresas')} className="gap-1.5 -ml-2 text-foreground/72 hover:text-foreground">
