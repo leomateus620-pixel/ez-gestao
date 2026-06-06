@@ -1,4 +1,5 @@
-import { startTransition, useCallback, useRef, useState } from 'react';
+import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
+import type { PointerEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { MenuIconRenderer } from '@/navigation/components/MenuIconRenderer';
 import { resolveContextualMenu, type MenuCounters } from '@/navigation/engine/contextual-menu-engine';
@@ -8,6 +9,8 @@ import { cn } from '@/lib/utils';
 import { BrandLogo } from '@/components/BrandLogo';
 import { useIsMobile } from '@/hooks/use-mobile';
 
+const HOVER_PRELOAD_DELAY_MS = 140;
+
 export function SmartSidebar({ counters }: { counters: MenuCounters }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -16,34 +19,69 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const model = resolveContextualMenu({ pathname: location.pathname, isMobile, counters });
   const navigatingToRef = useRef<string>();
+  const hoveredMenuIdRef = useRef<string>();
+  const preloadTimerRef = useRef<number>();
+
+  const clearScheduledPreload = useCallback(() => {
+    if (preloadTimerRef.current !== undefined) {
+      window.clearTimeout(preloadTimerRef.current);
+      preloadTimerRef.current = undefined;
+    }
+  }, []);
+
+  const expandSidebar = useCallback(() => {
+    setIsExpanded((current) => (current ? current : true));
+  }, []);
+
+  const collapseSidebar = useCallback(() => {
+    clearScheduledPreload();
+    hoveredMenuIdRef.current = undefined;
+    setIsExpanded((current) => (current ? false : current));
+    setHoveredMenuId(undefined);
+  }, [clearScheduledPreload, setHoveredMenuId]);
+
   const navigateTo = useCallback((route: string) => {
+    clearScheduledPreload();
+
     if (location.pathname === route || navigatingToRef.current === route) {
       closeAllPanels();
-      setIsExpanded(false);
+      setIsExpanded((current) => (current ? false : current));
       return;
     }
 
     navigatingToRef.current = route;
-    preloadRoute(route);
     closeAllPanels();
-    setIsExpanded(false);
+    setIsExpanded((current) => (current ? false : current));
     startTransition(() => {
       navigate(route);
-      window.setTimeout(() => {
-        if (navigatingToRef.current === route) navigatingToRef.current = undefined;
-      }, 350);
     });
-  }, [closeAllPanels, location.pathname, navigate]);
-  const previewRoute = useCallback((menuId: string, route: string) => {
-    setIsExpanded(true);
-    setHoveredMenuId(menuId);
-    preloadRoute(route);
-  }, [setHoveredMenuId]);
+  }, [clearScheduledPreload, closeAllPanels, location.pathname, navigate]);
 
-  const collapseSidebar = useCallback(() => {
-    setIsExpanded(false);
-    setHoveredMenuId(undefined);
-  }, [setHoveredMenuId]);
+  const previewRoute = useCallback((menuId: string, route: string) => {
+    expandSidebar();
+
+    if (hoveredMenuIdRef.current !== menuId) {
+      hoveredMenuIdRef.current = menuId;
+      setHoveredMenuId(menuId);
+    }
+
+    clearScheduledPreload();
+    preloadTimerRef.current = window.setTimeout(() => {
+      preloadTimerRef.current = undefined;
+      void preloadRoute(route)?.catch(() => undefined);
+    }, HOVER_PRELOAD_DELAY_MS);
+  }, [clearScheduledPreload, expandSidebar, setHoveredMenuId]);
+
+  const previewPointerRoute = useCallback((event: PointerEvent<HTMLButtonElement>, menuId: string, route: string) => {
+    if (event.pointerType === 'touch') return;
+    previewRoute(menuId, route);
+  }, [previewRoute]);
+
+  useEffect(() => {
+    navigatingToRef.current = undefined;
+  }, [location.pathname]);
+
+  useEffect(() => clearScheduledPreload, [clearScheduledPreload]);
 
   return (
     <aside
@@ -53,11 +91,9 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
           ? 'w-[264px] shadow-[inset_-1px_0_0_rgba(255,255,255,0.86),0_24px_72px_-42px_hsl(var(--brand-warm-shadow))]'
           : 'w-[92px]',
       )}
-      onMouseEnter={() => setIsExpanded(true)}
+      onMouseEnter={expandSidebar}
       onMouseLeave={collapseSidebar}
-      onPointerMove={() => setIsExpanded(true)}
-      onTouchStart={() => setIsExpanded(true)}
-      onTouchMove={() => setIsExpanded(true)}
+      onTouchStart={expandSidebar}
       data-expanded={isExpanded}
     >
       <div className={cn('mb-5 flex transition-[justify-content] duration-300', isExpanded ? 'justify-start px-1' : 'justify-center')}>
@@ -68,12 +104,12 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
         {model.visiblePrimary.map((item) => {
           const active = model.activeMenuId === item.id;
           return (
-            <div key={item.id} onMouseEnter={() => previewRoute(item.id, item.route)}>
+            <div key={item.id}>
               <button
                 type="button"
                 onClick={() => navigateTo(item.route)}
                 onFocus={() => previewRoute(item.id, item.route)}
-                onPointerEnter={() => previewRoute(item.id, item.route)}
+                onPointerEnter={(event) => previewPointerRoute(event, item.id, item.route)}
                 className={cn(
                   'group relative flex h-12 w-full items-center overflow-hidden rounded-[22px] p-1.5 text-left transition-[background-color,box-shadow,padding] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
                   isExpanded ? 'gap-3 pr-3' : 'justify-center',

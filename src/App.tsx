@@ -11,25 +11,41 @@ import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { lazyRetry } from '@/lib/lazy-retry';
 import { preloadInitialAppRoutes } from '@/navigation/route-preload';
+import {
+  loadAlertas,
+  loadClassifica,
+  loadConfiguracoes,
+  loadDocumentos,
+  loadEmpresas,
+  loadEmpresaDetalhe,
+  loadEnvios,
+  loadFatorR,
+  loadGuiaDetalhe,
+  loadGuias,
+  loadIntegracoesGuias,
+  loadLogs,
+  loadNotFound,
+  loadWhatsAppPage,
+} from '@/navigation/route-loaders';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 
-const Empresas = lazyRetry(() => import('./pages/Empresas'));
-const EmpresaDetalhe = lazyRetry(() => import('./pages/EmpresaDetalhe'));
-const Documentos = lazyRetry(() => import('./pages/Documentos'));
-const Envios = lazyRetry(() => import('./pages/Envios'));
-const Alertas = lazyRetry(() => import('./pages/Alertas'));
-const Logs = lazyRetry(() => import('./pages/Logs'));
-const Configuracoes = lazyRetry(() => import('./pages/Configuracoes'));
-const FatorR = lazyRetry(() => import('./pages/FatorR'));
-const Classifica = lazyRetry(() => import('./pages/Classifica'));
-const Guias = lazyRetry(() => import('./pages/guias/Guias'));
-const GuiaDetalhe = lazyRetry(() => import('./pages/guias/GuiaDetalhe'));
-const IntegracoesGuias = lazyRetry(() => import('./pages/guias/IntegracoesGuias'));
-const NotFound = lazyRetry(() => import('./pages/NotFound'));
-const WhatsAppPage = lazyRetry(() => import('./pages/admin/WhatsApp'));
+const Empresas = lazyRetry(loadEmpresas);
+const EmpresaDetalhe = lazyRetry(loadEmpresaDetalhe);
+const Documentos = lazyRetry(loadDocumentos);
+const Envios = lazyRetry(loadEnvios);
+const Alertas = lazyRetry(loadAlertas);
+const Logs = lazyRetry(loadLogs);
+const Configuracoes = lazyRetry(loadConfiguracoes);
+const FatorR = lazyRetry(loadFatorR);
+const Classifica = lazyRetry(loadClassifica);
+const Guias = lazyRetry(loadGuias);
+const GuiaDetalhe = lazyRetry(loadGuiaDetalhe);
+const IntegracoesGuias = lazyRetry(loadIntegracoesGuias);
+const NotFound = lazyRetry(loadNotFound);
+const WhatsAppPage = lazyRetry(loadWhatsAppPage);
 
 function RoutePreloader() {
   useEffect(() => {
@@ -37,11 +53,18 @@ function RoutePreloader() {
       requestIdleCallback?: (callback: () => void) => number;
       cancelIdleCallback?: (handle: number) => void;
     };
-    const idle = idleWindow.requestIdleCallback ?? ((callback: () => void) => window.setTimeout(callback, 800));
-    const handle = idle(preloadInitialAppRoutes);
+    let cleanupIdle: (() => void) | undefined;
+    const idle = idleWindow.requestIdleCallback ?? ((callback: () => void) => window.setTimeout(callback, 1600));
+    const timer = window.setTimeout(() => {
+      const handle = idle(preloadInitialAppRoutes);
+      cleanupIdle = () => {
+        if (idleWindow.cancelIdleCallback) idleWindow.cancelIdleCallback(handle);
+        else window.clearTimeout(handle);
+      };
+    }, 1200);
     return () => {
-      if (idleWindow.cancelIdleCallback) idleWindow.cancelIdleCallback(handle);
-      else window.clearTimeout(handle);
+      window.clearTimeout(timer);
+      cleanupIdle?.();
     };
   }, []);
   return null;

@@ -1,5 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 
+declare global {
+  interface Window {
+    __ezNavMonitor?: {
+      reset: () => void;
+      snapshot: () => { loadingMounts: number; urlChanges: string[] };
+    };
+  }
+}
+
 const projectRef = 'wsgphutkybxhajyicxif';
 const authStorageKey = `sb-${projectRef}-auth-token`;
 const now = '2026-06-05T12:00:00.000Z';
@@ -192,59 +201,169 @@ test.beforeEach(async ({ page }) => {
   await mockSupabase(page);
 });
 
-test('navega pelos menus principais, submenus e refresh de rota interna', async ({ page }) => {
+
+type MenuExpectation = {
+  label: string;
+  path: string;
+  heading: RegExp;
+};
+
+const menuItems: MenuExpectation[] = [
+  { label: 'Abrir dashboard', path: '/', heading: /Envio de Guias/i },
+  { label: 'Abrir modulo de guias', path: '/guias', heading: /Fila de Guias/i },
+  { label: 'Abrir empresas', path: '/empresas', heading: /Empresas/i },
+  { label: 'Abrir integracoes', path: '/integracoes', heading: /Integra/i },
+  { label: 'Abrir modulo Fator R', path: '/fator-r', heading: /Fator R/i },
+  { label: 'Abrir modulo Classifica', path: '/classifica', heading: /Classifica/i },
+  { label: 'Abrir envios', path: '/envios', heading: /Envios/i },
+  { label: 'Abrir alertas', path: '/alertas', heading: /Alertas/i },
+  { label: 'Abrir modulo WhatsApp', path: '/whatsapp', heading: /WhatsApp/i },
+  { label: 'Abrir configuracoes', path: '/configuracoes', heading: /Configura/i },
+];
+
+async function installNavigationMonitor(page: Page) {
+  await page.evaluate(() => {
+    const win = window as Window & {
+      __ezNavMonitor?: {
+        reset: () => void;
+        snapshot: () => { loadingMounts: number; urlChanges: string[] };
+      };
+    };
+
+    if (win.__ezNavMonitor) {
+      win.__ezNavMonitor.reset();
+      return;
+    }
+
+    const state = { loadingMounts: 0, urlChanges: [] as string[] };
+    const originalPushState = history.pushState.bind(history);
+    const originalReplaceState = history.replaceState.bind(history);
+    const recordUrlChange = () => state.urlChanges.push(location.pathname);
+    const isRouteFallback = (node: Node) => node.textContent?.includes('Carregando modulo...') ?? false;
+
+    history.pushState = (...args) => {
+      const result = originalPushState(...args);
+      recordUrlChange();
+      return result;
+    };
+    history.replaceState = (...args) => {
+      const result = originalReplaceState(...args);
+      recordUrlChange();
+      return result;
+    };
+
+    new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of Array.from(mutation.addedNodes)) {
+          if (isRouteFallback(node)) state.loadingMounts += 1;
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+
+    win.__ezNavMonitor = {
+      reset: () => {
+        state.loadingMounts = 0;
+        state.urlChanges = [];
+      },
+      snapshot: () => ({ loadingMounts: state.loadingMounts, urlChanges: [...state.urlChanges] }),
+    };
+  });
+}
+
+async function resetNavigationMonitor(page: Page) {
+  await page.evaluate(() => window.__ezNavMonitor?.reset());
+}
+
+async function navigationSnapshot(page: Page) {
+  return page.evaluate(() => window.__ezNavMonitor?.snapshot() ?? { loadingMounts: 0, urlChanges: [] });
+}
+
+async function expectSingleNavigationClick(page: Page, item: MenuExpectation) {
+  const button = page.getByLabel(item.label);
+  await expect(button).toHaveCount(1);
+  await resetNavigationMonitor(page);
+  await button.click();
+  await expect(page).toHaveURL(item.path);
+  await expect(page.getByRole('heading', { name: item.heading })).toBeVisible();
+  await expect(page.getByText('Carregando modulo...')).toHaveCount(0);
+  await expect(button).toHaveAttribute('aria-pressed', 'true');
+
+  const snapshot = await navigationSnapshot(page);
+  expect(snapshot.loadingMounts, `${item.label} should not mount loading fallback twice`).toBeLessThanOrEqual(1);
+  expect(snapshot.urlChanges.filter((path) => path === item.path), `${item.label} should push target URL once`).toHaveLength(item.path === '/' ? 0 : 1);
+}
+
+test('navega pelos menus principais sem depender de topbar ou submenus removidos', async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
 
   await page.goto('/');
+  await installNavigationMonitor(page);
   await expect(page.getByRole('heading', { name: /Envio de Guias/i })).toBeVisible();
 
-  const menuItems = [
-    { label: 'Abrir dashboard', path: '/', heading: /Envio de Guias/i },
-    { label: 'Abrir modulo de guias', path: '/guias', heading: /Fila de Guias/i },
-    { label: 'Abrir empresas', path: '/empresas', heading: /Empresas/i },
-    { label: 'Abrir integracoes', path: '/integracoes', heading: /Integra/i },
-    { label: 'Abrir modulo Fator R', path: '/fator-r', heading: /Fator R/i },
-    { label: 'Abrir modulo Classifica', path: '/classifica', heading: /Classifica/i },
-    { label: 'Abrir envios', path: '/envios', heading: /Envios/i },
-    { label: 'Abrir alertas', path: '/alertas', heading: /Alertas/i },
-    { label: 'Abrir modulo WhatsApp', path: '/whatsapp', heading: /WhatsApp/i },
-    { label: 'Abrir configuracoes', path: '/configuracoes', heading: /Configura/i },
-  ];
-
   for (const item of menuItems) {
-    const button = page.getByLabel(item.label);
-    await expect(button).toHaveCount(1);
-    await button.click();
-    await expect(page).toHaveURL(item.path);
-    await expect(page.getByRole('heading', { name: item.heading })).toBeVisible();
-    await expect(button).toHaveAttribute('aria-pressed', 'true');
+    await expectSingleNavigationClick(page, item);
   }
 
-  await page.getByLabel('Abrir modulo de guias').hover();
-  await page.getByRole('button', { name: 'Enviadas' }).click();
-  await expect(page).toHaveURL('/guias/enviadas');
+  await page.goto('/guias/enviadas');
   await expect(page.getByRole('heading', { name: /Guias Enviadas/i })).toBeVisible();
   await expect(page.getByLabel('Abrir modulo de guias')).toHaveAttribute('aria-pressed', 'true');
 
   await page.reload();
+  await installNavigationMonitor(page);
   await expect(page.getByRole('heading', { name: /Guias Enviadas/i })).toBeVisible();
   await expect(page.getByLabel('Abrir modulo de guias')).toHaveAttribute('aria-pressed', 'true');
 
   expect(consoleErrors).toEqual([]);
 });
 
-test('mantem navegacao utilizavel em viewport mobile', async ({ page }) => {
+test('nao duplica fallback nem historico em hover, cliques rapidos e clique repetido', async ({ page }) => {
+  await page.goto('/');
+  await installNavigationMonitor(page);
+  await expect(page.getByRole('heading', { name: /Envio de Guias/i })).toBeVisible();
+
+  const guiasButton = page.getByLabel('Abrir modulo de guias');
+  await guiasButton.hover();
+  await page.waitForTimeout(180);
+  await expectSingleNavigationClick(page, { label: 'Abrir modulo de guias', path: '/guias', heading: /Fila de Guias/i });
+
+  await resetNavigationMonitor(page);
+  await page.getByLabel('Abrir empresas').click();
+  await page.getByLabel('Abrir integracoes').click();
+  await expect(page).toHaveURL('/integracoes');
+  await expect(page.getByRole('heading', { name: /Integra/i })).toBeVisible();
+  await expect(page.getByText('Carregando modulo...')).toHaveCount(0);
+  const rapidSnapshot = await navigationSnapshot(page);
+  expect(rapidSnapshot.loadingMounts, 'rapid clicks should not show duplicate fallback for a single route').toBeLessThanOrEqual(2);
+  expect(rapidSnapshot.urlChanges.filter((path) => path === '/integracoes')).toHaveLength(1);
+
+  await resetNavigationMonitor(page);
+  await page.getByLabel('Abrir integracoes').click();
+  await expect(page).toHaveURL('/integracoes');
+  const repeatedSnapshot = await navigationSnapshot(page);
+  expect(repeatedSnapshot.loadingMounts, 'repeated click on active menu should not remount fallback').toBe(0);
+  expect(repeatedSnapshot.urlChanges, 'repeated click on active menu should not push history').toHaveLength(0);
+});
+
+test('mantem navegacao utilizavel em viewport mobile sem preload agressivo por touchmove', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/envios');
+  await installNavigationMonitor(page);
 
   await expect(page.getByRole('heading', { name: /Envios/i })).toBeVisible();
   await expect(page.getByLabel('Abrir envios')).toHaveAttribute('aria-pressed', 'true');
 
-  await page.getByLabel('Busca global').click();
-  await expect(page.getByPlaceholder(/Buscar em dashboard, guias, empresas/i)).toBeVisible();
+  await resetNavigationMonitor(page);
+  const button = page.getByLabel('Abrir alertas');
+  await button.dispatchEvent('touchmove');
+  await button.tap();
+  await expect(page).toHaveURL('/alertas');
+  await expect(page.getByRole('heading', { name: /Alertas/i })).toBeVisible();
+  const snapshot = await navigationSnapshot(page);
+  expect(snapshot.loadingMounts, 'mobile touch navigation should not duplicate route fallback').toBeLessThanOrEqual(1);
+  expect(snapshot.urlChanges.filter((path) => path === '/alertas')).toHaveLength(1);
 
   const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
   expect(hasHorizontalOverflow).toBe(false);
