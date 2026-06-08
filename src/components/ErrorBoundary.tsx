@@ -55,7 +55,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       if (this.props.fallback) return this.props.fallback;
       const wrapperClass = this.props.fullScreen
-        ? 'liquid-stage flex min-h-screen flex-col items-center justify-center p-6 animate-fade-in'
+        ? 'liquid-stage flex min-h-[100dvh] flex-col items-center justify-center p-6 animate-fade-in'
         : 'flex flex-col items-center justify-center py-20 animate-fade-in';
       return (
         <div className={wrapperClass}>

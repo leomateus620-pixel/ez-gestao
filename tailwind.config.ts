@@ -29,6 +29,16 @@ export default {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        text: {
+          primary: "hsl(var(--text-primary))",
+          secondary: "hsl(var(--text-secondary))",
+          tertiary: "hsl(var(--text-tertiary))",
+        },
+        surface: {
+          panel: "hsla(var(--surface-panel))",
+          readable: "hsla(var(--surface-readable))",
+          muted: "hsla(var(--surface-readable-muted))",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -79,6 +89,8 @@ export default {
           "premium-dark": "hsl(var(--brand-premium-dark))",
           "warm-surface": "hsl(var(--brand-warm-surface))",
           "warm-canvas": "hsl(var(--brand-warm-canvas))",
+          "orange-soft": "hsl(var(--brand-orange-soft))",
+          "orange-muted": "hsl(var(--brand-orange-muted))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",

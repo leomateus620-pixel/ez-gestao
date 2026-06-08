@@ -115,7 +115,7 @@ export default function Guias({ view }: { view: GuideView }) {
           <Link to="/guias/enviadas">Enviadas ({sent.length})</Link>
         </Button>
         <Button asChild size="sm" variant={view === 'excecoes' ? 'default' : 'outline'}>
-          <Link to="/guias/excecoes">Excecoes ({openExceptions.length})</Link>
+          <Link to="/guias/excecoes">Exceções ({openExceptions.length})</Link>
         </Button>
       </div>
 

@@ -48,12 +48,12 @@ function ShellContent({ children }: { children: React.ReactNode }) {
   }, [closeAllPanels]);
 
   return (
-    <div ref={containerRef} className="flex h-screen w-full overflow-hidden">
+    <div ref={containerRef} className="flex h-[100dvh] w-full overflow-hidden">
       <SmartSidebar counters={counters} />
       <div className="flex min-w-0 flex-1 flex-col">
         <main
           ref={mainRef}
-          className="liquid-stage min-h-0 flex-1 overflow-auto p-4 md:p-6 lg:p-8"
+          className="liquid-stage min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6 lg:p-8"
         >
           {children}
         </main>
