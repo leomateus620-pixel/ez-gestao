@@ -83,7 +83,7 @@ const queryClient = new QueryClient({
   },
 });
 
-function LoadingFallback({ message = 'Carregando modulo...' }: { message?: string }) {
+function LoadingFallback({ message = 'Carregando módulo...' }: { message?: string }) {
   const [stuck, setStuck] = useState(false);
   useEffect(() => {
     const t = window.setTimeout(() => setStuck(true), 8000);
@@ -91,11 +91,13 @@ function LoadingFallback({ message = 'Carregando modulo...' }: { message?: strin
   }, []);
   return (
     <div className="liquid-stage flex min-h-[60vh] flex-col items-center justify-center gap-3 p-6 text-center">
-      <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
-      <p className="text-sm text-foreground/60">{message}</p>
+      <div className="glass-card flex h-16 w-16 items-center justify-center rounded-3xl p-0">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary/25 border-t-primary" />
+      </div>
+      <p className="text-sm font-medium text-[hsl(var(--text-secondary))]">{message}</p>
       {stuck && (
         <div className="flex flex-col items-center gap-2">
-          <p className="text-xs text-foreground/50">Esta demorando mais que o normal.</p>
+          <p className="text-xs text-foreground/50">Está demorando mais que o normal.</p>
           <Button variant="outline" size="sm" className="gap-2" onClick={() => window.location.reload()}>
             <RefreshCw className="h-3.5 w-3.5" /> Recarregar
           </Button>
@@ -128,17 +130,17 @@ function AuthenticatedApp() {
   const { session, isLoading, error, retry } = useAuth();
 
   if (isLoading) {
-    return <LoadingFallback message="Verificando sessao..." />;
+    return <LoadingFallback message="Verificando sessão..." />;
   }
 
   if (error && !session) {
     return (
-      <div className="liquid-stage flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">
+      <div className="liquid-stage flex min-h-[100dvh] flex-col items-center justify-center gap-3 p-6 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive/10">
           <RefreshCw className="h-6 w-6 text-destructive" />
         </div>
-        <h2 className="text-base font-semibold">Nao conseguimos iniciar o app</h2>
-        <p className="max-w-md text-sm text-foreground/60">{error}</p>
+        <h2 className="text-base font-semibold">Não conseguimos iniciar o app</h2>
+        <p className="max-w-md text-sm text-[hsl(var(--text-secondary))]">{error}</p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={retry}>Tentar novamente</Button>
           <Button size="sm" onClick={() => window.location.reload()}>Recarregar</Button>

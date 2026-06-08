@@ -120,7 +120,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
   return (
     <aside
       className={cn(
-        'relative sticky top-0 z-50 h-screen shrink-0 overflow-hidden border-r border-sidebar-border/70 bg-[linear-gradient(180deg,hsl(var(--brand-warm-canvas)/0.88),hsl(var(--brand-warm-surface)/0.70)),radial-gradient(circle_at_48%_0%,hsl(var(--brand-orange-light)/0.12),transparent_46%),radial-gradient(circle_at_50%_100%,hsl(var(--brand-metal-blue)/0.09),transparent_50%)] shadow-[inset_-1px_0_0_rgba(255,255,255,0.78),0_20px_60px_-44px_hsl(var(--brand-warm-shadow))] backdrop-blur-2xl transition-[width,padding,box-shadow,background-color] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] will-change-[width]',
+        'relative sticky top-0 z-50 h-[100dvh] shrink-0 overflow-hidden border-r border-sidebar-border/70 bg-[linear-gradient(180deg,hsl(var(--brand-warm-canvas)/0.88),hsl(var(--brand-warm-surface)/0.70)),radial-gradient(circle_at_48%_0%,hsl(var(--brand-orange-light)/0.12),transparent_46%),radial-gradient(circle_at_50%_100%,hsl(var(--brand-metal-blue)/0.09),transparent_50%)] shadow-[inset_-1px_0_0_rgba(255,255,255,0.78),0_20px_60px_-44px_hsl(var(--brand-warm-shadow))] backdrop-blur-2xl transition-[width,padding,box-shadow,background-color] [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] will-change-[width]',
         isExpanded
           ? 'w-[280px] px-4 py-5 duration-300 shadow-[inset_-1px_0_0_rgba(255,255,255,0.88),0_28px_82px_-42px_hsl(var(--brand-warm-shadow))]'
           : 'w-[92px] px-3 py-4 duration-500',
@@ -136,7 +136,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
         <BrandLogo className="h-10 w-10 shrink-0" />
       </div>
 
-      <nav aria-label="Navegação principal" className={cn('max-h-[calc(100vh-6.25rem)] overflow-y-auto overflow-x-hidden transition-[padding] duration-300', isExpanded ? 'space-y-3 pr-1.5' : 'space-y-2.5 pr-1')}>
+      <nav aria-label="Navegação principal" className={cn('max-h-[calc(100dvh-6.25rem)] overflow-y-auto overflow-x-hidden transition-[padding] duration-300', isExpanded ? 'space-y-3 pr-1.5' : 'space-y-2.5 pr-1')}>
         {model.visiblePrimary.map((item) => {
           const active = model.activeMenuId === item.id;
           return (
@@ -147,7 +147,7 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                 onFocus={() => previewRoute(item.id, item.route)}
                 onPointerEnter={(event) => previewPointerRoute(event, item.id, item.route)}
                 className={cn(
-                  'group relative flex h-12 w-full items-center overflow-hidden rounded-[22px] p-1.5 text-left transition-[background-color,box-shadow,padding,gap,height] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+                  'group relative flex h-12 w-full items-center overflow-hidden rounded-[22px] p-1.5 text-left transition-[background-color,box-shadow,padding,gap,height] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-[0.99]',
                   isExpanded ? 'h-[52px] gap-3.5 pr-3.5' : 'justify-center',
                   active ? 'bg-[hsla(var(--sidebar-active-bg))] shadow-[inset_0_1px_0_rgba(255,255,255,0.94),0_14px_30px_-24px_hsla(var(--sidebar-active-glow))] ring-1 ring-sidebar-primary/18' : 'hover:bg-[hsla(var(--surface-readable-muted))] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_10px_24px_-24px_hsl(var(--brand-warm-shadow))]',
                 )}
@@ -163,14 +163,14 @@ export function SmartSidebar({ counters }: { counters: MenuCounters }) {
                 </span>
                 <span
                   className={cn(
-                    'relative z-10 min-w-0 flex-1 whitespace-nowrap text-sm font-extrabold tracking-tight text-[hsl(var(--text-primary))] transition-[opacity,transform,max-width] ease-out',
+                    'relative z-10 min-w-0 flex-1 whitespace-nowrap font-display text-[0.92rem] font-bold tracking-[-0.02em] text-[hsl(var(--text-primary))] transition-[opacity,transform,max-width] ease-out',
                     isExpanded ? 'max-w-[184px] translate-x-0 opacity-100 delay-75 duration-300' : 'max-w-0 -translate-x-1.5 opacity-0 duration-500',
                   )}
                 >
                   {item.label}
                 </span>
                 {item.badgeKey && counters[item.badgeKey] > 0 && (
-                  <span className={cn('z-20 rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm transition-[opacity,transform,top,right] duration-300', isExpanded ? 'relative translate-x-0 opacity-100' : 'absolute right-1 top-1 translate-x-0 opacity-100')}>
+                  <span className={cn('z-20 rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-white shadow-sm transition-[opacity,transform,top,right] duration-300', isExpanded ? 'relative translate-x-0 opacity-100' : 'absolute right-1 top-1 translate-x-0 opacity-100')}>
                     {counters[item.badgeKey]}
                   </span>
                 )}

@@ -20,8 +20,8 @@ export function GlassCard({ children, className, hover = false, variant = 'defau
       className={cn(
         variantClasses[variant],
         'p-5',
-        hover && 'metric-card',
-        className
+        hover && 'transition-transform hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-[0_18px_42px_-32px_hsl(var(--brand-warm-shadow)/0.36)]',
+        className,
       )}
       {...props}
     >

@@ -11,7 +11,7 @@ export function MenuIconRenderer({ Icon, active }: { Icon: LucideIcon; active?: 
           : 'border-white/60 bg-[hsla(var(--surface-readable-muted))] text-[hsl(var(--text-tertiary))] hover:border-sidebar-primary/20 hover:bg-[hsla(var(--surface-readable))] hover:text-sidebar-primary',
       )}
     >
-      <Icon className="h-[18px] w-[18px]" />
+      <Icon className="h-[18px] w-[18px] stroke-[2.1]" />
     </span>
   );
 }
