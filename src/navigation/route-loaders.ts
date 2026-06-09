@@ -26,6 +26,7 @@ export const loadAlertas = cachedImport(() => import('@/pages/Alertas'));
 export const loadLogs = cachedImport(() => import('@/pages/Logs'));
 export const loadConfiguracoes = cachedImport(() => import('@/pages/Configuracoes'));
 export const loadFatorR = cachedImport(() => import('@/pages/FatorR'));
+export const loadReformaTributaria = cachedImport(() => import('@/pages/ReformaTributaria'));
 export const loadClassifica = cachedImport(() => import('@/pages/Classifica'));
 export const loadGuias = cachedImport(() => import('@/pages/guias/Guias'));
 export const loadGuiaDetalhe = cachedImport(() => import('@/pages/guias/GuiaDetalhe'));
