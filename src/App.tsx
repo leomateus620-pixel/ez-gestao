@@ -20,6 +20,7 @@ import {
   loadEmpresaDetalhe,
   loadEnvios,
   loadFatorR,
+  loadReformaTributaria,
   loadGuiaDetalhe,
   loadGuias,
   loadIntegracoesGuias,
@@ -40,6 +41,7 @@ const Alertas = lazyRetry(loadAlertas);
 const Logs = lazyRetry(loadLogs);
 const Configuracoes = lazyRetry(loadConfiguracoes);
 const FatorR = lazyRetry(loadFatorR);
+const ReformaTributaria = lazyRetry(loadReformaTributaria);
 const Classifica = lazyRetry(loadClassifica);
 const Guias = lazyRetry(loadGuias);
 const GuiaDetalhe = lazyRetry(loadGuiaDetalhe);
@@ -172,6 +174,7 @@ function AuthenticatedApp() {
                   <Route path="/empresas/:id" element={<EmpresaDetalhe />} />
                   <Route path="/integracoes" element={<IntegracoesGuias />} />
                   <Route path="/fator-r" element={<FatorR />} />
+                  <Route path="/reforma-tributaria" element={<ReformaTributaria />} />
                   <Route path="/classifica" element={<Classifica />} />
                   <Route path="/configuracoes" element={<Configuracoes />} />
                   <Route path="/documentos" element={<Documentos />} />

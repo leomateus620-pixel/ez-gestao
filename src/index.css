@@ -386,6 +386,60 @@
   .data-row:hover {
     transform: translateX(2px);
   }
+
+  .native-select {
+    @apply flex h-10 w-full appearance-none rounded-md border border-input bg-background px-3 py-2 pr-9 text-sm ring-offset-background transition-colors;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+    background-image:
+      linear-gradient(45deg, transparent 50%, hsl(var(--muted-foreground)) 50%),
+      linear-gradient(135deg, hsl(var(--muted-foreground)) 50%, transparent 50%);
+    background-position:
+      calc(100% - 18px) calc(50% - 2px),
+      calc(100% - 13px) calc(50% - 2px);
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+  }
+}
+
+@media print {
+  body {
+    background: #fff !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .glass-card,
+  .glass-card-elevated,
+  .glass-card-subtle,
+  .page-accent-panel,
+  .liquid-stat-card {
+    background: #fff !important;
+    border: 1px solid #d8d8d8 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    break-inside: avoid;
+  }
+
+  .page-title,
+  h1,
+  h2,
+  h3,
+  p,
+  span,
+  td,
+  th,
+  label {
+    color: #111 !important;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    print-color-adjust: exact;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
