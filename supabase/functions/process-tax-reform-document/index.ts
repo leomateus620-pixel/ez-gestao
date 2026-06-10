@@ -99,6 +99,64 @@ function extract(documentType: string, text: string) {
     }
     push(findings, documentType, 'b2bPercent', values.b2bPercent, 0.75, 'Faturamento por cliente');
     push(findings, documentType, 'top10ClientsConcentration', values.top10ClientsConcentration, 0.8, 'Faturamento por cliente');
+  } else if (documentType === 'folha_pagamento') {
+    // CNPJ
+    const cnpjMatch = text.match(/\b\d{2}\.?\d{3}\.?\d{3}\/\d{4}-?\d{2}\b/);
+    if (cnpjMatch) values.cnpj = cnpjMatch[0];
+    const empMatch = text.match(/Empresa:\s*([^\n]+)/i);
+    if (empMatch) values.companyName = empMatch[1].trim();
+    const periodMatch = text.match(/Per[ií]odo:\s*\d{2}\/(\d{2})\/(\d{4})/i);
+    if (periodMatch) values.period = `${periodMatch[1]}/${periodMatch[2]}`;
+    const empCount = text.match(/Total de empregados:\s*(\d+)/i);
+    if (empCount) values.employeesCount = Number(empCount[1]);
+
+    // Localiza a linha que começa com "Total:" e junta linhas seguintes até obter 11 números.
+    const moneyRe = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}|\b0\b/g;
+    const lines = text.split(/\n/);
+    let totalIdx = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*Total:/i.test(lines[i])) { totalIdx = i; break; }
+    }
+    if (totalIdx >= 0) {
+      let buf = lines[totalIdx].replace(/^\s*Total:/i, ' ');
+      let nums = buf.match(moneyRe) ?? [];
+      let j = totalIdx + 1;
+      while (nums.length < 11 && j < lines.length && j <= totalIdx + 6) {
+        if (/Total de empregados|P[áa]gina|JB Folha|Pacote/i.test(lines[j])) { j++; continue; }
+        buf += ' ' + lines[j];
+        nums = buf.match(moneyRe) ?? [];
+        j++;
+      }
+      const parsed = nums.map((n) => normalizeNumber(n)).filter((n): n is number => n !== undefined);
+      if (parsed.length >= 11) {
+        // Ordem do cabeçalho JB Folha "RESUMO DE CÁLCULO":
+        // Salário, S.Fam, BaseINSS, INSS, BaseIRRF, IRRF, BaseFGTS, FGTS, Prov./Vant., Descontos, Líquido
+        values.salaryTotal = parsed[0];
+        values.inssBase = parsed[2];
+        values.inssValue = parsed[3];
+        values.irrfBase = parsed[4];
+        values.irrfValue = parsed[5];
+        values.fgtsBase = parsed[6];
+        values.fgtsValue = parsed[7];
+        values.grossPayroll = parsed[8];
+        values.discounts = parsed[9];
+        values.netPayroll = parsed[10];
+      } else {
+        warnings.push(`Linha Total encontrada mas com apenas ${parsed.length} valores numéricos.`);
+      }
+    } else {
+      warnings.push('Linha "Total" não encontrada no relatório de folha.');
+    }
+
+    push(findings, documentType, 'cnpj', values.cnpj, 0.9, 'Folha');
+    push(findings, documentType, 'period', values.period, 0.9, 'Folha');
+    push(findings, documentType, 'employeesCount', values.employeesCount, 0.9, 'Folha');
+    push(findings, documentType, 'salaryTotal', values.salaryTotal, 0.9, 'Folha');
+    push(findings, documentType, 'inssValue', values.inssValue, 0.85, 'Folha');
+    push(findings, documentType, 'fgtsValue', values.fgtsValue, 0.85, 'Folha');
+    push(findings, documentType, 'irrfValue', values.irrfValue, 0.8, 'Folha');
+    push(findings, documentType, 'grossPayroll', values.grossPayroll, 0.9, 'Folha');
+    push(findings, documentType, 'netPayroll', values.netPayroll, 0.85, 'Folha');
   } else {
     values.revenue = numberAfter(text, ['receita', 'faturamento']);
     const costs = numberAfter(text, ['fornecedores', 'compras', 'custos']);
