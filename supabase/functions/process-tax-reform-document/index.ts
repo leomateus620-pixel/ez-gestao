@@ -404,14 +404,27 @@ Deno.serve(async (req) => {
     // Service role para leitura/escrita do documento e download do storage privado.
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const { data: document, error: fetchError } = await supabase.from('tax_reform_documents').select('*').eq('id', documentId).single();
-    if (fetchError) throw fetchError;
+    const { data: document, error: fetchError } = await supabase.from('tax_reform_documents').select('*').eq('id', documentId).maybeSingle();
+    if (fetchError) {
+      console.error('[process-tax-reform-document] fetch error', { documentId, message: fetchError.message });
+      throw fetchError;
+    }
+    if (!document) {
+      console.warn('[process-tax-reform-document] documento não encontrado', { documentId });
+      return new Response(
+        JSON.stringify({ error: `Documento ${documentId} não encontrado no banco. Aguarde a sincronização e tente novamente.` }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
     await supabase.from('tax_reform_documents').update({ reading_status: 'lendo', extraction_error: null }).eq('id', documentId);
 
     if (!document.storage_path) throw new Error('Documento sem storage_path.');
     const bucket = document.storage_bucket || 'tax-reform-documents';
     const { data: blob, error: downloadError } = await supabase.storage.from(bucket).download(document.storage_path);
-    if (downloadError) throw downloadError;
+    if (downloadError) {
+      console.error('[process-tax-reform-document] download falhou', { documentId, bucket, path: document.storage_path, message: downloadError.message });
+      throw new Error(`Falha ao baixar arquivo do storage: ${downloadError.message}`);
+    }
     const decoded = await decodeText(document.file_name, document.mime_type ?? '', await blob.arrayBuffer());
     if (decoded.nonProcessable) {
       const { data: updated, error } = await supabase.from('tax_reform_documents').update({
@@ -430,6 +443,13 @@ Deno.serve(async (req) => {
       Promise.resolve().then(() => extract(document.document_type, decoded.text ?? '')),
       new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Tempo limite de 50s excedido ao interpretar o documento.')), 50_000)),
     ]).catch((e) => ({ values: { warnings: [String(e?.message ?? e)], confidence: 0 }, findings: [], confidence: 0, summary: 'Tempo limite excedido na leitura.', warnings: [String(e?.message ?? e)] }));
+    console.info('[process-tax-reform-document] extração concluída', {
+      documentId,
+      type: document.document_type,
+      confidence: result.confidence,
+      findings: result.findings.length,
+      warnings: (result.values as ExtractedValues).warnings ?? [],
+    });
     if ((decoded as { warning?: string }).warning) {
       (result.values as ExtractedValues).warnings = [...((result.values as ExtractedValues).warnings ?? []), (decoded as { warning: string }).warning];
     }
@@ -449,6 +469,8 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ document: updated }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro inesperado na leitura.';
+    const stack = error instanceof Error ? error.stack : undefined;
+    console.error('[process-tax-reform-document] erro fatal', { message, stack });
     return new Response(JSON.stringify({ error: message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });

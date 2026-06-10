@@ -44,6 +44,7 @@ import {
   getTaxReformDocumentSignedUrl,
   processTaxReformDocument,
   deleteTaxReformDocument,
+  upsertTaxReformDocument,
 } from '@/features/tax-reform/persistence';
 import { computeConfidenceLevel, computeConfidenceReasons, confidenceLabels } from '@/features/tax-reform/confidence';
 import type {
@@ -635,7 +636,7 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
           });
           continue;
         }
-        validDocs.push({
+        const newDoc: TaxReformDocument = {
           id: newId(),
           companyId: company.id,
           analysisId: analysis.id,
@@ -652,7 +653,22 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
           uploadedBy: uploadResult.uploadedBy,
           uploadedAt: timestamp,
           updatedAt: timestamp,
-        });
+        };
+        // Persistir IMEDIATAMENTE no banco para evitar race com o debounce
+        // do saveTaxReformStore (sem isso, a Edge Function não encontra a linha
+        // e devolve 500 ao clicar em "Analisar documentos" logo após o upload).
+        try {
+          await upsertTaxReformDocument(newDoc);
+        } catch (persistError) {
+          const persistMessage = persistError instanceof Error ? persistError.message : 'Falha ao registrar documento no banco.';
+          console.error('[reforma-tributaria] falha ao persistir documento após upload', { fileName: file.name, persistMessage });
+          toast.error('Falha ao registrar documento', { description: `${file.name}: ${persistMessage}` });
+          newDoc.readingStatus = 'erro_leitura';
+          newDoc.uploadStatus = 'erro_upload';
+          newDoc.uploadError = persistMessage;
+          newDoc.extractionError = persistMessage;
+        }
+        validDocs.push(newDoc);
         console.info('[reforma-tributaria] documento enviado', { companyId: company.id, analysisId: analysis.id, documentType, fileName: file.name, storagePath: uploadResult.storagePath });
       }
 
@@ -1200,7 +1216,26 @@ export default function ReformaTributaria() {
     let nonProcessable = 0;
     for (const doc of processableDocuments) {
       try {
-        const updated = await processTaxReformDocument(doc.id);
+        // Garante a linha no banco antes da Edge Function tentar lê-la.
+        try {
+          await upsertTaxReformDocument(doc);
+        } catch (syncError) {
+          console.warn('[reforma-tributaria] pré-sync do documento falhou; tentando processar mesmo assim', syncError);
+        }
+        let updated: TaxReformDocument | null = null;
+        try {
+          updated = await processTaxReformDocument(doc.id);
+        } catch (firstError) {
+          const msg = firstError instanceof Error ? firstError.message : String(firstError);
+          if (/n[aã]o encontrado|not found|no rows|404/i.test(msg)) {
+            // Race: aguarda e re-tenta uma vez após reconfirmar persistência.
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+            await upsertTaxReformDocument(doc);
+            updated = await processTaxReformDocument(doc.id);
+          } else {
+            throw firstError;
+          }
+        }
         if (updated) {
           processed.push(updated);
           if (updated.readingStatus === 'nao_processavel') nonProcessable += 1;
