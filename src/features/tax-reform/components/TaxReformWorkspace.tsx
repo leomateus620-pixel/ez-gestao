@@ -11,7 +11,6 @@ import {
   FileSpreadsheet,
   FileText,
   Gauge,
-  History as HistoryIcon,
   Loader2,
   Pencil,
   Plus,
