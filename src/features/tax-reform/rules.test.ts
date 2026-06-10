@@ -173,3 +173,68 @@ describe('getCompanyAnalysisHistory', () => {
     expect(history[1].manualOpinion).toBe('Parecer 2026');
   });
 });
+
+describe('document driven Reforma Tributária analysis', () => {
+  const doc = (documentType: string, extractedValues: Record<string, unknown>, extractionConfidence = 0.8, readingStatus = 'lido') => ({
+    documentType,
+    readingStatus,
+    uploadStatus: 'enviado',
+    storagePath: `${documentType}.csv`,
+    extractionConfidence,
+    extractedValues: { ...extractedValues, confidence: extractionConfidence },
+  });
+
+  it('generates a preliminary recommendation with low confidence when questionnaire is complete and documents are absent', () => {
+    const result = calculateTaxReformScore('simples_nacional', lowB2CAnswers, [], scoreOptions);
+
+    expect(result.riskLevel).toBe('baixo_risco');
+    expect(result.recommendation).toBe('permanecer_simples');
+    expect(result.insufficientData).toBe(false);
+    expect(result.alerts.find((alert) => alert.alertType === 'missing_documents')?.message).toContain('Análise baseada apenas no questionário');
+  });
+
+  it('requires manual review when decisive questionnaire answers are missing and no documents can fill them', () => {
+    const result = calculateTaxReformScore('simples_nacional', { sales_b2b_percent: 80 }, [], scoreOptions);
+
+    expect(result.riskLevel).toBe('dados_insuficientes');
+    expect(result.recommendation).toBe('analise_manual_necessaria');
+    expect(result.missingRequiredData).toContain('sales_b2c_percent');
+  });
+
+  it('uses a DRE extraction with high input cost to increase the cost score', () => {
+    const base = calculateTaxReformScore('simples_nacional', lowB2CAnswers, [], scoreOptions);
+    const withDre = calculateTaxReformScore('simples_nacional', lowB2CAnswers, [doc('dre', { inputCostPercent: 65 })], scoreOptions);
+
+    expect(withDre.costs).toBeGreaterThan(base.costs);
+  });
+
+  it('uses a PGDAS extraction with high effective tax rate to increase the current tax score', () => {
+    const answers = { ...lowB2CAnswers, effective_tax_rate: 6 };
+    const base = calculateTaxReformScore('simples_nacional', answers, [], scoreOptions);
+    const withPgdas = calculateTaxReformScore('simples_nacional', answers, [doc('pgdas', { effectiveTaxRate: 14 })], scoreOptions);
+
+    expect(withPgdas.currentTax).toBeGreaterThan(base.currentTax);
+  });
+
+  it('uses client revenue extraction with high B2B to increase client profile score', () => {
+    const base = calculateTaxReformScore('simples_nacional', lowB2CAnswers, [], scoreOptions);
+    const withClients = calculateTaxReformScore('simples_nacional', lowB2CAnswers, [doc('faturamento_cliente', { b2bPercent: 82, b2cPercent: 18, top10ClientsConcentration: 70 })], scoreOptions);
+
+    expect(withClients.clients).toBeGreaterThan(base.clients);
+  });
+
+  it('flags divergence and can require manual review when documents contradict questionnaire', () => {
+    const result = calculateTaxReformScore('simples_nacional', lowB2CAnswers, [doc('faturamento_cliente', { b2bPercent: 85, b2cPercent: 15 })], scoreOptions);
+
+    expect(result.alerts.map((alert) => alert.alertType)).toContain('document_divergence');
+    expect(result.riskLevel).toBe('dados_insuficientes');
+    expect(result.recommendation).toBe('analise_manual_necessaria');
+  });
+
+  it('does not increase confidence or count a document with reading error as read evidence', () => {
+    const result = calculateTaxReformScore('simples_nacional', lowB2CAnswers, [doc('dre', { inputCostPercent: 70 }, 0, 'erro_leitura')], scoreOptions);
+
+    expect(result.costs).toBe(0);
+    expect(result.alerts.map((alert) => alert.alertType)).toContain('document_reading');
+  });
+});

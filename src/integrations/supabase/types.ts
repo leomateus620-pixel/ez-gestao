@@ -2365,6 +2365,8 @@ export type Database = {
           document_confidence_weight: number | null
           document_type: string
           extracted_summary: string | null
+          extracted_values: Json | null
+          extracted_findings: Json | null
           extraction_confidence: number | null
           extraction_error: string | null
           file_name: string
@@ -2387,6 +2389,8 @@ export type Database = {
           document_confidence_weight?: number | null
           document_type: string
           extracted_summary?: string | null
+          extracted_values?: Json | null
+          extracted_findings?: Json | null
           extraction_confidence?: number | null
           extraction_error?: string | null
           file_name: string
@@ -2409,6 +2413,8 @@ export type Database = {
           document_confidence_weight?: number | null
           document_type?: string
           extracted_summary?: string | null
+          extracted_values?: Json | null
+          extracted_findings?: Json | null
           extraction_confidence?: number | null
           extraction_error?: string | null
           file_name?: string

@@ -21,6 +21,7 @@ const COMBO_FORCE_ALTA = ['dre', 'pgdas', 'faturamento_cliente'];
 function uploadedPrimaryTypes(documents: DocumentLike[]): Set<string> {
   const accepted = documents.filter((doc) => {
     if (doc.uploadStatus && doc.uploadStatus !== 'enviado') return false;
+    if (doc.readingStatus !== 'lido') return false;
     if (doc.storagePath === null) return false;
     return PRIMARY_CONFIDENCE_DOCUMENTS.includes(doc.documentType as typeof PRIMARY_CONFIDENCE_DOCUMENTS[number]);
   });
@@ -39,13 +40,13 @@ export function computeConfidenceReasons(documents: DocumentLike[] = []): string
   const types = uploadedPrimaryTypes(documents);
   const reasons: string[] = [];
   if (types.size === 0) {
-    reasons.push('Nenhum documento principal enviado ao Storage.');
+    reasons.push('Nenhum documento principal lido com sucesso.');
   } else {
-    reasons.push(`${types.size} de ${PRIMARY_CONFIDENCE_DOCUMENTS.length} documentos principais enviados.`);
+    reasons.push(`${types.size} de ${PRIMARY_CONFIDENCE_DOCUMENTS.length} documentos principais lidos com sucesso.`);
   }
   const hasCombo = COMBO_FORCE_ALTA.every((type) => types.has(type));
   if (hasCombo) {
-    reasons.push('Combinação DRE + PGDAS + Faturamento por cliente garante confiança alta.');
+    reasons.push('Combinação DRE + PGDAS + Faturamento por cliente lida com sucesso garante confiança alta.');
   }
   const ignored = documents.filter((doc) => doc.uploadStatus === 'erro_upload').length;
   if (ignored > 0) {

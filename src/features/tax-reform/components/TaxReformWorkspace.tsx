@@ -42,6 +42,7 @@ import {
   saveTaxReformStore,
   uploadTaxReformDocumentFile,
   getTaxReformDocumentSignedUrl,
+  processTaxReformDocument,
 } from '@/features/tax-reform/persistence';
 import { computeConfidenceLevel, computeConfidenceReasons, confidenceLabels } from '@/features/tax-reform/confidence';
 import type {
@@ -122,6 +123,7 @@ const documentTypeLabels: Record<string, string> = {
 
 const readingStatusLabels: Record<TaxReformDocument['readingStatus'], string> = {
   aguardando_leitura: 'Aguardando leitura',
+  lendo: 'Lendo',
   lido: 'Lido',
   erro_leitura: 'Erro na leitura',
   nao_processavel: 'Não processável',
@@ -635,7 +637,7 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
           fileSize: file.size,
           mimeType: file.type || extension,
           readingStatus: 'aguardando_leitura',
-          extractedSummary: 'Arquivo registrado. A leitura automática ainda não está conectada ao pipeline definitivo.',
+          extractedSummary: 'Arquivo registrado e aguardando leitura real pelo pipeline de documentos.',
           storageBucket: uploadResult.storageBucket,
           storagePath: uploadResult.storagePath,
           uploadStatus: 'enviado',
@@ -661,7 +663,7 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
     <GlassCard className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div><h3 className="font-bold">Documentos e planilhas</h3><p className="text-sm text-foreground/65">Arquivos vinculados a {company.companyName} · ano-base {analysis.analysisYear}.</p></div>
-        <Button onClick={onAnalyze} variant="outline" className="gap-2" disabled={!documents.length}><FileSpreadsheet className="h-4 w-4" />Atualizar status de leitura</Button>
+        <Button onClick={onAnalyze} variant="outline" className="gap-2" disabled={!documents.length}><FileSpreadsheet className="h-4 w-4" />Analisar documentos</Button>
       </div>
       {missing.length > 0 && <div className="rounded-2xl border border-amber-200/70 bg-amber-50/70 p-3 text-sm text-amber-900"><b>Faltam documentos-chave:</b> {missing.map((type) => documentTypeLabels[type]).join(', ')}.</div>}
       <div className="grid gap-3 md:grid-cols-[minmax(0,260px)_1fr]">
@@ -681,7 +683,8 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
             <div>
               <p className="font-semibold">{doc.fileName}</p>
               <p className="text-xs text-foreground/60">{documentTypeLabels[doc.documentType]} · {Math.ceil(doc.fileSize / 1024)} KB · enviado em {formatDate(doc.uploadedAt)}</p>
-              {doc.extractionError && <p className="mt-1 text-xs text-amber-700">Upload/leitura pendente: {doc.extractionError}</p>}
+              {doc.extractedSummary && <p className="mt-1 text-xs text-foreground/60">{doc.extractedSummary}</p>}
+              {doc.extractionError && <p className="mt-1 text-xs text-amber-700">Upload/leitura: {doc.extractionError}</p>}
             </div>
             <Badge variant="outline">{readingStatusLabels[doc.readingStatus]}</Badge>
           </div>
@@ -689,6 +692,40 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
       </div>
     </GlassCard>
   );
+}
+
+
+function formatExtractedField(field: string, value: unknown) {
+  const labels: Record<string, string> = {
+    revenue: 'Receita',
+    projectedRevenue: 'Receita projetada',
+    grossRevenue12m: 'RBT12',
+    effectiveTaxRate: 'Alíquota efetiva',
+    taxRegimeDetected: 'Regime detectado',
+    b2bPercent: 'B2B',
+    b2cPercent: 'B2C',
+    governmentPercent: 'Governo',
+    top10ClientsConcentration: 'Concentração top 10',
+    lucroRealClientsPercent: 'Clientes Lucro Real',
+    inputCostPercent: 'Custos/insumos',
+    supplierRegimeDetected: 'Regime fornecedores',
+    payrollPercent: 'Folha/receita',
+    hasSt: 'ST',
+    hasMonophasic: 'Monofásico',
+    hasIssRetido: 'ISS retido',
+    hasExportation: 'Exportação',
+    netProfit: 'Lucro líquido',
+    grossMargin: 'Margem bruta',
+    operatingExpenses: 'Despesas operacionais',
+  };
+  const label = labels[field] ?? field;
+  if (typeof value === 'boolean') return `${label}: ${value ? 'Sim' : 'Não'}`;
+  if (typeof value === 'number') {
+    const isCurrency = ['revenue', 'projectedRevenue', 'grossRevenue12m', 'netProfit', 'operatingExpenses'].includes(field);
+    return `${label}: ${isCurrency ? formatMoney(value) : `${value}%`}`;
+  }
+  if (Array.isArray(value)) return `${label}: ${value.join(', ')}`;
+  return `${label}: ${String(value)}`;
 }
 
 function ScoreAndRecommendation({ company, analysis, documents, remotePersisted = true }: { company: TaxReformCompany; analysis: TaxReformAnalysis; documents: TaxReformDocument[]; remotePersisted?: boolean }) {
@@ -776,6 +813,27 @@ function ScoreAndRecommendation({ company, analysis, documents, remotePersisted 
             <h4 className="mb-2 text-sm font-semibold">Perguntas respondidas</h4>
             {Object.entries(analysis.answers).filter(([, value]) => value !== '' && value !== undefined && value !== null).slice(0, 8).map(([key, value]) => <p key={key} className="text-xs text-foreground/70"><b>{questionLabelByKey[key] ?? key}:</b> {formatAnswerValue(key, value)}</p>)}
           </div>
+        </div>
+        <div className="rounded-2xl border border-white/60 bg-white/45 p-3">
+          <h4 className="mb-2 text-sm font-semibold">Dados extraídos dos documentos</h4>
+          {documents.length === 0 ? (
+            <p className="text-xs text-foreground/60">Resultado preliminar baseado apenas no questionário. A leitura documental será exibida aqui após o processamento real.</p>
+          ) : (
+            <div className="grid gap-2 md:grid-cols-2">
+              {documents.map((doc) => {
+                const extractedEntries = Object.entries(doc.extractedValues ?? {}).filter(([field, value]) => !['warnings', 'confidence'].includes(field) && value !== undefined && value !== null && value !== '');
+                return (
+                  <div key={doc.id} className="rounded-2xl border border-white/70 bg-white/55 p-3 text-xs">
+                    <div className="flex items-start justify-between gap-2"><b>{documentTypeLabels[doc.documentType] ?? doc.documentType}</b><Badge variant="outline">{readingStatusLabels[doc.readingStatus]}</Badge></div>
+                    <p className="mt-1 text-foreground/60">{doc.extractedSummary || (doc.readingStatus === 'aguardando_leitura' ? 'Documento aguardando leitura real.' : 'Sem resumo extraído.')}</p>
+                    {doc.extractionConfidence !== undefined && <p className="mt-1 text-foreground/70"><b>Confiança:</b> {Math.round(doc.extractionConfidence * 100)}%</p>}
+                    {extractedEntries.length > 0 && <ul className="mt-2 list-disc space-y-0.5 pl-4 text-foreground/70">{extractedEntries.map(([field, value]) => <li key={field}>{formatExtractedField(field, value)}</li>)}</ul>}
+                    {doc.storagePath && <button type="button" onClick={() => openSignedUrl(doc)} className="mt-2 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/20">Abrir documento</button>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div className="rounded-2xl border border-white/60 bg-white/45 p-3 text-sm">
           <h4 className="mb-1 font-semibold">Decisão consolidada</h4>
@@ -1100,20 +1158,55 @@ export default function ReformaTributaria() {
     setStatusForCurrent(next);
   };
 
-  const analyzeDocuments = () => {
+  const analyzeDocuments = async () => {
     if (!selectedAnalysis) return;
+    const processableDocuments = selectedDocuments.filter((doc) => doc.uploadStatus !== 'erro_upload' && doc.storagePath && doc.readingStatus !== 'lido');
+    if (!processableDocuments.length) {
+      toast.info('Nenhum documento pendente de leitura.');
+      return;
+    }
+
     setStore((prev) => ({
       ...prev,
-      documents: prev.documents.map((doc) => doc.analysisId === selectedAnalysis.id ? {
+      documents: prev.documents.map((doc) => processableDocuments.some((pending) => pending.id === doc.id) ? {
         ...doc,
-        readingStatus: 'nao_processavel',
-        extractedSummary: 'Leitura automática não executada. Documento mantido como evidência da análise para conferência manual.',
-        extractionError: 'Pipeline de extração automática ainda não conectado para Reforma Tributária.',
+        readingStatus: 'lendo',
+        extractionError: '',
         updatedAt: nowIso(),
       } : doc),
     }));
-    console.info('[reforma-tributaria] status de leitura atualizado como placeholder controlado', { analysisId: selectedAnalysis.id, total: selectedDocuments.length });
-    toast.info('Leitura automática ainda não conectada', { description: 'Os documentos foram mantidos para conferência manual, sem simular extração real.' });
+
+    const processed: TaxReformDocument[] = [];
+    let failures = 0;
+    for (const doc of processableDocuments) {
+      try {
+        const updated = await processTaxReformDocument(doc.id);
+        if (updated) processed.push(updated);
+      } catch (error) {
+        failures += 1;
+        const message = error instanceof Error ? error.message : 'Falha ao chamar o processador real.';
+        setStore((prev) => ({
+          ...prev,
+          documents: prev.documents.map((item) => item.id === doc.id ? {
+            ...item,
+            readingStatus: 'erro_leitura',
+            extractionError: message,
+            extractedSummary: 'Erro real ao executar a leitura do documento.',
+            extractionConfidence: 0,
+            updatedAt: nowIso(),
+          } : item),
+        }));
+      }
+    }
+
+    if (processed.length) {
+      setStore((prev) => ({
+        ...prev,
+        documents: prev.documents.map((doc) => processed.find((updated) => updated.id === doc.id) ?? doc),
+      }));
+      toast.success(`${processed.length} documento(s) processado(s) com leitura real.`);
+    }
+    if (failures) toast.error(`${failures} documento(s) não puderam ser lidos.`);
   };
 
   const generateReport = () => {
