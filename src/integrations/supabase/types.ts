@@ -2160,6 +2160,295 @@ export type Database = {
           },
         ]
       }
+      tax_reform_alerts: {
+        Row: {
+          alert_type: string
+          analysis_id: string
+          created_at: string
+          id: string
+          message: string
+          severity: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          alert_type: string
+          analysis_id: string
+          created_at?: string
+          id?: string
+          message: string
+          severity?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          alert_type?: string
+          analysis_id?: string
+          created_at?: string
+          id?: string
+          message?: string
+          severity?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_reform_alerts_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "tax_reform_analyses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tax_reform_analyses: {
+        Row: {
+          analysis_year: number
+          automatic_summary: string | null
+          company_id: string
+          confidence_level: string | null
+          confidence_reason: string | null
+          created_at: string
+          final_decision: string | null
+          id: string
+          manual_opinion: string | null
+          recommendation: string | null
+          risk_level: string | null
+          score_clients: number | null
+          score_costs: number | null
+          score_current_tax: number | null
+          score_total: number | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          analysis_year: number
+          automatic_summary?: string | null
+          company_id: string
+          confidence_level?: string | null
+          confidence_reason?: string | null
+          created_at?: string
+          final_decision?: string | null
+          id?: string
+          manual_opinion?: string | null
+          recommendation?: string | null
+          risk_level?: string | null
+          score_clients?: number | null
+          score_costs?: number | null
+          score_current_tax?: number | null
+          score_total?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          analysis_year?: number
+          automatic_summary?: string | null
+          company_id?: string
+          confidence_level?: string | null
+          confidence_reason?: string | null
+          created_at?: string
+          final_decision?: string | null
+          id?: string
+          manual_opinion?: string | null
+          recommendation?: string | null
+          risk_level?: string | null
+          score_clients?: number | null
+          score_costs?: number | null
+          score_current_tax?: number | null
+          score_total?: number | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_reform_analyses_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "tax_reform_companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tax_reform_answers: {
+        Row: {
+          analysis_id: string
+          answer_type: string
+          answer_value: Json | null
+          created_at: string
+          id: string
+          question_key: string
+          question_label: string
+          updated_at: string
+        }
+        Insert: {
+          analysis_id: string
+          answer_type: string
+          answer_value?: Json | null
+          created_at?: string
+          id?: string
+          question_key: string
+          question_label: string
+          updated_at?: string
+        }
+        Update: {
+          analysis_id?: string
+          answer_type?: string
+          answer_value?: Json | null
+          created_at?: string
+          id?: string
+          question_key?: string
+          question_label?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_reform_answers_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "tax_reform_analyses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tax_reform_companies: {
+        Row: {
+          analysis_year: number | null
+          cnpj: string
+          company_name: string
+          created_at: string
+          current_tax_regime: string
+          effective_tax_rate: number | null
+          id: string
+          main_activity: string
+          notes: string | null
+          projected_revenue: number | null
+          rbt12: number | null
+          responsible_user: string
+          updated_at: string
+        }
+        Insert: {
+          analysis_year?: number | null
+          cnpj: string
+          company_name: string
+          created_at?: string
+          current_tax_regime: string
+          effective_tax_rate?: number | null
+          id?: string
+          main_activity: string
+          notes?: string | null
+          projected_revenue?: number | null
+          rbt12?: number | null
+          responsible_user: string
+          updated_at?: string
+        }
+        Update: {
+          analysis_year?: number | null
+          cnpj?: string
+          company_name?: string
+          created_at?: string
+          current_tax_regime?: string
+          effective_tax_rate?: number | null
+          id?: string
+          main_activity?: string
+          notes?: string | null
+          projected_revenue?: number | null
+          rbt12?: number | null
+          responsible_user?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      tax_reform_documents: {
+        Row: {
+          analysis_id: string
+          company_id: string
+          document_confidence_weight: number | null
+          document_type: string
+          extracted_summary: string | null
+          extraction_confidence: number | null
+          extraction_error: string | null
+          file_name: string
+          file_size: number | null
+          file_url: string | null
+          id: string
+          mime_type: string | null
+          reading_status: string
+          storage_bucket: string | null
+          storage_path: string | null
+          updated_at: string
+          upload_error: string | null
+          upload_status: string | null
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          analysis_id: string
+          company_id: string
+          document_confidence_weight?: number | null
+          document_type: string
+          extracted_summary?: string | null
+          extraction_confidence?: number | null
+          extraction_error?: string | null
+          file_name: string
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          mime_type?: string | null
+          reading_status?: string
+          storage_bucket?: string | null
+          storage_path?: string | null
+          updated_at?: string
+          upload_error?: string | null
+          upload_status?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          analysis_id?: string
+          company_id?: string
+          document_confidence_weight?: number | null
+          document_type?: string
+          extracted_summary?: string | null
+          extraction_confidence?: number | null
+          extraction_error?: string | null
+          file_name?: string
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          mime_type?: string | null
+          reading_status?: string
+          storage_bucket?: string | null
+          storage_path?: string | null
+          updated_at?: string
+          upload_error?: string | null
+          upload_status?: string | null
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_reform_documents_analysis_company_fkey"
+            columns: ["analysis_id", "company_id"]
+            isOneToOne: false
+            referencedRelation: "tax_reform_analyses"
+            referencedColumns: ["id", "company_id"]
+          },
+          {
+            foreignKeyName: "tax_reform_documents_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "tax_reform_analyses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tax_reform_documents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "tax_reform_companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
