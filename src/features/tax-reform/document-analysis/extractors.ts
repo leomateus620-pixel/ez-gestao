@@ -38,48 +38,49 @@ export function parsePgdasDocument(text: string, documentType = 'pgdas'): TaxRef
   const paMatch = text.match(/Per[ií]odo de Apura[cç][aã]o\s*\(?PA\)?:\s*(\d{2}\/\d{4})/i);
   if (paMatch) values.period = paMatch[1];
 
-  // Receita Bruta do PA — primeira linha numérica após o rótulo.
-  const rpaMatch = text.match(/Receita Bruta do PA[^\n]*\n?[^\n]*?(\d{1,3}(?:\.\d{3})*,\d{2})/i);
-  values.monthlyRevenue = normalizeNumber(rpaMatch?.[1]);
+  // Helper: encontra um rótulo no texto e devolve o primeiro número da MESMA linha
+  // (ou da próxima linha se a atual não tiver número).
+  const firstNumberNear = (regex: RegExp): number | undefined => {
+    const lines = text.replace(/\r/g, '\n').split('\n');
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!regex.test(lines[i])) continue;
+      // Busca primeiro número em até 3 linhas a partir daqui.
+      for (let j = i; j < Math.min(lines.length, i + 4); j += 1) {
+        const nums = extractAllNumbers(lines[j]);
+        if (nums.length) return nums[0];
+      }
+    }
+    return undefined;
+  };
+
+  values.monthlyRevenue = firstNumberNear(/Receita Bruta do PA/i);
   values.revenue = values.monthlyRevenue;
-
-  const rbt12Match = text.match(/RBT12\)?\s*[^\n]*?(\d{1,3}(?:\.\d{3})*,\d{2})/i)
-    ?? text.match(/Receita bruta acumulada nos doze meses[^\n]*\n?[^\n]*?(\d{1,3}(?:\.\d{3})*,\d{2})/i);
-  values.grossRevenue12m = normalizeNumber(rbt12Match?.[1]);
-
-  const rbaMatch = text.match(/Receita bruta acumulada no ano-calendário corrente[^\n]*\(?RBA\)?[^\n]*?(\d{1,3}(?:\.\d{3})*,\d{2})/i)
-    ?? text.match(/\(RBA\)[^\n]*?(\d{1,3}(?:\.\d{3})*,\d{2})/i);
-  values.rba = normalizeNumber(rbaMatch?.[1]);
-
-  const rbaaMatch = text.match(/Receita bruta acumulada no ano-calendário anterior[^\n]*\n?\s*\(?RBAA\)?[^\n]*?(\d{1,3}(?:\.\d{3})*,\d{2})/i)
-    ?? text.match(/\(RBAA\)[^\n]*?(\d{1,3}(?:\.\d{3})*,\d{2})/i);
-  values.rbaa = normalizeNumber(rbaaMatch?.[1]);
+  values.grossRevenue12m = firstNumberNear(/RBT12|Receita bruta acumulada nos doze meses/i);
+  values.rba = firstNumberNear(/\bRBA\b|ano-calend[aá]rio corrente/i);
+  values.rbaa = firstNumberNear(/\bRBAA\b|ano-calend[aá]rio anterior/i);
 
   const limitMatch = text.match(/Limite de receita bruta[^\n]*?(\d{1,3}(?:\.\d{3})*,\d{2})/i);
   values.simplesLimit = normalizeNumber(limitMatch?.[1]) ?? 4_800_000;
   const sublimitMatch = text.match(/Sublimite de Receita[^\n]*?(\d{1,3}(?:\.\d{3})*,\d{2})/i);
   values.sublimit = normalizeNumber(sublimitMatch?.[1]) ?? 3_600_000;
 
-  // DAS Total / tributos: pegar a linha "Total do Débito Exigível" seguida da linha de números.
-  const dasMatch = text.match(/Total do D[eé]bito Exig[ií]vel[^\n]*\n[^\n]*\n([^\n]+)/i);
-  if (dasMatch) {
-    const nums = extractAllNumbers(dasMatch[1]);
-    if (nums.length >= 9) {
-      values.irpj = nums[0];
-      values.csll = nums[1];
-      values.cofins = nums[2];
-      values.pis = nums[3];
-      values.inssCpp = nums[4];
-      values.icms = nums[5];
-      values.ipi = nums[6];
-      values.iss = nums[7];
-      values.dasTotal = nums[8];
-    }
-  }
+  // DAS total: prioriza linha "Principal X Multa Y Juros Z Total W" (sempre presente no DAS gerado).
+  const principalMatch = text.match(/Principal\s+([\d.,]+)\s+Multa\s+([\d.,]+)\s+Juros\s+([\d.,]+)\s+Total\s+([\d.,]+)/i);
+  if (principalMatch) values.dasTotal = normalizeNumber(principalMatch[4]);
   if (values.dasTotal === undefined) {
-    // Fallback: "Principal X Multa X Juros X Total X"
-    const principalMatch = text.match(/Principal\s+\d[\d.,]*\s+Multa\s+\d[\d.,]*\s+Juros\s+\d[\d.,]*\s+Total\s+([\d.,]+)/i);
-    values.dasTotal = normalizeNumber(principalMatch?.[1]);
+    // Fallback: 9 valores logo após "Total do Débito Exigível".
+    const lines = text.replace(/\r/g, '\n').split('\n');
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!/Total do D[eé]bito Exig[ií]vel/i.test(lines[i])) continue;
+      for (let j = i + 1; j < Math.min(lines.length, i + 5); j += 1) {
+        const nums = extractAllNumbers(lines[j]);
+        if (nums.length >= 9) {
+          [values.irpj, values.csll, values.cofins, values.pis, values.inssCpp, values.icms, values.ipi, values.iss, values.dasTotal] = nums;
+          break;
+        }
+      }
+      if (values.dasTotal !== undefined) break;
+    }
   }
 
   if (values.dasTotal !== undefined && values.monthlyRevenue) {
