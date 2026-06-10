@@ -4,6 +4,7 @@ import type {
   AnalysisStatus,
   AnswerMap,
   AnswerValue,
+  ConfidenceLevel,
   FinalDecision,
   MainActivity,
   ReadingStatus,
@@ -15,6 +16,7 @@ import type {
   TaxReformDocument,
   TaxReformStore,
   TaxRegime,
+  UploadStatus,
 } from './types';
 
 export const TAX_REFORM_DOCUMENT_BUCKET = 'tax-reform-documents';
@@ -72,6 +74,8 @@ function mapAnalysis(row: any, answers: AnswerMap): TaxReformAnalysis {
     automaticSummary: row.automatic_summary ?? '',
     manualOpinion: row.manual_opinion ?? '',
     finalDecision: (row.final_decision ?? '') as FinalDecision,
+    confidenceLevel: (row.confidence_level ?? undefined) as ConfidenceLevel | undefined,
+    confidenceReason: row.confidence_reason ?? '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -90,6 +94,13 @@ function mapDocument(row: any): TaxReformDocument {
     readingStatus: row.reading_status as ReadingStatus,
     extractedSummary: row.extracted_summary ?? '',
     extractionError: row.extraction_error ?? '',
+    storageBucket: row.storage_bucket ?? undefined,
+    storagePath: row.storage_path ?? undefined,
+    uploadStatus: (row.upload_status ?? undefined) as UploadStatus | undefined,
+    uploadError: row.upload_error ?? undefined,
+    uploadedBy: row.uploaded_by ?? undefined,
+    extractionConfidence: row.extraction_confidence !== null && row.extraction_confidence !== undefined ? Number(row.extraction_confidence) : undefined,
+    documentConfidenceWeight: row.document_confidence_weight !== null && row.document_confidence_weight !== undefined ? Number(row.document_confidence_weight) : undefined,
     uploadedAt: row.uploaded_at,
     updatedAt: row.updated_at ?? row.uploaded_at,
   };
@@ -173,6 +184,8 @@ export async function saveTaxReformStore(store: TaxReformStore) {
     automatic_summary: analysis.automaticSummary,
     manual_opinion: analysis.manualOpinion,
     final_decision: analysis.finalDecision,
+    confidence_level: analysis.confidenceLevel ?? null,
+    confidence_reason: analysis.confidenceReason ?? null,
     created_at: analysis.createdAt,
     updated_at: analysis.updatedAt,
   }));
@@ -221,6 +234,13 @@ export async function saveTaxReformStore(store: TaxReformStore) {
       reading_status: document.readingStatus,
       extracted_summary: document.extractedSummary ?? null,
       extraction_error: document.extractionError ?? null,
+      storage_bucket: document.storageBucket ?? null,
+      storage_path: document.storagePath ?? null,
+      upload_status: document.uploadStatus ?? null,
+      upload_error: document.uploadError ?? null,
+      uploaded_by: document.uploadedBy ?? null,
+      extraction_confidence: document.extractionConfidence ?? null,
+      document_confidence_weight: document.documentConfidenceWeight ?? null,
       uploaded_at: document.uploadedAt,
       updated_at: document.updatedAt,
     }));
@@ -256,25 +276,70 @@ const sanitizeFileName = (fileName: string) => fileName
   .replace(/-+/g, '-')
   .replace(/^-|-$/g, '');
 
-export async function uploadTaxReformDocumentFile(companyId: string, analysisId: string, file: File) {
-  const fallbackUrl = `local://${file.name}`;
+export interface TaxReformUploadResult {
+  ok: boolean;
+  storageBucket?: string;
+  storagePath?: string;
+  fileUrl?: string;
+  uploadedBy?: string;
+  error?: string;
+}
 
+export async function uploadTaxReformDocumentFile(
+  companyId: string,
+  analysisId: string,
+  file: File,
+): Promise<TaxReformUploadResult> {
   if (!isSupabaseConfigured) {
-    return { fileUrl: fallbackUrl, uploadError: 'Supabase não configurado; metadados salvos localmente.' };
+    return { ok: false, error: 'Lovable Cloud não configurado. Conecte o backend para anexar documentos.' };
   }
 
   try {
     const fileId = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`;
     const storagePath = `${companyId}/${analysisId}/${fileId}-${sanitizeFileName(file.name)}`;
-    const { error } = await db().storage
+    const client = db();
+    const { error } = await client.storage
       .from(TAX_REFORM_DOCUMENT_BUCKET)
       .upload(storagePath, file, { cacheControl: '3600', upsert: false, contentType: file.type || undefined });
 
     if (error) throw error;
-    return { fileUrl: `storage://${TAX_REFORM_DOCUMENT_BUCKET}/${storagePath}`, uploadError: null };
+
+    let uploadedBy: string | undefined;
+    try {
+      const { data } = await client.auth.getUser();
+      uploadedBy = data?.user?.id ?? undefined;
+    } catch (authError) {
+      console.warn('[reforma-tributaria] não foi possível identificar uploader', authError);
+    }
+
+    return {
+      ok: true,
+      storageBucket: TAX_REFORM_DOCUMENT_BUCKET,
+      storagePath,
+      fileUrl: `storage://${TAX_REFORM_DOCUMENT_BUCKET}/${storagePath}`,
+      uploadedBy,
+    };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Upload indisponível.';
+    const message = error instanceof Error ? error.message : 'Falha no upload para o Storage.';
     console.error('[reforma-tributaria] falha no upload para Storage', { companyId, analysisId, fileName: file.name, message });
-    return { fileUrl: fallbackUrl, uploadError: message };
+    return { ok: false, error: message };
+  }
+}
+
+export async function getTaxReformDocumentSignedUrl(
+  storagePath: string,
+  expiresInSeconds = 3600,
+  bucket = TAX_REFORM_DOCUMENT_BUCKET,
+): Promise<string | null> {
+  if (!isSupabaseConfigured || !storagePath) return null;
+  try {
+    const { data, error } = await db().storage
+      .from(bucket)
+      .createSignedUrl(storagePath, expiresInSeconds);
+    if (error) throw error;
+    return data?.signedUrl ?? null;
+  } catch (error) {
+    console.error('[reforma-tributaria] falha ao gerar signed URL', { storagePath, error });
+    return null;
   }
 }
