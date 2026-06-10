@@ -1,110 +1,70 @@
-# Plano — Corrigir parser da Folha de Pagamento (Reforma Tributária)
-
 ## Diagnóstico
 
-O PDF real `71052026_000071_ESCRITORIO CONTABIL ZIMMERMANN LTDA.pdf` contém camada de texto e a linha:
-`Total: 22.680,85 0,00 24.565,24 2.343,08 19.673,40 321,79 22.944,24 1.835,52 24.565,24 4.072,87 20.492,37`
-seguida de `Total de empregados: 7`.
+As respostas do questionário **estão sendo salvas no Cloud** (confirmei 19 respostas da análise da Zimmermann com `updated_at` atual). O problema está no ciclo de carga/salvamento no frontend, em `src/features/tax-reform/components/TaxReformWorkspace.tsx`:
 
-O parser atual falha porque:
-1. Em `extractors.ts` (`parsePayrollSummaryDocument`) e em `process-tax-reform-document/index.ts` (`parsePayrollTotals`), a detecção usa `/^\s*Total:/i` — exige `Total:` no início da linha, ignorando linhas com `Total:` no meio ou com valores na mesma linha.
-2. O mapeamento de colunas atual está deslocado em relação à ordem real do relatório JB Folha (Salário, S.Fam., Base INSS, INSS, Base IRRF, IRRF, Base FGTS, FGTS, Prov./Vant., Descontos, Líquido).
-3. `employeesCount` só aceita número na linha seguinte, não na mesma linha.
-4. `decisiveFieldsMissing` não exige `grossPayroll`.
-5. Status `lido` é atribuído sempre que `confidence > 0` — permissivo demais.
+1. **Seed antigo do `localStorage` sobrescreve o Cloud**
+   - `useState(loadLocalStore)` inicializa com a `seedStore` (empresa demo + respostas fictícias) ou com o snapshot antigo do `localStorage`.
+   - O `useEffect` de persistência grava no `localStorage` em **toda** mudança de `store`, inclusive antes do fetch remoto chegar.
+   - Se o usuário começa a interagir antes do `fetchTaxReformStore()` resolver, edits ficam em cima do seed e depois o `setStore(remoteStore)` apaga o que ele digitou. O inverso também: a montagem grava o seed no `localStorage`, "envenenando" recargas futuras.
 
-A fixture `folha-zimmermann.txt` (e os testes em `parsers-large.test.ts`) foi criada com uma ordem de colunas diferente da real e precisa ser realinhada à ordem JB Folha correta.
+2. **Debounce de 700ms perdido em reload/navegação**
+   - O save remoto é feito com `setTimeout(..., 700)`. Se o usuário fecha a aba, recarrega ou troca de etapa antes desse intervalo, o `clearTimeout` cancela o save — as últimas respostas digitadas só ficam no `localStorage` (que depois é sobrescrito pelo remoto na próxima abertura).
 
-## Alterações
+3. **`saveTaxReformStore` nunca apaga respostas removidas**
+   - Faz upsert por chave, mas se o usuário limpa um campo, a linha antiga continua no banco e "volta" no próximo load.
 
-### 1. `src/features/tax-reform/document-analysis/extractors.ts` — `parsePayrollSummaryDocument`
+4. **`withDerivedScores` reaplica seed implicitamente**
+   - `loadLocalStore` envolve qualquer payload em `withDerivedScores`, e o efeito derivado pode re-disparar `setStore`, criando saves redundantes que pisam no remoto recém-carregado.
 
-Substituir a detecção atual por uma busca em 4 camadas:
+## Correções
 
-- **A. Regex no texto completo:** `/\bTotal\s*:\s*((?:-?\d{1,3}(?:\.\d{3})*,\d{2}\s*){11})/gi`. Coletar todas as ocorrências como blocos candidatos.
-- **B. Busca por linhas:** se A não encontrar, varrer linhas com `/\bTotal\s*:/i` (excluindo `/Total de empregados/i`). Acumular até 30 linhas seguintes parando em barreiras: `Empregado`, `Empresa:`, `Inscr. Fed.`, `CNPJ:`, `RESUMO`, novo `Total:`, `Cargo:`, `Departamento:`, `Página`, `JB Folha`, `Pacote`. Extrair exatamente 11 monetários.
-- **C. Fallback rodapé:** procurar nas últimas 80 linhas um bloco com exatamente 11 monetários. Aceitar somente se o texto contiver `RESUMO DE CÁLCULO`, `Empregado`, `Prov./Vant.`, `Descontos`, `Líquido`.
-- **D. Fallback por soma:** identificar linhas `/^\s*\d{6}\s+/` com 11 monetários. Somar coluna a coluna. Aceitar somente se ≥1 empregado e contagem confere com `Total de empregados` (ou diferença explicada).
+### `src/features/tax-reform/components/TaxReformWorkspace.tsx`
 
-Para multi-estabelecimento (vários `Total:` válidos via A/B), agregar somando blocos e marcar `establishmentsAggregated`.
+- **Iniciar com store vazio quando o backend está habilitado.**
+  - Trocar o `useState(loadLocalStore)` por um estado inicial `emptyStore` (sem seed) e marcar `persistenceReady=false` até o fetch terminar.
+  - Só cair no `localStorage`/`seedStore` se `isSupabaseConfigured === false` (modo offline).
+  - Mostrar um loading discreto enquanto `persistenceReady` é falso para evitar edição em cima de dados que serão sobrescritos.
 
-Mapeamento fixo (em todos os caminhos):
-```
-salaryTotal=cols[0]; familySalary=cols[1];
-inssBase=cols[2]; inssValue=cols[3];
-irrfBase=cols[4]; irrfValue=cols[5];
-fgtsBase=cols[6]; fgtsValue=cols[7];
-grossPayroll=cols[8]; discounts=cols[9]; netPayroll=cols[10];
-```
+- **Bloquear o efeito de persistência até o fetch terminar.**
+  - Manter a guarda `if (!persistenceReady) return;` também para o `localStorage.setItem` — hoje ele grava antes do remoto chegar.
+  - Adicionar um ref `lastSavedStoreRef` e comparar via hash leve para evitar saves redundantes disparados por `withDerivedScores`.
 
-Adicionar `familySalary?: number` em `types.ts` (`TaxReformExtractedValues`).
+- **Persistência granular e imediata no `setAnswer`.**
+  - Em vez de depender só do debounce global, criar `persistAnswer(analysisId, key, value)` que:
+    1. atualiza o store local;
+    2. chama `upsertTaxReformAnswer` imediatamente (com `await` em background + toast em erro);
+    3. cancela/encurta o debounce global para o restante do store.
+  - Garante que cada alteração de campo já fica no Cloud antes do reload.
 
-**Validação de coerência** antes de aceitar o bloco:
-- `|netPayroll - (grossPayroll - discounts)| ≤ 1`
-- `salaryTotal ≤ grossPayroll`
-- `inssValue ≤ inssBase`, `fgtsValue ≤ fgtsBase`, `irrfValue ≤ irrfBase`
-Se falhar: descartar bloco com warning `"bloco Total descartado: valores incoerentes"`; se nenhum bloco passar, emitir warning crítico `"Linha Total encontrada, mas valores incoerentes."` e não preencher campos decisivos.
+- **Flush em eventos críticos.**
+  - Adicionar `useEffect` com listeners `beforeunload` e `visibilitychange === 'hidden'` que dispara `saveTaxReformStore` síncrono pendente (cancela debounce e executa).
+  - Disparar flush também ao trocar de `step` no wizard e ao chamar `setSelectedAnalysisId(null)`.
 
-**employeesCount:** procurar `Total de empregados:\s*(\d+)` na mesma linha; se ausente, próximo inteiro isolado (1–4 dígitos) nas 6 linhas seguintes, ignorando datas (`\d{2}/\d{2}/\d{4}`), `Página`, `Pacote` e monetários (com vírgula).
+- **Apagar respostas removidas.**
+  - Em `saveTaxReformStore`/fluxo de save, comparar as chaves atuais com as do snapshot remoto e chamar `upsertTaxReformAnswer(..., '')` para as que sumiram, garantindo `DELETE` no banco.
 
-Adicionar warning crítico se faltar `period`, `salaryTotal`, `grossPayroll` ou `netPayroll`.
+### `src/features/tax-reform/persistence.ts`
 
-### 2. `supabase/functions/process-tax-reform-document/index.ts`
+- Em `fetchTaxReformWorkspace`, retornar também um `loadedAt` no resultado para o componente saber a versão (evita aplicar saves antigos depois de um fetch novo).
+- Em `saveTaxReformStore`, aceitar opcional `{ previous: TaxReformStore }` e calcular o diff de respostas para emitir `DELETE` nas chaves removidas.
 
-- Reescrever `parsePayrollTotals` com a mesma lógica das 4 camadas e mesmo mapeamento.
-- Em `decisiveFieldsMissing` para `folha_pagamento`: exigir `period`, `salaryTotal`, `grossPayroll`, `netPayroll`. Mensagem: `"Campos decisivos ausentes: Período, Total de salários, Proventos/Vantagens, Líquido a pagar."`.
-- Trocar `const status = result.confidence > 0 ? 'lido' : 'erro_leitura'` por:
-  ```
-  const hasCriticalWarnings = warnings.some(w => /incoerentes|não encontrada|ausentes/i.test(w));
-  const status = result.confidence >= 0.7 && !hasCriticalWarnings ? 'lido' : 'erro_leitura';
-  ```
-- Quando `status === 'erro_leitura'`, gravar `extraction_confidence = 0` e `extraction_error` específico.
-- Manter cálculos cross-document Folha×PGDAS já existentes (`payrollPercentByMonthlyRevenue`, etc.) — só rodam quando folha tem `grossPayroll` válido.
+### Telemetria de depuração
 
-### 3. Score / consumo
-
-Em `documentScore.ts` (já filtra por `readingStatus === 'lido'`): adicionar guarda extra exigindo `extractionConfidence ?? 0 ≥ 0.7` antes de incluir extracted values no score.
-
-### 4. Fixture e testes
-
-- Reescrever `__tests__/fixtures/folha-zimmermann.txt` com o texto real (formato tabela linearizado) do PDF Zimmermann, com ordem correta de colunas.
-- Em `parsers-large.test.ts` ajustar `buildFolha` para gerar valores na ordem JB Folha real e adicionar casos:
-  - `Total:` + valores na **mesma** linha.
-  - `Total:` em linha separada + valores na linha seguinte.
-  - `Total de empregados: 7` na mesma linha.
-  - `Total de empregados:` com `7` na linha seguinte.
-  - Sem `Total:`, com 7 linhas de empregados válidas → fallback D.
-  - Bloco `Total:` com `netPayroll` inconsistente → `erro_leitura` e sem campos.
-  - Ordem das colunas: assert `irrfBase=19673.40`, `irrfValue=321.79`, `fgtsBase=22944.24`, `fgtsValue=1835.52`, `grossPayroll=24565.24`, `netPayroll=20492.37`.
-- Novo teste para `parsers.test.ts` consumindo a fixture real e validando os 11 campos + `employeesCount=7` + `confidence ≥ 0.7`.
-
-### 5. Redeploy + validação end-to-end
-
-- Redeploy de `process-tax-reform-document`.
-- Resetar a leitura do documento Zimmermann via SQL:
-  ```sql
-  update public.tax_reform_documents
-  set reading_status='aguardando_leitura', extraction_error=null,
-      extracted_summary=null, extracted_values=null,
-      extracted_findings=null, extraction_confidence=null, updated_at=now()
-  where file_name ilike '71052026_000071%';
-  ```
-- Verificar no preview: folha aparece **Lido** com salários 22.680,85 / Prov. 24.565,24 / Líquido 20.492,37 / 7 empregados, e os percentuais cross-document com PGDAS aparecem.
-
-## Arquivos alterados
-
-- `src/features/tax-reform/document-analysis/extractors.ts`
-- `src/features/tax-reform/document-analysis/types.ts` (adiciona `familySalary`)
-- `src/features/tax-reform/document-analysis/documentScore.ts` (guarda `confidence ≥ 0.7`)
-- `supabase/functions/process-tax-reform-document/index.ts`
-- `src/features/tax-reform/document-analysis/__tests__/fixtures/folha-zimmermann.txt`
-- `src/features/tax-reform/document-analysis/__tests__/parsers-large.test.ts`
-- `src/features/tax-reform/document-analysis/__tests__/parsers.test.ts`
+- `console.info('[reforma-tributaria] fetch carregado', { analyses, answersTotal })` após o fetch.
+- `console.info('[reforma-tributaria] save concluído', { analysisId, keys })` após cada upsert de resposta.
+- Toast amigável quando o save falhar (já existe parcialmente, padronizar).
 
 ## Critérios de aceite
 
-- PDF Zimmermann lê como `lido` com os 11 valores corretos + `employeesCount=7`.
-- Mensagem "Linha Total não encontrada" desaparece.
-- Documentos com coerência ruim ficam `erro_leitura` e não alimentam o score.
-- Todos os testes (incluindo os novos) passam.
-- PGDAS e DRE continuam funcionando inalterados.
+- Recarregar a página em `/reforma-tributaria` mantém **todas** as respostas digitadas no questionário (incluindo a última alteração feita imediatamente antes do reload).
+- Limpar um campo no questionário e recarregar mantém o campo vazio (não "volta" a resposta antiga).
+- Nenhuma resposta é sobrescrita pelo `seedStore` quando o backend está conectado.
+- Saves não dependem mais do debounce de 700ms para alterações críticas; cada blur/change persiste no Cloud em < 1s.
+- Nenhuma alteração de layout, do Dashboard, Documentos, Resultado ou Parecer manual.
+
+## Arquivos a alterar
+
+- `src/features/tax-reform/components/TaxReformWorkspace.tsx`
+- `src/features/tax-reform/persistence.ts`
+
+Sem migrations, sem alterar Edge Function, sem mexer no parser de documentos.
