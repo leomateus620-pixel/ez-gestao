@@ -739,12 +739,50 @@ function formatExtractedField(field: string, value: unknown) {
     netProfit: 'Lucro líquido',
     grossMargin: 'Margem bruta',
     operatingExpenses: 'Despesas operacionais',
+    cnpj: 'CNPJ',
+    companyName: 'Empresa',
+    period: 'Período',
+    monthlyRevenue: 'Receita do PA (mensal)',
+    rba: 'RBA (ano corrente)',
+    rbaa: 'RBAA (ano anterior)',
+    dasTotal: 'DAS total',
+    simplesLimitUsagePercent: 'Uso do limite do Simples',
+    sublimitUsagePercent: 'Uso do sublimite',
+    nearSimplesLimit: 'Próximo do limite do Simples',
+    factorRStatus: 'Fator R',
+    assetsTotal: 'Ativo total',
+    equity: 'Patrimônio líquido',
+    afac: 'AFAC',
+    grossRevenue: 'Receita bruta (DRE)',
+    serviceRevenue: 'Prestação de serviços',
+    simplesNacionalExpense: 'Simples Nacional (DRE)',
+    netRevenue: 'Receita líquida',
+    serviceCosts: 'Custo dos serviços',
+    grossProfit: 'Lucro bruto',
+    taxExpenses: 'Despesas tributárias',
+    annualPayrollFromDre: 'Folha anual (DRE)',
+    payrollPercentFromDre: 'Folha/receita (DRE)',
+    annualEffectiveTaxRate: 'Alíquota anual (DRE)',
+    netMargin: 'Margem líquida',
+    employeesCount: 'Empregados',
+    salaryTotal: 'Salários',
+    inssValue: 'INSS',
+    fgtsValue: 'FGTS',
+    irrfValue: 'IRRF',
+    grossPayroll: 'Folha bruta',
+    netPayroll: 'Folha líquida',
+    annualizedPayrollPercentByRbt12: 'Folha anualizada/RBT12',
+    annualizedPayrollWithChargesPercentByRbt12: 'Folha+encargos anualizada/RBT12',
   };
   const label = labels[field] ?? field;
   if (typeof value === 'boolean') return `${label}: ${value ? 'Sim' : 'Não'}`;
   if (typeof value === 'number') {
-    const isCurrency = ['revenue', 'projectedRevenue', 'grossRevenue12m', 'netProfit', 'operatingExpenses'].includes(field);
-    return `${label}: ${isCurrency ? formatMoney(value) : `${value}%`}`;
+    const currencyFields = new Set(['revenue', 'projectedRevenue', 'grossRevenue12m', 'netProfit', 'operatingExpenses',
+      'monthlyRevenue', 'rba', 'rbaa', 'dasTotal', 'assetsTotal', 'equity', 'afac', 'grossRevenue', 'serviceRevenue',
+      'simplesNacionalExpense', 'netRevenue', 'serviceCosts', 'grossProfit', 'taxExpenses', 'annualPayrollFromDre',
+      'salaryTotal', 'inssValue', 'fgtsValue', 'irrfValue', 'grossPayroll', 'netPayroll']);
+    if (field === 'employeesCount') return `${label}: ${value}`;
+    return `${label}: ${currencyFields.has(field) ? formatMoney(value) : `${value}%`}`;
   }
   if (Array.isArray(value)) return `${label}: ${value.join(', ')}`;
   return `${label}: ${String(value)}`;

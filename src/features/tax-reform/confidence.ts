@@ -60,3 +60,21 @@ export const confidenceLabels: Record<ConfidenceLevel, string> = {
   media: 'Confiança média',
   alta: 'Confiança alta',
 };
+
+/**
+ * Confiança específica para dados financeiros/tributários (DRE, PGDAS, Folha).
+ * Distinta da confiança comercial (que depende de faturamento_cliente).
+ */
+export function computeFinancialTaxConfidence(documents: DocumentLike[] = []): ConfidenceLevel {
+  const accepted = new Set(
+    documents
+      .filter((doc) => (!doc.uploadStatus || doc.uploadStatus === 'enviado') && doc.readingStatus === 'lido' && doc.storagePath !== null)
+      .map((doc) => doc.documentType),
+  );
+  const hasDre = accepted.has('dre') || accepted.has('balancete');
+  const hasPgdas = accepted.has('pgdas');
+  const hasPayroll = accepted.has('folha_pagamento');
+  if (hasDre && hasPgdas && hasPayroll) return 'alta';
+  if (hasDre && hasPgdas) return 'media';
+  return 'baixa';
+}

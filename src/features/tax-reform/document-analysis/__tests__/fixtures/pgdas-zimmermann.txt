@@ -1,0 +1,119 @@
+ 
+ 
+ 
+ 
+Extrato do Simples Nacional
+Gerado em 13/05/2026 08:44:41
+Apurado em 13/05/2026 08:40:02
+Apuração Original
+PGDAS-D 2018 Versão 2.2.29
+1) Informações do Contribuinte
+CNPJ Básico: 88.736.335 Nome Empresarial: ESCRITORIO CONTABIL ZIMMERMANN LTDA
+Data de Abertura: 17/12/1974 Regime de Apuração: Competência Optante pelo Simples Nacional: Sim
+2) Informações da Apuração 88736335202604001
+Período de Apuração (PA): 04/2026
+2.1 Discriminativo de Receitas
+Total de Receitas Brutas (R$) Mercado Interno Mercado Externo Total
+Receita Bruta do PA (RPA) - Competência 80.220,40 0,00 80.220,40
+Receita bruta acumulada nos doze meses anteriores ao PA
+(RBT12) 958.935,69 0,00 958.935,69
+Receita bruta acumulada nos doze meses anteriores ao PA
+proporcionalizada (RBT12p)
+Receita bruta acumulada no ano-calendário corrente (RBA) 350.279,28 0,00 350.279,28
+Receita bruta acumulada no ano-calendário anterior
+(RBAA) 902.870,81 0,00 902.870,81
+Limite de receita bruta proporcionalizado 4.800.000,00 4.800.000,00
+.
+.
+2.2) Receitas Brutas Anteriores (R$)
+2.2.1) Mercado Interno
+01/2025 69.536,00 02/2025 74.378,00 03/2025 70.080,00 04/2025 87.677,81
+05/2025 74.772,00 06/2025 75.542,00 07/2025 75.592,00 08/2025 65.847,00
+09/2025 85.474,00 10/2025 62.550,00 11/2025 78.348,00 12/2025 83.074,00
+01/2026 71.913,48 02/2026 115.716,00 03/2026 82.429,40
+2.2.2) Mercado Externo
+01/2025 0,00 02/2025 0,00 03/2025 0,00 04/2025 0,00
+05/2025 0,00 06/2025 0,00 07/2025 0,00 08/2025 0,00
+09/2025 0,00 10/2025 0,00 11/2025 0,00 12/2025 0,00
+01/2026 0,00 02/2026 0,00 03/2026 0,00
+.
+.
+2.3) Folha de Salários Anteriores (R$)
+Nenhuma
+.
+.
+2.4) Fator r
+Fator r = Não se aplica
+.
+.
+2.5) Valores Fixos
+Não se aplica
+.
+.
+3) Informações dos Estabelecimentos - valores referentes às Receitas Informadas
+CNPJ Estabelecimento: 88.736.335/0001-13
+Município: SANTA ROSA UF: RS
+Sublimite de Receita Anual (R$): 3.600.000,00 Impedido de recolher ICMS/ISS no DAS: Não
+                                                                                      Página 1
+
+ 
+ 
+.
+.
+Valor do Débito por Tributo para a Atividade (R$):
+Prestação de Serviços, exceto para o exterior - Escritórios de serviços contábeis autorizados pela
+legislação municipal a pagar o ISS em valor fixo em guia do Município
+Receita Bruta Informada: R$ 80.220,40
+IRPJ CSLL COFINS PIS/Pasep INSS/CPP ICMS IPI ISS Total
+394,15 344,88 1.344,06 291,67 4.276,54 0,00 0,00 0,00 6.651,30
+Parcela 1: R$ 80.220,40
+.
+.
+Informações por Estabelecimento
+Valor Informado: 80.220,40
+Total do Débito Declarado (exigível + suspenso)
+IRPJ CSLL COFINS PIS/Pasep INSS/CPP ICMS IPI ISS Total
+394,15 344,88 1.344,06 291,67 4.276,54 0,00 0,00 0,00 6.651,30
+Total do Débito com Exigibilidade Suspensa (R$)
+IRPJ CSLL COFINS PIS/Pasep INSS/CPP ICMS IPI ISS Total
+0,00 0,00 0,00 0,00 0,00 0,00 0,00 0,00 0,00
+Total do Débito Exigível (R$)
+IRPJ CSLL COFINS PIS/Pasep INSS/CPP ICMS IPI ISS Total
+394,15 344,88 1.344,06 291,67 4.276,54 0,00 0,00 0,00 6.651,30
+.
+.
+.
+.
+4) Total Geral da Empresa
+Total do Débito Declarado (exigível + suspenso) (R$)
+IRPJ CSLL COFINS PIS/Pasep INSS/CPP ICMS IPI ISS Total
+394,15 344,88 1.344,06 291,67 4.276,54 0,00 0,00 0,00 6.651,30
+Total do Débito com Exigibilidade Suspensa (R$)
+IRPJ CSLL COFINS PIS/Pasep INSS/CPP ICMS IPI ISS Total
+0,00 0,00 0,00 0,00 0,00 0,00 0,00 0,00 0,00
+Total do Débito Exigível (R$)
+IRPJ CSLL COFINS PIS/Pasep INSS/CPP ICMS IPI ISS Total
+394,15 344,88 1.344,06 291,67 4.276,54 0,00 0,00 0,00 6.651,30
+.
+.
+5) Este item não se aplica à primeira apuração do PA:
+.
+6) Informações sobre DAS Gerado na apuração: 88736335202604001
+Número: 07202613327140574 Data de Vencimento:
+20/05/2026 Data limite para acolhimento: 20/05/2026
+IRPJ 394,15 CSLL 344,88 COFINS 1.344,06 PIS/PASEP 291,67
+INSS/CPP 4.276,54 ICMS 0,00 IPI 0,00 ISS 0,00
+Principal 6.651,30 Multa 0,00 Juros 0,00 Total 6.651,30
+6.1) Discriminação dos Valores Calculados no DAS Gerado
+Tributo Valor Ente Federativo de Destino
+IRPJ 394,15 União
+CSLL 344,88 União
+COFINS 1.344,06 União
+PIS 291,67 União
+                                                                                      Página 2
+
+INSS/CPP 4.276,54 União
+6.2)  Informações da Arrecadação do DAS gerado nesta apuração
+Não foi reconhecido pagamento até a presente data
+                                                                                      Página 3
+
