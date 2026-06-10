@@ -1,54 +1,81 @@
-## Finalizar pendências 1-3 do módulo Reforma Tributária
+# Validação Reforma Tributária — Lovable Cloud
 
-Objetivo: completar os 3 itens pendentes identificados na sessão anterior, sem mexer em layout, providers ou outros menus.
+## Causa raiz já identificada
 
-### 1. `src/features/tax-reform/persistence.ts` — Upload real no Storage
+Os logs do console mostram erro recorrente ao salvar a análise:
 
-- Refatorar `uploadTaxReformDocumentFile`:
-  - Se Supabase não estiver configurado ou `storage.upload` falhar → retornar `{ ok: false, error }`. **Remover** o fallback `local://arquivo`.
-  - Em sucesso → retornar `{ ok: true, storagePath, storageBucket: 'tax-reform-documents', uploadedBy }`.
-  - Persistir `upload_status = 'enviado'` apenas quando o upload real concluir; `'erro_upload'` em falha.
-- Adicionar `getTaxReformDocumentSignedUrl(storagePath, expiresInSeconds = 3600)` usando `supabase.storage.from('tax-reform-documents').createSignedUrl(...)`.
-- Atualizar `saveTaxReformDocument` para gravar `storage_path`, `storage_bucket`, `upload_status`, `uploaded_by`, `extraction_confidence`, `document_confidence_weight`.
+```
+code: 42P10 — there is no unique or exclusion constraint matching the ON CONFLICT specification
+```
 
-### 2. `src/features/tax-reform/confidence.ts` — Nível de confiança
+Investigação no banco real confirma:
 
-Novo módulo puro (testável):
+- `tax_reform_alerts` só possui `PRIMARY KEY (id)` — **não tem** `UNIQUE (analysis_id, alert_type)`.
+- O código em `src/features/tax-reform/persistence.ts:328` chama `upsert(..., { onConflict: 'analysis_id,alert_type' })`.
 
-- `computeConfidenceLevel(documents): 'baixa' | 'media' | 'alta'`
-  - Considera apenas documentos com `uploadStatus === 'enviado'`.
-  - 0 documentos principais → `baixa`
-  - 1-2 → `media`
-  - 3+ → `alta`
-  - Combo **DRE + PGDAS + faturamento_cliente** força `alta` mesmo com contagem menor.
-- `computeConfidenceReasons(documents)` retornando lista de strings para exibição.
-- Persistir o nível em `tax_reform_analyses.confidence_level` ao salvar a análise.
-- Adicionar testes em `confidence.test.ts`.
+Resultado: toda persistência de alertas falha silenciosamente no Supabase real, e a função `saveTaxReformStore` rejeita, fazendo o sistema cair para localStorage sem aviso claro — exatamente o sintoma que o usuário descreveu ("localStorage funcionando como persistência silenciosa").
 
-### 3. `src/pages/ReformaTributaria.tsx` — Painel Resultado
+Demais tabelas estão OK:
+- `tax_reform_answers` tem `UNIQUE (analysis_id, question_key)` ✓
+- `tax_reform_companies`, `tax_reform_analyses`, `tax_reform_documents` usam `onConflict: 'id'` (PK) ✓
 
-Editar **apenas** o painel de Resultado (sem redesenhar a tela):
+E o `GuideProvider` já é corretamente gated por `pathname` (`/guias`, `/integracoes`, `/`), então rotas como `/reforma-tributaria`, `/classifica`, `/configuracoes`, `/whatsapp` **não** disparam queries de guias. Não há refator de provider necessário.
 
-- Badge de status da análise: **Preliminar** | **Confiável** | **Bloqueada** | **Revisão manual** (derivado de score + decisivas faltantes + confiança).
-- Mostrar:
-  - Score numérico (já existe, manter)
-  - Lista de perguntas decisivas faltantes (bloqueia "Confiável")
-  - Lista de documentos enviados com link via `getTaxReformDocumentSignedUrl` (abrir em nova aba)
-  - Nível de confiança + razões (`baixa`/`media`/`alta`)
-  - Recomendação + fatores (já existe)
-  - Alertas (já existe)
-  - Campo de parecer manual (textarea curto, salvo em `tax_reform_analyses.manual_review_notes`)
-  - Decisão final consolidada
+## Escopo da correção
 
-### Fora de escopo
+### 1. Migration — adicionar UNIQUE em tax_reform_alerts
 
-- Layout/redesign da tela
-- Providers, navegação, outros menus
-- Pipeline real de extração de PDF (continua mock; apenas `extraction_confidence` é persistido)
-- Mudanças de RLS (continua `authenticated`)
+```sql
+-- Limpar duplicatas antes de aplicar UNIQUE (mantém o mais recente por par)
+DELETE FROM public.tax_reform_alerts a
+USING public.tax_reform_alerts b
+WHERE a.analysis_id = b.analysis_id
+  AND a.alert_type  = b.alert_type
+  AND a.created_at < b.created_at;
 
-### Validação
+ALTER TABLE public.tax_reform_alerts
+  ADD CONSTRAINT tax_reform_alerts_analysis_type_key
+  UNIQUE (analysis_id, alert_type);
+```
 
-- `bunx vitest run` (incluindo novos testes de `confidence.ts`)
-- Smoke manual: preencher questionário → upload de DRE → ver URL assinada abrindo → confirmar badge muda de Preliminar para Confiável quando decisivas + 3 docs enviados.
-- `supabase--read_query` em `tax_reform_documents` para confirmar `storage_path` e `upload_status='enviado'` gravados.
+### 2. Aviso explícito quando cair em modo local
+
+Em `src/features/tax-reform/persistence.ts` (ou no wrapper que chama `saveTaxReformStore`), quando qualquer upsert do Supabase falhar, exibir `toast.warning` claro: "Modo rascunho local — alterações não foram salvas na nuvem" e marcar a análise como `Preliminar` no painel Resultado (não permitir badge `Confiável`).
+
+Sem isso, o usuário não distingue persistência real de localStorage — que é o ponto 2 do checklist do usuário.
+
+### 3. Validação real no preview (após migration aplicada)
+
+Roteiro manual via `browser--view_preview` em `/reforma-tributaria`:
+
+1. Cadastrar empresa → verificar via `supabase--read_query` em `tax_reform_companies`.
+2. Responder questionário → verificar `tax_reform_answers` (uma linha por questão).
+3. Upload PDF → verificar arquivo no bucket `tax-reform-documents` e linha em `tax_reform_documents` com `storage_path` e `upload_status='enviado'`.
+4. Clicar "Abrir" no documento → confirmar que a URL assinada (`createSignedUrl`) abre.
+5. Salvar parecer manual + decisão final → verificar `tax_reform_analyses.manual_review_notes` e campos de decisão.
+6. Recarregar página e abrir em aba anônima autenticada → confirmar dados vindos do Supabase.
+7. Repetir para um segundo `analysis_year` na mesma empresa — confirmar que histórico não sobrescreve.
+8. Simular falha de upload (arquivo inválido) → confirmar `upload_status='erro_upload'`, documento não conta para confiança, alerta de documento pendente continua aparecendo.
+
+### 4. Validação de navegação (sem mudanças de código)
+
+Browser smoke test: Dashboard → Guias → Empresas → Fator R → Reforma Tributária → Classifica → WhatsApp → Dashboard. Confirmar que nenhuma rota quebra e que /reforma-tributaria está no menu.
+
+### 5. Verificações de qualidade
+
+- `bunx vitest run` (suite completa)
+- Build automático do harness
+
+## Fora de escopo
+
+- Redesign de qualquer tela
+- Refator de providers (GuideProvider já está corretamente gated)
+- Mudanças em Classifica, WhatsApp, Fator R, Guias além de smoke test
+- Pipeline real de extração de PDF
+- Atualização de README (separar para outra task se o usuário pedir)
+
+## Entregáveis
+
+1. Migration que adiciona `UNIQUE (analysis_id, alert_type)` em `tax_reform_alerts`.
+2. Aviso de modo rascunho em `persistence.ts` / painel Resultado.
+3. Relatório final com: tabelas verificadas via SQL, screenshots dos passos críticos do roteiro, resultado do vitest, e confirmação de que o erro 42P10 sumiu dos logs do console.
