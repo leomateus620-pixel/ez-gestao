@@ -19,6 +19,61 @@ const pct = (numerator: number | undefined, denominator: number | undefined) => 
   return Number(((Math.abs(numerator) / denominator) * 100).toFixed(2));
 };
 
+/**
+ * Extrai a relação CLIENTES (saldo a receber) do Balanço, classificando cada
+ * sacado por heurística de razão social. Usado apenas como evidência de perfil
+ * comercial — NÃO substitui relatório de faturamento por cliente.
+ */
+function extractBalanceClients(text: string): {
+  total: number; b2b: number; b2c: number; entity: number; amounts: number[];
+} {
+  const lines = text.replace(/\r/g, '\n').split('\n').map((l) => l.trim());
+  // Localiza o cabeçalho da conta "CLIENTES" dentro do Balanço.
+  let start = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (/^CLIENTES\s*$/.test(lines[i])) { start = i + 1; break; }
+  }
+  if (start < 0) return { total: 0, b2b: 0, b2c: 0, entity: 0, amounts: [] };
+  // Stop ao encontrar próxima seção contábil em CAIXA ALTA.
+  const stopRe = /^(ADIANTAMENTOS|CR[EÉ]DITOS\s|OUTROS\s+CR|ATIVO\s+NAO|ATIVO\s+N[ÃA]O|INVESTIMENTOS|IMOBILIZADO|INTANGIVEL|P\s+A\s+S\s+S\s+I\s+V\s+O|PASSIVO|DEPRECIA)/i;
+  const noiseRe = /^(Empresa:|Emp\.:|CEP:|Bairro:|Cidade:|NIRE:|CRPJ|Per[ií]odo:|Data do NIRE|IE:|CNPJ:|Endere|Fone|BALAN[ÇC]O|A T I V O|P A S S I V O|ValorContas|Folha:|Contas Cont|_{5,}|S[OÓ]CIO|CONTADOR|RG:|CPF:|CRC:|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$|\d{2,}-\d{3}$|0{4,}\d|^$)/;
+  const moneyOnly = /^-?\d{1,3}(?:\.\d{3})*,\d{2}$/;
+  const out = { total: 0, b2b: 0, b2c: 0, entity: 0, amounts: [] as number[] };
+  let nameBuf: string[] = [];
+  // Pula a linha imediatamente após o cabeçalho se for o total da conta (já está em accountsReceivable).
+  for (let i = start; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line) { continue; }
+    if (stopRe.test(line)) break;
+    if (noiseRe.test(line)) { nameBuf = []; continue; }
+    if (moneyOnly.test(line)) {
+      const amount = Number(line.replace(/\./g, '').replace(',', '.'));
+      if (!Number.isFinite(amount)) { nameBuf = []; continue; }
+      // Ignora o total inicial (147.536,81 logo após "CLIENTES").
+      if (!nameBuf.length) continue;
+      const name = nameBuf.join(' ').replace(/\s+/g, ' ').trim();
+      const cls = classifyClientName(name);
+      out.total += amount;
+      out.amounts.push(amount);
+      if (cls === 'b2b') out.b2b += amount;
+      else if (cls === 'entity') out.entity += amount;
+      else out.b2c += amount;
+      nameBuf = [];
+      continue;
+    }
+    // Linha textual = parte do nome do cliente
+    nameBuf.push(line);
+  }
+  return out;
+}
+
+function classifyClientName(name: string): 'b2b' | 'b2c' | 'entity' {
+  const u = name.toUpperCase();
+  if (/(\bASSOC(?:IACAO|IAÇÃO|\.)|\bCOND(?:OM[IÍ]NIO|\.)|\bEDIF[IÍ]CIO|\bROTARY|\bCLUBE|\bLOJA\s+SIMB[OÓ]LICA|\bIGREJA|\bPAR[OÓ]QUIA)/.test(u)) return 'entity';
+  if (/(\bLTDA\b|\bEIRELI\b|\bS\/?A\b|\bSA\b|\bCIA\b|\bME\b|\bEPP\b|\bMEI\b|ADVOG\.?\s*ASSOC|CORRETORA|TRANSPORTES|TURISMO|TELECOM|CL[IÍ]NICA|PRODUTORA|REPRES|REPRESENTA|IND[\.\s]|COM[\.\s]|COMERCIO|COM[ÉE]RCIO|IND[ÚU]STRIA|SERV[\.IÇOS]|& CIA|EIR\b)/.test(u)) return 'b2b';
+  return 'b2c';
+}
+
 function confidenceFromFindings(findings: TaxReformDocumentFinding[], base = 0.35) {
   if (!findings.length) return 0;
   return clampConfidence(Math.min(0.95, base + findings.length * 0.08));
