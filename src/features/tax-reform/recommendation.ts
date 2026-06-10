@@ -50,13 +50,15 @@ export function buildTaxReformRecommendation({
   if (currentRegime === 'simples_nacional') {
     if (isLowComplexityB2C) return 'permanecer_simples';
     if (hasStrongB2BPressure) return 'avaliar_lucro_presumido';
-    return 'analise_manual_necessaria';
+    // Cenário meio-termo: recomendação preliminar de permanência no regime atual.
+    return 'permanecer_simples';
   }
 
   // Lucro Presumido
   if (isLowComplexityB2C) return 'avaliar_simples_nacional';
   if (hasStrongB2BPressure) return 'permanecer_lucro_presumido';
-  return 'analise_manual_necessaria';
+  // Cenário meio-termo: recomendação preliminar de permanência no regime atual.
+  return 'permanecer_lucro_presumido';
 }
 
 export function buildRecommendationSummary(
