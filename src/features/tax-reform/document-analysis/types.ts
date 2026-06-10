@@ -28,6 +28,88 @@ export type TaxReformExtractedValues = {
 
   warnings?: string[];
   confidence?: number;
+
+  // ---- Identificação genérica ----
+  cnpj?: string;
+  companyName?: string;
+  period?: string;
+
+  // ---- PGDAS específicos ----
+  monthlyRevenue?: number;
+  rba?: number;
+  rbaa?: number;
+  simplesLimit?: number;
+  sublimit?: number;
+  dasTotal?: number;
+  irpj?: number;
+  csll?: number;
+  cofins?: number;
+  pis?: number;
+  inssCpp?: number;
+  icms?: number;
+  ipi?: number;
+  iss?: number;
+  simplesLimitUsagePercent?: number;
+  sublimitUsagePercent?: number;
+  nearSimplesLimit?: boolean;
+  factorRStatus?: 'aplica' | 'nao_se_aplica' | 'desconhecido';
+  shouldCalculateFactorR?: boolean;
+
+  // ---- Balanço ----
+  assetsTotal?: number;
+  currentAssets?: number;
+  cashAndBanks?: number;
+  financialInvestments?: number;
+  accountsReceivable?: number;
+  nonCurrentAssets?: number;
+  liabilitiesTotal?: number;
+  currentLiabilities?: number;
+  suppliersBalance?: number;
+  laborObligations?: number;
+  taxObligations?: number;
+  simplesPayable?: number;
+  irrfPayable?: number;
+  equity?: number;
+  capitalStock?: number;
+  accumulatedProfits?: number;
+  afac?: number;
+
+  // ---- DRE ----
+  grossRevenue?: number;
+  serviceRevenue?: number;
+  simplesNacionalExpense?: number;
+  netRevenue?: number;
+  serviceCosts?: number;
+  grossProfit?: number;
+  adminExpenses?: number;
+  proLabore?: number;
+  pjServices?: number;
+  taxExpenses?: number;
+  financialResult?: number;
+  otherOperatingExpenses?: number;
+  annualPayrollFromDre?: number;
+  payrollPercentFromDre?: number;
+  annualEffectiveTaxRate?: number;
+  netMargin?: number;
+
+  // ---- Folha de pagamento ----
+  employeesCount?: number;
+  salaryTotal?: number;
+  inssBase?: number;
+  inssValue?: number;
+  irrfBase?: number;
+  irrfValue?: number;
+  fgtsBase?: number;
+  fgtsValue?: number;
+  grossPayroll?: number;
+  discounts?: number;
+  netPayroll?: number;
+
+  // ---- Folha × PGDAS (cross-document) ----
+  payrollPercentByMonthlyRevenue?: number;
+  payrollWithChargesPercentByMonthlyRevenue?: number;
+  annualizedPayrollPercentByRbt12?: number;
+  annualizedPayrollWithChargesPercentByRbt12?: number;
 };
 
 export type TaxReformDocumentFinding = {
