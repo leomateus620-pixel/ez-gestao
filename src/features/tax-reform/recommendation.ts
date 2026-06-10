@@ -20,21 +20,42 @@ export function buildTaxReformRecommendation({
 
   const b2b = toNumber(answers.sales_b2b_percent);
   const b2c = toNumber(answers.sales_b2c_percent);
+  const b2bLR = toNumber(answers.b2b_lucro_real_percent);
   const clientsUseCredits = answers.clients_use_tax_credits === 'sim' || answers.clients_use_tax_credits === 'parcialmente';
-  const clientLossRisk = answers.client_loss_risk === 'alto' || answers.client_loss_risk === 'medio';
+  const clientLossRiskHigh = answers.client_loss_risk === 'alto' || answers.client_loss_risk === 'medio';
   const seeksSimplicity = answers.partners_main_goal === 'manter_simplicidade';
+  const wantsGrowth = answers.partners_main_goal === 'crescer'
+    || answers.partners_main_goal === 'ganhar_mercado'
+    || answers.partners_main_goal === 'atrair_grandes_clientes';
   const lowInputs = answers.inputs_revenue_percent === 'ate_20' || answers.inputs_revenue_percent === '21_40';
-  const lowComplexityB2C = total <= 30 && b2c >= 60 && !clientsUseCredits && !clientLossRisk && (seeksSimplicity || lowInputs);
-  const strongB2BPressure = total > 30 || b2b >= 50 || clientsUseCredits || clientLossRisk;
+  const lowComplexityProfile = answers.business_complexity_acceptance === 'nao' || answers.business_complexity_acceptance === 'depende_economia';
+
+  // Perfil de baixa complexidade / B2C dominante.
+  const isLowComplexityB2C =
+    total <= 30 &&
+    b2c >= 60 &&
+    !clientsUseCredits &&
+    !clientLossRiskHigh &&
+    lowInputs &&
+    (seeksSimplicity || lowComplexityProfile);
+
+  // Pressão B2B / créditos / clientes grandes.
+  const hasStrongB2BPressure =
+    b2b >= 40 ||
+    clientsUseCredits ||
+    b2bLR >= 20 ||
+    clientLossRiskHigh ||
+    wantsGrowth;
 
   if (currentRegime === 'simples_nacional') {
-    if (lowComplexityB2C) return 'permanecer_simples';
-    if (strongB2BPressure) return 'avaliar_lucro_presumido';
+    if (isLowComplexityB2C) return 'permanecer_simples';
+    if (hasStrongB2BPressure) return 'avaliar_lucro_presumido';
     return 'analise_manual_necessaria';
   }
 
-  if (lowComplexityB2C) return 'avaliar_simples_nacional';
-  if (strongB2BPressure) return 'permanecer_lucro_presumido';
+  // Lucro Presumido
+  if (isLowComplexityB2C) return 'avaliar_simples_nacional';
+  if (hasStrongB2BPressure) return 'permanecer_lucro_presumido';
   return 'analise_manual_necessaria';
 }
 
