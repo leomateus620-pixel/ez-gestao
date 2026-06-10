@@ -129,15 +129,15 @@ function extract(documentType: string, text: string) {
       }
       const parsed = nums.map((n) => normalizeNumber(n)).filter((n): n is number => n !== undefined);
       if (parsed.length >= 11) {
-        // Ordem do cabeçalho JB Folha "RESUMO DE CÁLCULO":
-        // Salário, S.Fam, BaseINSS, INSS, BaseIRRF, IRRF, BaseFGTS, FGTS, Prov./Vant., Descontos, Líquido
+        // Ordem observada na linha Total via unpdf:
+        // [0]=Salário, [1]=S.Fam, [2]=BaseINSS, [3]=INSS, [4]=FGTS, [5]=IRRF, [6]=BaseFGTS, [7]=BaseIRRF, [8]=Prov./Vant., [9]=Descontos, [10]=Líquido
         values.salaryTotal = parsed[0];
         values.inssBase = parsed[2];
         values.inssValue = parsed[3];
-        values.irrfBase = parsed[4];
+        values.fgtsValue = parsed[4];
         values.irrfValue = parsed[5];
         values.fgtsBase = parsed[6];
-        values.fgtsValue = parsed[7];
+        values.irrfBase = parsed[7];
         values.grossPayroll = parsed[8];
         values.discounts = parsed[9];
         values.netPayroll = parsed[10];
