@@ -485,6 +485,12 @@ function CompanyForm({ onSave, initial, analysisYear = currentYear, compact = fa
       return;
     }
 
+    const effectiveRate = normalizeNumber(form.effectiveTaxRate);
+    if (effectiveRate !== undefined && (effectiveRate < 0 || effectiveRate > 100)) {
+      toast.error('Alíquota efetiva deve estar entre 0 e 100%.');
+      return;
+    }
+
     const timestamp = nowIso();
     onSave({
       id: initial?.id ?? newId(),
@@ -495,7 +501,7 @@ function CompanyForm({ onSave, initial, analysisYear = currentYear, compact = fa
       responsibleUser: form.responsibleUser.trim(),
       rbt12: normalizeNumber(form.rbt12),
       projectedRevenue: normalizeNumber(form.projectedRevenue),
-      effectiveTaxRate: normalizeNumber(form.effectiveTaxRate),
+      effectiveTaxRate: effectiveRate,
       notes: form.notes,
       createdAt: initial?.createdAt ?? timestamp,
       updatedAt: timestamp,
@@ -514,7 +520,7 @@ function CompanyForm({ onSave, initial, analysisYear = currentYear, compact = fa
         <div className="space-y-2"><Label>Ano-base da análise <span className="text-destructive">*</span></Label><Input type="number" min="2026" max="2100" value={form.analysisYear} onChange={(e) => update('analysisYear', e.target.value)} /></div>
         <div className="space-y-2"><Label>Faturamento últimos 12 meses</Label><Input value={form.rbt12} onChange={(e) => update('rbt12', e.target.value)} placeholder="R$" /></div>
         <div className="space-y-2"><Label>Faturamento projetado 12 meses</Label><Input value={form.projectedRevenue} onChange={(e) => update('projectedRevenue', e.target.value)} placeholder="R$" /></div>
-        <div className="space-y-2"><Label>Alíquota efetiva atual (%)</Label><Input type="number" min="0" max="100" value={form.effectiveTaxRate} onChange={(e) => update('effectiveTaxRate', e.target.value)} /></div>
+        <div className="space-y-2"><Label>Alíquota efetiva atual (%)</Label><Input type="text" inputMode="decimal" pattern="[0-9.,]*" placeholder="0,00" value={form.effectiveTaxRate} onChange={(e) => update('effectiveTaxRate', e.target.value)} /></div>
       </div>
       <div className="space-y-2"><Label>Observações internas</Label><Textarea value={form.notes} onChange={(e) => update('notes', e.target.value)} placeholder="Contexto, sazonalidade, premissas e pontos de atenção." /></div>
       <div className="flex justify-end"><Button onClick={submit} className="gap-2"><Save className="h-4 w-4" />{initial ? 'Salvar e continuar análise' : 'Cadastrar e abrir análise'}</Button></div>
