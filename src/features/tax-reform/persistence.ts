@@ -94,6 +94,8 @@ function mapDocument(row: any): TaxReformDocument {
     readingStatus: row.reading_status as ReadingStatus,
     extractedSummary: row.extracted_summary ?? '',
     extractionError: row.extraction_error ?? '',
+    extractedValues: row.extracted_values ?? undefined,
+    extractedFindings: row.extracted_findings ?? undefined,
     storageBucket: row.storage_bucket ?? undefined,
     storagePath: row.storage_path ?? undefined,
     uploadStatus: (row.upload_status ?? undefined) as UploadStatus | undefined,
@@ -200,6 +202,8 @@ const documentToRow = (document: TaxReformDocument) => ({
   reading_status: document.readingStatus,
   extracted_summary: document.extractedSummary ?? null,
   extraction_error: document.extractionError ?? null,
+  extracted_values: document.extractedValues ?? null,
+  extracted_findings: document.extractedFindings ?? null,
   storage_bucket: document.storageBucket ?? null,
   storage_path: document.storagePath ?? null,
   upload_status: document.uploadStatus ?? null,
@@ -421,4 +425,17 @@ export async function getTaxReformDocumentSignedUrl(
     console.error('[reforma-tributaria] falha ao gerar signed URL', { storagePath, error });
     return null;
   }
+}
+
+
+export async function processTaxReformDocument(documentId: string): Promise<TaxReformDocument | null> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase não configurado para processar documentos da Reforma Tributária.');
+  }
+  const { data, error } = await db().functions.invoke('process-tax-reform-document', {
+    body: { document_id: documentId },
+  });
+  if (error) throw error;
+  if (!data?.document) return null;
+  return mapDocument(data.document);
 }

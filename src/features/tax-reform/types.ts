@@ -1,3 +1,5 @@
+import type { TaxReformDocumentFinding, TaxReformExtractedValues } from './document-analysis/types';
+
 export type TaxRegime = 'simples_nacional' | 'lucro_presumido';
 export type MainActivity = 'comercio' | 'industria' | 'servicos' | 'misto';
 
@@ -9,7 +11,7 @@ export type AnalysisStatus =
   | 'analise_concluida'
   | 'necessita_revisao_manual';
 
-export type ReadingStatus = 'aguardando_leitura' | 'lido' | 'erro_leitura' | 'nao_processavel';
+export type ReadingStatus = 'aguardando_leitura' | 'lendo' | 'lido' | 'erro_leitura' | 'nao_processavel';
 export type RiskLevel = 'baixo_risco' | 'risco_medio' | 'alto_risco' | 'dados_insuficientes';
 export type Recommendation =
   | 'permanecer_simples'
@@ -25,13 +27,14 @@ export type FinalDecision =
   | 'rodar_simulacao_detalhada'
   | 'coletar_dados_adicionais';
 
-export type TaxReformAlertType = 'commercial_risk' | 'likely_simples' | 'missing_documents' | 'manual_review';
+export type TaxReformAlertType = 'commercial_risk' | 'likely_simples' | 'missing_documents' | 'manual_review' | 'document_divergence' | 'document_reading';
 export type TaxReformAlertSeverity = 'info' | 'warning' | 'critical';
 
 export type AnswerValue = string | number | string[] | null | undefined;
 export type AnswerMap = Record<string, AnswerValue>;
 
 export type UploadStatus = 'enviado' | 'erro_upload';
+
 export type ConfidenceLevel = 'baixa' | 'media' | 'alta';
 
 export interface TaxReformCompany {
@@ -82,6 +85,8 @@ export interface TaxReformDocument {
   readingStatus: ReadingStatus;
   extractedSummary?: string;
   extractionError?: string;
+  extractedValues?: TaxReformExtractedValues;
+  extractedFindings?: TaxReformDocumentFinding[];
   storageBucket?: string;
   storagePath?: string;
   uploadStatus?: UploadStatus;

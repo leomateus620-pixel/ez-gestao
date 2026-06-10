@@ -44,7 +44,17 @@ export function buildTaxReformAlerts({ answers, documents = [], insufficientData
       alertType: 'missing_documents',
       severity: 'warning',
       title: 'Documentos pendentes',
-      message: 'A análise está incompleta. Para maior segurança técnica, anexar DRE, balancete, PGDAS, faturamento por cliente e relação dos principais fornecedores.',
+      message: 'Análise baseada apenas no questionário. Anexe DRE, PGDAS, balancete, faturamento por cliente e fornecedores para aumentar a segurança da conclusão.',
+    });
+  }
+
+  const documentsWithReadingError = documents.filter((doc) => doc.readingStatus === 'erro_leitura').length;
+  if (documentsWithReadingError > 0) {
+    alerts.push({
+      alertType: 'document_reading',
+      severity: 'warning',
+      title: 'Documento com erro de leitura',
+      message: `${documentsWithReadingError} documento(s) não puderam ser lidos e não aumentaram a confiança da análise.`,
     });
   }
 
