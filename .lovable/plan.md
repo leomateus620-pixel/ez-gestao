@@ -1,81 +1,103 @@
-# Validação Reforma Tributária — Lovable Cloud
+## Objetivo
 
-## Causa raiz já identificada
+Corrigir duas falhas reais do módulo Reforma Tributária:
 
-Os logs do console mostram erro recorrente ao salvar a análise:
+1. Sem documentos, o sistema joga para "Análise manual necessária" mesmo com questionário completo.
+2. PDFs e planilhas anexadas não são lidos de verdade — a Edge Function `process-tax-reform-document` só faz `TextDecoder` em bytes brutos (não funciona para PDF) e marca XLSX/XLS como `nao_processavel`.
 
-```
-code: 42P10 — there is no unique or exclusion constraint matching the ON CONFLICT specification
-```
+Sem mocks. Sem simulação. Erro real quando o arquivo não puder ser lido.
 
-Investigação no banco real confirma:
+---
 
-- `tax_reform_alerts` só possui `PRIMARY KEY (id)` — **não tem** `UNIQUE (analysis_id, alert_type)`.
-- O código em `src/features/tax-reform/persistence.ts:328` chama `upsert(..., { onConflict: 'analysis_id,alert_type' })`.
+## Parte A — Recomendação preliminar sem documentos
 
-Resultado: toda persistência de alertas falha silenciosamente no Supabase real, e a função `saveTaxReformStore` rejeita, fazendo o sistema cair para localStorage sem aviso claro — exatamente o sintoma que o usuário descreveu ("localStorage funcionando como persistência silenciosa").
+### A.1 `src/features/tax-reform/recommendation.ts`
+- Remover o fallback `return 'analise_manual_necessaria'` dos dois ramos finais (Simples e Lucro Presumido). Hoje, qualquer cenário "meio termo" (nem baixo complexidade B2C, nem forte pressão B2B) vira manual — isso quebra o caso de questionário completo sem documentos.
+- Novo comportamento: nesse meio-termo, devolver a recomendação de permanência no regime atual (`permanecer_simples` / `permanecer_lucro_presumido`) como **preliminar**, baseada apenas no questionário.
+- Manter `analise_manual_necessaria` apenas quando: regime inválido OU `riskLevel === 'dados_insuficientes'` (que já cobre perguntas decisivas faltantes e divergência crítica documento×questionário).
 
-Demais tabelas estão OK:
-- `tax_reform_answers` tem `UNIQUE (analysis_id, question_key)` ✓
-- `tax_reform_companies`, `tax_reform_analyses`, `tax_reform_documents` usam `onConflict: 'id'` (PK) ✓
+### A.2 `src/features/tax-reform/score.ts`
+- `getMissingRequiredData`: continuar listando documentos faltantes, mas a flag `requireDocuments` passa a ser **informativa** (não vira "bloqueio"). Já está correto em `rules.ts` (`blockingMissingData` filtra `documento:`), apenas reconfirmar.
 
-E o `GuideProvider` já é corretamente gated por `pathname` (`/guias`, `/integracoes`, `/`), então rotas como `/reforma-tributaria`, `/classifica`, `/configuracoes`, `/whatsapp` **não** disparam queries de guias. Não há refator de provider necessário.
+### A.3 `src/features/tax-reform/components/TaxReformWorkspace.tsx`
+- Em `ScoreAndRecommendation`, ajustar o cálculo de `analysisStatus`:
+  - `Bloqueada` → só quando `essentialMissing.length > 0` (perguntas decisivas).
+  - `Revisão manual` → só quando `score.recommendation === 'analise_manual_necessaria'` OU houver alerta `document_divergence` crítico.
+  - **`Preliminar`** → quando recomendação válida + sem documentos lidos (`uploaded.length === 0` ou nenhum `readingStatus === 'lido'`). Adicionar texto: "Análise baseada apenas no questionário. A conclusão pode mudar após a leitura dos documentos."
+  - **`Final com documentos`** → recomendação válida + pelo menos 1 documento lido + confiança média/alta.
+  - `Rascunho local` permanece quando `remotePersisted=false`.
+- Card "Documentos pendentes" deve sempre listar os tipos faltantes nesse modo preliminar (já existe via `missingDocs`).
 
-## Escopo da correção
+### A.4 `src/features/tax-reform/rules.test.ts`
+- Atualizar o teste linha 187/200 ("preliminary recommendation … documents are absent"): esperar `permanecer_simples` (ou `permanecer_lucro_presumido` conforme regime) em vez de `analise_manual_necessaria`.
+- Manter o teste linha 83 (regime inválido → manual) e o 231 (perguntas decisivas faltando → manual).
 
-### 1. Migration — adicionar UNIQUE em tax_reform_alerts
+---
 
-```sql
--- Limpar duplicatas antes de aplicar UNIQUE (mantém o mais recente por par)
-DELETE FROM public.tax_reform_alerts a
-USING public.tax_reform_alerts b
-WHERE a.analysis_id = b.analysis_id
-  AND a.alert_type  = b.alert_type
-  AND a.created_at < b.created_at;
+## Parte B — Leitura real de documentos (Edge Function)
 
-ALTER TABLE public.tax_reform_alerts
-  ADD CONSTRAINT tax_reform_alerts_analysis_type_key
-  UNIQUE (analysis_id, alert_type);
-```
+### B.1 Reescrever `supabase/functions/process-tax-reform-document/index.ts`
 
-### 2. Aviso explícito quando cair em modo local
+Adicionar parsers reais via `npm:` specifiers:
+- **PDF (texto)**: `npm:unpdf@0.12` (`extractText` — funciona em Deno/edge, sem worker nativo).
+- **XLSX/XLS**: `npm:xlsx@0.18` (SheetJS) — `read(bytes, {type:'array'})` + `sheet_to_csv` por planilha. Concatenar CSVs e alimentar os mesmos extratores já existentes.
+- **CSV/TXT**: TextDecoder (atual).
+- **Imagens / PDF sem texto**: marcar `nao_processavel` com mensagem clara "Documento parece imagem/escaneado. OCR ainda não está disponível."
 
-Em `src/features/tax-reform/persistence.ts` (ou no wrapper que chama `saveTaxReformStore`), quando qualquer upsert do Supabase falhar, exibir `toast.warning` claro: "Modo rascunho local — alterações não foram salvas na nuvem" e marcar a análise como `Preliminar` no painel Resultado (não permitir badge `Confiável`).
+Fluxo:
+1. Validar `Authorization` (header obrigatório, JWT do usuário — usar client com `SUPABASE_ANON_KEY` + Authorization para checar `auth.getUser()`; usar `SUPABASE_SERVICE_ROLE_KEY` apenas para escrita).
+2. Buscar documento, `update reading_status='lendo'`.
+3. Download do bucket.
+4. Detectar tipo (extensão + MIME) e despachar para o parser.
+5. Se PDF: tentar `unpdf.extractText`. Se texto resultante for vazio/curto (< 40 chars úteis) → `nao_processavel` com motivo "PDF sem camada de texto (provável escaneado)".
+6. Se XLSX/XLS: extrair texto de todas as planilhas via SheetJS.
+7. Chamar `extract(documentType, text)` (já existe e cobre DRE/PGDAS/Balancete/Faturamento por cliente/Fornecedores/Folha — não precisa reescrever, só está ganhando texto real).
+8. Salvar `reading_status` (`lido` / `erro_leitura` / `nao_processavel`), `extracted_values`, `extracted_summary`, `extracted_findings`, `extraction_confidence`, `extraction_error`.
+9. CORS: trocar `corsHeaders` local pelo import `npm:@supabase/supabase-js@2/cors`.
 
-Sem isso, o usuário não distingue persistência real de localStorage — que é o ponto 2 do checklist do usuário.
+### B.2 Migration de schema (verificar/garantir colunas JSONB)
+Já existem em `tax_reform_documents` (visto em `mapDocument`): `extracted_values`, `extracted_findings`, `extracted_summary`, `extraction_confidence`, `extraction_error`, `storage_path`, `storage_bucket`, `upload_status`, `uploaded_by`. **Confirmar** via `supabase--read_query` antes de criar migration; só criar se faltar coluna.
 
-### 3. Validação real no preview (após migration aplicada)
+### B.3 Cliente
+- `persistence.ts` `processTaxReformDocument` já chama `functions.invoke('process-tax-reform-document', { body: { document_id } })`. Confirmar que o `body` envia `document_id` (snake_case) que a função espera.
+- `TaxReformWorkspace.tsx` `analyzeDocuments` já existe — manter. Adicionar mensagem distinta para `nao_processavel` (toast.info, não error).
 
-Roteiro manual via `browser--view_preview` em `/reforma-tributaria`:
+### B.4 Cruzamento documentos × questionário
+Já implementado em `document-analysis/reconcile.ts` + `documentScore.ts` + `alerts` (`document_divergence`). Após Parte B funcionar com dados reais, esse pipeline passa a operar automaticamente — sem código novo.
 
-1. Cadastrar empresa → verificar via `supabase--read_query` em `tax_reform_companies`.
-2. Responder questionário → verificar `tax_reform_answers` (uma linha por questão).
-3. Upload PDF → verificar arquivo no bucket `tax-reform-documents` e linha em `tax_reform_documents` com `storage_path` e `upload_status='enviado'`.
-4. Clicar "Abrir" no documento → confirmar que a URL assinada (`createSignedUrl`) abre.
-5. Salvar parecer manual + decisão final → verificar `tax_reform_analyses.manual_review_notes` e campos de decisão.
-6. Recarregar página e abrir em aba anônima autenticada → confirmar dados vindos do Supabase.
-7. Repetir para um segundo `analysis_year` na mesma empresa — confirmar que histórico não sobrescreve.
-8. Simular falha de upload (arquivo inválido) → confirmar `upload_status='erro_upload'`, documento não conta para confiança, alerta de documento pendente continua aparecendo.
+---
 
-### 4. Validação de navegação (sem mudanças de código)
+## Parte C — Validação real no preview
 
-Browser smoke test: Dashboard → Guias → Empresas → Fator R → Reforma Tributária → Classifica → WhatsApp → Dashboard. Confirmar que nenhuma rota quebra e que /reforma-tributaria está no menu.
+1. `bunx vitest run` (esperar testes ajustados em A.4 passarem; suite atual 40 testes).
+2. No preview `/reforma-tributaria`:
+   - **Teste 1**: cadastrar empresa Simples, responder questionário completo, **sem documentos** → resultado deve mostrar status `Preliminar`, recomendação `Permanecer no Simples` (ou similar), confiança baixa, documentos pendentes listados.
+   - **Teste 2**: anexar DRE em XLSX real → clicar "Analisar documentos" → status `lido`, valores (receita, custos, margem) preenchidos.
+   - **Teste 3**: anexar PGDAS PDF com texto → RBT12/alíquota extraídos.
+   - **Teste 4**: anexar PDF escaneado → `nao_processavel` com mensagem OCR indisponível.
+3. Recarregar a página: dados persistem (`tax_reform_documents.extracted_values` salvos via service_role).
+4. Smoke test rápido nos outros menus (Dashboard, Guias, Classifica, Fator R, WhatsApp) para garantir que nada quebrou.
 
-### 5. Verificações de qualidade
-
-- `bunx vitest run` (suite completa)
-- Build automático do harness
+---
 
 ## Fora de escopo
 
-- Redesign de qualquer tela
-- Refator de providers (GuideProvider já está corretamente gated)
-- Mudanças em Classifica, WhatsApp, Fator R, Guias além de smoke test
-- Pipeline real de extração de PDF
-- Atualização de README (separar para outra task se o usuário pedir)
+- OCR (mensagem clara "indisponível" basta).
+- Redesign de telas.
+- Mexer em Classifica, Fator R, Guias, WhatsApp.
+- Editar `supabase/integrations/supabase/client.ts` ou `types.ts`.
+- Recriar componentes existentes (`reconcile.ts`, `documentScore.ts`, `alerts.ts` ficam intactos).
 
-## Entregáveis
+---
 
-1. Migration que adiciona `UNIQUE (analysis_id, alert_type)` em `tax_reform_alerts`.
-2. Aviso de modo rascunho em `persistence.ts` / painel Resultado.
-3. Relatório final com: tabelas verificadas via SQL, screenshots dos passos críticos do roteiro, resultado do vitest, e confirmação de que o erro 42P10 sumiu dos logs do console.
+## Detalhes técnicos
+
+**Arquivos modificados:**
+- `src/features/tax-reform/recommendation.ts` (remover fallback manual)
+- `src/features/tax-reform/components/TaxReformWorkspace.tsx` (status Preliminar)
+- `src/features/tax-reform/rules.test.ts` (atualizar 1 expectativa)
+- `supabase/functions/process-tax-reform-document/index.ts` (reescrita com unpdf + xlsx)
+
+**Possível migration (só se colunas faltarem):** add `extracted_findings jsonb`, `extraction_confidence numeric`, etc. — checar antes.
+
+**Dependências Edge Function:** `npm:unpdf@0.12`, `npm:xlsx@0.18` — ambos compatíveis com Deno via `npm:` specifier, sem `deno.json`.

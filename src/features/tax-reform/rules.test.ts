@@ -4,7 +4,7 @@ import {
   getCompanyAnalysisHistory,
   REQUIRED_DOCUMENT_TYPES,
 } from './rules';
-import type { AnswerMap, TaxReformAnalysis } from './types';
+import type { AnswerMap, DocumentLike, ReadingStatus, TaxReformAnalysis, UploadStatus } from './types';
 
 const completeDocs = REQUIRED_DOCUMENT_TYPES.map((documentType) => ({ documentType }));
 
@@ -175,10 +175,15 @@ describe('getCompanyAnalysisHistory', () => {
 });
 
 describe('document driven Reforma Tributária analysis', () => {
-  const doc = (documentType: string, extractedValues: Record<string, unknown>, extractionConfidence = 0.8, readingStatus = 'lido') => ({
+  const doc = (
+    documentType: string,
+    extractedValues: Record<string, unknown>,
+    extractionConfidence = 0.8,
+    readingStatus: ReadingStatus = 'lido',
+  ): DocumentLike & { extractionConfidence: number; extractedValues: Record<string, unknown> } => ({
     documentType,
     readingStatus,
-    uploadStatus: 'enviado',
+    uploadStatus: 'enviado' as UploadStatus,
     storagePath: `${documentType}.csv`,
     extractionConfidence,
     extractedValues: { ...extractedValues, confidence: extractionConfidence },

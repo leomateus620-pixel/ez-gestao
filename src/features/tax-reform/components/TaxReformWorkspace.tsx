@@ -740,17 +740,22 @@ function ScoreAndRecommendation({ company, analysis, documents, remotePersisted 
   const missingDocs = score.missingRequiredData.filter((key) => key.startsWith('documento:'));
   const uploaded = documents.filter((doc) => doc.uploadStatus !== 'erro_upload');
   const failed = documents.filter((doc) => doc.uploadStatus === 'erro_upload');
+  const readDocuments = documents.filter((doc) => doc.readingStatus === 'lido');
+  const pendingReading = documents.filter((doc) => doc.uploadStatus !== 'erro_upload' && (doc.readingStatus === 'aguardando_leitura' || doc.readingStatus === 'lendo'));
+  const hasCriticalDivergence = score.alerts.some((alert) => alert.alertType === 'document_divergence' && alert.severity === 'critical');
   let analysisStatus: { label: string; tone: string; description: string };
   if (!remotePersisted) {
     analysisStatus = { label: 'Rascunho local', tone: 'border-amber-300 bg-amber-50 text-amber-900', description: 'Os dados não foram salvos na nuvem. Sincronize antes de tratar como decisão final.' };
   } else if (essentialMissing.length > 0) {
     analysisStatus = { label: 'Bloqueada', tone: 'border-rose-200 bg-rose-50 text-rose-900', description: 'Responda as perguntas decisivas para liberar a recomendação confiável.' };
-  } else if (score.recommendation === 'analise_manual_necessaria') {
+  } else if (score.recommendation === 'analise_manual_necessaria' || hasCriticalDivergence) {
     analysisStatus = { label: 'Revisão manual', tone: 'border-amber-200 bg-amber-50 text-amber-900', description: 'O cenário exige parecer manual do contador antes da decisão final.' };
+  } else if (readDocuments.length === 0) {
+    analysisStatus = { label: 'Preliminar', tone: 'border-sky-200 bg-sky-50 text-sky-900', description: 'Análise baseada apenas no questionário. A conclusão pode mudar após a leitura dos documentos.' };
   } else if (confidenceLevel === 'alta' && missingDocs.length === 0) {
-    analysisStatus = { label: 'Confiável', tone: 'border-emerald-200 bg-emerald-50 text-emerald-900', description: 'Perguntas decisivas respondidas e documentos suficientes enviados.' };
+    analysisStatus = { label: 'Final com documentos', tone: 'border-emerald-200 bg-emerald-50 text-emerald-900', description: 'Perguntas decisivas respondidas e documentos suficientes lidos com sucesso.' };
   } else {
-    analysisStatus = { label: 'Preliminar', tone: 'border-sky-200 bg-sky-50 text-sky-900', description: 'Recomendação inicial. Envie mais documentos para subir a confiança.' };
+    analysisStatus = { label: 'Parcial', tone: 'border-sky-200 bg-sky-50 text-sky-900', description: pendingReading.length > 0 ? `${pendingReading.length} documento(s) aguardando leitura. Clique em "Analisar documentos" para processar.` : 'Recomendação inicial. Envie mais documentos para subir a confiança.' };
   }
   const openSignedUrl = async (doc: TaxReformDocument) => {
     if (!doc.storagePath) { toast.error('Documento sem storage path. Reenvie o arquivo.'); return; }
@@ -1178,10 +1183,14 @@ export default function ReformaTributaria() {
 
     const processed: TaxReformDocument[] = [];
     let failures = 0;
+    let nonProcessable = 0;
     for (const doc of processableDocuments) {
       try {
         const updated = await processTaxReformDocument(doc.id);
-        if (updated) processed.push(updated);
+        if (updated) {
+          processed.push(updated);
+          if (updated.readingStatus === 'nao_processavel') nonProcessable += 1;
+        }
       } catch (error) {
         failures += 1;
         const message = error instanceof Error ? error.message : 'Falha ao chamar o processador real.';
@@ -1204,7 +1213,9 @@ export default function ReformaTributaria() {
         ...prev,
         documents: prev.documents.map((doc) => processed.find((updated) => updated.id === doc.id) ?? doc),
       }));
-      toast.success(`${processed.length} documento(s) processado(s) com leitura real.`);
+      const ok = processed.length - nonProcessable;
+      if (ok > 0) toast.success(`${ok} documento(s) processado(s) com leitura real.`);
+      if (nonProcessable > 0) toast.info(`${nonProcessable} documento(s) marcado(s) como não processáveis (ex.: imagem/escaneado).`);
     }
     if (failures) toast.error(`${failures} documento(s) não puderam ser lidos.`);
   };
