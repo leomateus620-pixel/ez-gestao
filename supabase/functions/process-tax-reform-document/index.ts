@@ -18,13 +18,43 @@ const normalizeNumber = (value?: string | null) => {
 };
 
 const money = /-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})?/;
-const numberAfter = (text: string, labels: string[]) => {
+const moneyG = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g;
+/**
+ * Procura um rótulo no texto e retorna o ÚLTIMO número monetário da MESMA linha
+ * (colunas de balancete: saldo atual costuma ser o último). Se a linha do rótulo
+ * não tiver número, busca em até `lookahead` linhas seguintes não-rótulo. Se
+ * houver múltiplas ocorrências do rótulo, prefere a última (transmissões/anos
+ * mais recentes).
+ */
+const numberAfter = (text: string, labels: string[], lookahead = 6) => {
+  const lines = text.replace(/\r/g, '\n').split('\n');
+  let best: number | undefined;
   for (const label of labels) {
-    const match = text.match(new RegExp(`${label}[^\\d-]{0,80}(${money.source})`, 'i'));
-    const value = normalizeNumber(match?.[1]);
-    if (value !== undefined) return value;
+    const re = new RegExp(label, 'i');
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!re.test(lines[i])) continue;
+      // Mesma linha → último número.
+      const sameLine = lines[i].match(moneyG);
+      if (sameLine && sameLine.length) {
+        const v = normalizeNumber(sameLine[sameLine.length - 1]);
+        if (v !== undefined) { best = v; continue; }
+      }
+      // Próximas linhas até achar número ou outra linha-rótulo.
+      for (let j = i + 1; j < Math.min(lines.length, i + 1 + lookahead); j += 1) {
+        const next = lines[j];
+        if (!next || !next.trim()) continue;
+        const nums = next.match(moneyG);
+        if (nums && nums.length) {
+          const v = normalizeNumber(nums[nums.length - 1]);
+          if (v !== undefined) { best = v; break; }
+        }
+        // Se for outra linha de texto sem número, desiste.
+        if (/[A-Za-zÀ-ú]{4,}/.test(next)) break;
+      }
+    }
+    if (best !== undefined) return best;
   }
-  return undefined;
+  return best;
 };
 const has = (text: string, words: string[]) => words.some((word) => new RegExp(word, 'i').test(text));
 const push = (findings: Finding[], documentType: string, field: string, value: unknown, confidence: number, sourceLabel?: string) => {
@@ -53,7 +83,13 @@ function extract(documentType: string, text: string) {
   if (documentType === 'dre' || documentType === 'balancete') {
     const revenue = numberAfter(text, ['receita bruta', 'receita operacional bruta', 'faturamento bruto', 'receitas', 'receita']);
     const costs = numberAfter(text, ['cmv', 'cpv', 'custo dos serviços', 'custo dos servicos', 'custos', 'compras']);
-    const payroll = numberAfter(text, ['folha', 'salários', 'salarios', 'encargos', 'pró-labore', 'pro-labore']);
+    // Folha em DRE: somar contas explícitas (evita pegar uma única linha "Folha" residual).
+    const payrollAccounts = ['Ordenados e Gratifica', '13[º°o]\\s*Sal[aá]rio', 'Decimo Terceiro Sal', 'F\\.?G\\.?T\\.?S', 'F[eé]rias', 'Aviso Pr[eé]vio', 'Pro-?Labore', 'Pr[oó]-?Labore', 'Estagi[aá]rios', 'Ajuda de Custo'];
+    let payroll = 0; let payrollHits = 0;
+    for (const acc of payrollAccounts) {
+      const v = numberAfter(text, [acc]);
+      if (v !== undefined) { payroll += Math.abs(v); payrollHits += 1; }
+    }
     const grossProfit = numberAfter(text, ['lucro bruto', 'resultado bruto']);
     const expenses = numberAfter(text, ['despesas operacionais', 'despesas']);
     const netProfit = numberAfter(text, ['lucro líquido', 'lucro liquido', 'resultado líquido', 'resultado liquido', 'resultado']);
@@ -61,21 +97,32 @@ function extract(documentType: string, text: string) {
     values.operatingExpenses = expenses;
     values.netProfit = netProfit;
     if (revenue && costs !== undefined) values.inputCostPercent = Number(((Math.abs(costs) / revenue) * 100).toFixed(2));
-    if (revenue && payroll !== undefined) values.payrollPercent = Number(((Math.abs(payroll) / revenue) * 100).toFixed(2));
+    if (revenue && payrollHits > 0) {
+      values.annualPayrollFromDre = Number(payroll.toFixed(2));
+      values.payrollPercent = Number(((payroll / revenue) * 100).toFixed(2));
+    }
     if (revenue && grossProfit !== undefined) values.grossMargin = Number(((grossProfit / revenue) * 100).toFixed(2));
     push(findings, documentType, 'revenue', values.revenue, 0.8, documentType.toUpperCase());
     push(findings, documentType, 'inputCostPercent', values.inputCostPercent, 0.78, documentType.toUpperCase());
     push(findings, documentType, 'payrollPercent', values.payrollPercent, 0.65, documentType.toUpperCase());
   } else if (documentType === 'pgdas') {
-    values.grossRevenue12m = numberAfter(text, ['rbt12', 'receita bruta acumulada', 'receita bruta total dos últimos 12 meses', 'receita bruta total dos ultimos 12 meses']);
-    values.revenue = numberAfter(text, ['receita mensal', 'receita do período', 'receita do periodo', 'receita bruta do pa']);
-    values.effectiveTaxRate = numberAfter(text, ['alíquota efetiva', 'aliquota efetiva', 'alíquota', 'aliquota']);
+    values.grossRevenue12m = numberAfter(text, ['rbt12', 'receita bruta acumulada', 'receita bruta total dos últimos 12 meses', 'receita bruta total dos ultimos 12 meses'], 10);
+    values.revenue = numberAfter(text, ['receita bruta do pa', 'receita mensal', 'receita do período', 'receita do periodo'], 10);
+    values.effectiveTaxRate = numberAfter(text, ['alíquota efetiva', 'aliquota efetiva'], 10);
     values.taxRegimeDetected = has(text, ['simples nacional', 'pgdas']) ? 'simples_nacional' : undefined;
     values.hasSt = has(text, ['substituição tributária', 'substituicao tributaria', '\\bST\\b']) || undefined;
     values.hasMonophasic = has(text, ['monofásic', 'monofasic']) || undefined;
     values.hasExportation = has(text, ['exportação', 'exportacao']) || undefined;
+    // Validação: dasTotal ≈ Σ tributos (quando ambos disponíveis).
+    const principal = text.match(/Principal\s+([\d.,]+)\s+Multa\s+[\d.,]+\s+Juros\s+[\d.,]+\s+Total\s+([\d.,]+)/i);
+    if (principal) values.dasTotal = normalizeNumber(principal[2]);
+    if (typeof values.dasTotal === 'number' && typeof values.revenue === 'number' && values.revenue > 0 && values.effectiveTaxRate === undefined) {
+      values.effectiveTaxRate = Number(((values.dasTotal / values.revenue) * 100).toFixed(2));
+    }
     push(findings, documentType, 'grossRevenue12m', values.grossRevenue12m, 0.9, 'PGDAS');
     push(findings, documentType, 'effectiveTaxRate', values.effectiveTaxRate, 0.9, 'PGDAS');
+    push(findings, documentType, 'dasTotal', values.dasTotal, 0.9, 'PGDAS');
+    push(findings, documentType, 'revenue', values.revenue, 0.9, 'PGDAS');
     push(findings, documentType, 'taxRegimeDetected', values.taxRegimeDetected, 0.9, 'PGDAS');
   } else if (documentType === 'faturamento_cliente') {
     let total = 0; let b2b = 0; let b2c = 0; let government = 0; const amounts: number[] = [];
@@ -100,53 +147,8 @@ function extract(documentType: string, text: string) {
     push(findings, documentType, 'b2bPercent', values.b2bPercent, 0.75, 'Faturamento por cliente');
     push(findings, documentType, 'top10ClientsConcentration', values.top10ClientsConcentration, 0.8, 'Faturamento por cliente');
   } else if (documentType === 'folha_pagamento') {
-    // CNPJ
-    const cnpjMatch = text.match(/\b\d{2}\.?\d{3}\.?\d{3}\/\d{4}-?\d{2}\b/);
-    if (cnpjMatch) values.cnpj = cnpjMatch[0];
-    const empMatch = text.match(/Empresa:\s*([^\n]+)/i);
-    if (empMatch) values.companyName = empMatch[1].trim();
-    const periodMatch = text.match(/Per[ií]odo:\s*\d{2}\/(\d{2})\/(\d{4})/i);
-    if (periodMatch) values.period = `${periodMatch[1]}/${periodMatch[2]}`;
-    const empCount = text.match(/Total de empregados:\s*(\d+)/i);
-    if (empCount) values.employeesCount = Number(empCount[1]);
-
-    // Localiza a linha que começa com "Total:" e junta linhas seguintes até obter 11 números.
-    const moneyRe = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g;
-    const lines = text.split(/\n/);
-    let totalIdx = -1;
-    for (let i = 0; i < lines.length; i++) {
-      if (/^\s*Total:/i.test(lines[i])) { totalIdx = i; break; }
-    }
-    if (totalIdx >= 0) {
-      let buf = lines[totalIdx].replace(/^\s*Total:/i, ' ');
-      let nums = buf.match(moneyRe) ?? [];
-      let j = totalIdx + 1;
-      while (nums.length < 11 && j < lines.length && j <= totalIdx + 6) {
-        if (/Total de empregados|P[áa]gina|JB Folha|Pacote/i.test(lines[j])) { j++; continue; }
-        buf += ' ' + lines[j];
-        nums = buf.match(moneyRe) ?? [];
-        j++;
-      }
-      const parsed = nums.map((n) => normalizeNumber(n)).filter((n): n is number => n !== undefined);
-      if (parsed.length >= 11) {
-        // Ordem observada na linha Total via unpdf:
-        // [0]=Salário, [1]=S.Fam, [2]=BaseINSS, [3]=INSS, [4]=FGTS, [5]=IRRF, [6]=BaseFGTS, [7]=BaseIRRF, [8]=Prov./Vant., [9]=Descontos, [10]=Líquido
-        values.salaryTotal = parsed[0];
-        values.inssBase = parsed[2];
-        values.inssValue = parsed[3];
-        values.fgtsValue = parsed[4];
-        values.irrfValue = parsed[5];
-        values.fgtsBase = parsed[6];
-        values.irrfBase = parsed[7];
-        values.grossPayroll = parsed[8];
-        values.discounts = parsed[9];
-        values.netPayroll = parsed[10];
-      } else {
-        warnings.push(`Linha Total encontrada mas com apenas ${parsed.length} valores numéricos.`);
-      }
-    } else {
-      warnings.push('Linha "Total" não encontrada no relatório de folha.');
-    }
+    const parsed = parsePayrollTotals(text, warnings);
+    Object.assign(values, parsed);
 
     push(findings, documentType, 'cnpj', values.cnpj, 0.9, 'Folha');
     push(findings, documentType, 'period', values.period, 0.9, 'Folha');
@@ -157,6 +159,9 @@ function extract(documentType: string, text: string) {
     push(findings, documentType, 'irrfValue', values.irrfValue, 0.8, 'Folha');
     push(findings, documentType, 'grossPayroll', values.grossPayroll, 0.9, 'Folha');
     push(findings, documentType, 'netPayroll', values.netPayroll, 0.85, 'Folha');
+    if (parsed.establishmentsAggregated && parsed.establishmentsAggregated > 1) {
+      push(findings, documentType, 'establishmentsAggregated', parsed.establishmentsAggregated, 0.8, 'Folha');
+    }
   } else {
     values.revenue = numberAfter(text, ['receita', 'faturamento']);
     const costs = numberAfter(text, ['fornecedores', 'compras', 'custos']);
@@ -167,10 +172,125 @@ function extract(documentType: string, text: string) {
     push(findings, documentType, 'inputCostPercent', values.inputCostPercent, 0.65, documentType);
     push(findings, documentType, 'supplierRegimeDetected', values.supplierRegimeDetected, 0.55, documentType);
   }
-  const confidence = findings.length ? Math.min(0.95, 0.35 + findings.length * 0.1) : 0;
+  // Gate de campos decisivos por tipo: se faltar o essencial, marcar erro_leitura
+  // (não inventar score com leitura parcial corrompida).
+  const missing = decisiveFieldsMissing(documentType, values);
+  let confidence = findings.length ? Math.min(0.95, 0.35 + findings.length * 0.1) : 0;
+  if (missing.length) {
+    warnings.push(`Campos decisivos ausentes: ${missing.join(', ')}.`);
+    confidence = 0;
+  }
   values.warnings = warnings;
   values.confidence = confidence;
   return { values, findings, confidence, summary: summary(values), warnings };
+}
+
+function decisiveFieldsMissing(documentType: string, values: ExtractedValues): string[] {
+  const has = (k: string) => values[k] !== undefined && values[k] !== null && values[k] !== '';
+  if (documentType === 'pgdas') {
+    const m: string[] = [];
+    if (!has('revenue')) m.push('Receita Bruta do PA');
+    if (!has('grossRevenue12m')) m.push('RBT12');
+    if (!has('dasTotal') && !has('effectiveTaxRate')) m.push('DAS total ou alíquota efetiva');
+    return m;
+  }
+  if (documentType === 'dre' || documentType === 'balancete') {
+    const m: string[] = [];
+    if (!has('revenue')) m.push('Receita bruta');
+    return m;
+  }
+  if (documentType === 'folha_pagamento') {
+    const m: string[] = [];
+    if (!has('salaryTotal')) m.push('Total de salários');
+    if (!has('netPayroll')) m.push('Líquido a pagar');
+    if (!has('period')) m.push('Período');
+    return m;
+  }
+  return [];
+}
+
+/**
+ * Parser robusto da linha "Total:" da folha (JB Folha "RESUMO DE CÁLCULO").
+ *
+ * Estratégia:
+ * - Itera TODAS as ocorrências de linhas começando com "Total:" (não apenas a primeira).
+ * - Para cada uma, junta linhas seguintes em até 30 linhas, ignorando rodapés/cabeçalhos
+ *   conhecidos (Página, JB Folha, Pacote) e PARANDO ao encontrar uma "barreira"
+ *   (Empregado, Empresa:, Inscr. Fed., Resumo, novo Total:, outro CNPJ).
+ * - Aceita só o bloco se obtiver 11 números coerentes (|Líquido − (Bruto − Descontos)| ≤ 1).
+ * - Se houver múltiplos blocos válidos (multi-estabelecimento), soma todos.
+ */
+function parsePayrollTotals(text: string, warnings: string[]): ExtractedValues {
+  const out: ExtractedValues = {};
+  const cnpjMatch = text.match(/\b\d{2}\.?\d{3}\.?\d{3}\/\d{4}-?\d{2}\b/);
+  if (cnpjMatch) out.cnpj = cnpjMatch[0];
+  const empMatch = text.match(/Empresa:\s*([^\n]+)/i);
+  if (empMatch) out.companyName = empMatch[1].trim();
+  const periodMatch = text.match(/Per[ií]odo:\s*\d{2}\/(\d{2})\/(\d{4})/i);
+  if (periodMatch) out.period = `${periodMatch[1]}/${periodMatch[2]}`;
+  // employeesCount pode estar na linha seguinte (multi-linha do unpdf)
+  const empCountSame = text.match(/Total de empregados:\s*(\d+)/i);
+  const empCountNext = text.match(/Total de empregados:\s*\n\s*(\d+)/i);
+  const empCount = empCountSame ?? empCountNext;
+  if (empCount) out.employeesCount = Number(empCount[1]);
+
+  const moneyRe = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g;
+  const lines = text.split(/\n/);
+  const skipRe = /^(?:\s*)(?:P[áa]gina|JB Folha|Pacote|Sistema|Data\s*:|Hora\s*:|Usu[aá]rio|Fls\.?\s*\d)/i;
+  const barrierRe = /^(?:\s*)(?:Empregado|Empresa\s*:|Inscr\.?\s*Fed|CNPJ\s*:|RESUMO|Total\s*:|Cargo\s*:|Departamento\s*:)/i;
+  // Barreira CNPJ embarcada no meio da linha: se aparecer um CNPJ diferente do de cabeçalho, considera barreira.
+
+  const blocks: number[][] = [];
+  const totalIdxs: number[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (/^\s*Total:/i.test(lines[i])) totalIdxs.push(i);
+  }
+  for (const idx of totalIdxs) {
+    let buf = lines[idx].replace(/^\s*Total:/i, ' ');
+    let nums = buf.match(moneyRe) ?? [];
+    for (let j = idx + 1; j < Math.min(lines.length, idx + 31) && nums.length < 11; j += 1) {
+      const line = lines[j];
+      if (!line || !line.trim()) continue;
+      if (skipRe.test(line)) continue;
+      if (j !== idx + 1 && barrierRe.test(line)) break;
+      // "Total de empregados:" pode aparecer dentro do bloco — preserva (contém o N de empregados)
+      // mas não conta como número monetário (regex exige ,2 dígitos).
+      buf += ' ' + line;
+      nums = buf.match(moneyRe) ?? [];
+    }
+    const parsed = nums.map((n) => normalizeNumber(n)).filter((n): n is number => n !== undefined);
+    if (parsed.length >= 11) {
+      // Ordem observada via unpdf:
+      // [0]=Salário, [1]=S.Fam, [2]=BaseINSS, [3]=INSS, [4]=FGTS, [5]=IRRF, [6]=BaseFGTS, [7]=BaseIRRF, [8]=Prov./Vant., [9]=Descontos, [10]=Líquido
+      const liq = parsed[10];
+      const bruto = parsed[8];
+      const desc = parsed[9];
+      const coerent = Math.abs(liq - (bruto - desc)) <= 1;
+      if (coerent) blocks.push(parsed.slice(0, 11));
+      else warnings.push(`Bloco Total na linha ${idx + 1} descartado: Líquido (${liq}) ≠ Bruto (${bruto}) − Descontos (${desc}).`);
+    }
+  }
+
+  if (!blocks.length) {
+    if (totalIdxs.length) warnings.push('Linha Total encontrada mas sem 11 valores coerentes — folha não interpretada.');
+    else warnings.push('Linha "Total" não encontrada no relatório de folha.');
+    return out;
+  }
+
+  // Soma blocos (multi-estabelecimento). Para apenas 1 bloco, é o próprio.
+  const sum = (idx: number) => blocks.reduce((s, b) => s + b[idx], 0);
+  out.salaryTotal = Number(sum(0).toFixed(2));
+  out.inssBase = Number(sum(2).toFixed(2));
+  out.inssValue = Number(sum(3).toFixed(2));
+  out.fgtsValue = Number(sum(4).toFixed(2));
+  out.irrfValue = Number(sum(5).toFixed(2));
+  out.fgtsBase = Number(sum(6).toFixed(2));
+  out.irrfBase = Number(sum(7).toFixed(2));
+  out.grossPayroll = Number(sum(8).toFixed(2));
+  out.discounts = Number(sum(9).toFixed(2));
+  out.netPayroll = Number(sum(10).toFixed(2));
+  if (blocks.length > 1) out.establishmentsAggregated = blocks.length;
+  return out;
 }
 
 function decodeText(fileName: string, mimeType: string, bytes: ArrayBuffer) {
@@ -210,12 +330,17 @@ function parseSpreadsheet(bytes: ArrayBuffer) {
 async function parsePdf(bytes: ArrayBuffer) {
   try {
     const pdf = await getDocumentProxy(new Uint8Array(bytes));
+    const numPages = (pdf as unknown as { numPages?: number }).numPages ?? 0;
+    const MAX_PAGES = 200;
+    const truncated = numPages > MAX_PAGES;
     const { text } = await extractText(pdf, { mergePages: true });
-    const clean = (typeof text === 'string' ? text : Array.isArray(text) ? text.join('\n') : '').trim();
+    let clean = (typeof text === 'string' ? text : Array.isArray(text) ? text.join('\n') : '').trim();
+    const MAX_CHARS = 5_000_000;
+    if (clean.length > MAX_CHARS) clean = clean.slice(0, MAX_CHARS);
     if (clean.length < 40) {
       return { text: '', nonProcessable: true, reason: 'PDF sem camada de texto (provável escaneado). OCR ainda não está disponível.' };
     }
-    return { text: clean };
+    return { text: clean, warning: truncated ? `Documento com ${numPages} páginas — análise considera as primeiras ${MAX_PAGES}.` : undefined };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { text: '', nonProcessable: true, reason: `Falha ao ler PDF: ${message}` };
@@ -267,7 +392,13 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ document: updated }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const result = extract(document.document_type, decoded.text ?? '');
+    const result = await Promise.race([
+      Promise.resolve().then(() => extract(document.document_type, decoded.text ?? '')),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Tempo limite de 50s excedido ao interpretar o documento.')), 50_000)),
+    ]).catch((e) => ({ values: { warnings: [String(e?.message ?? e)], confidence: 0 }, findings: [], confidence: 0, summary: 'Tempo limite excedido na leitura.', warnings: [String(e?.message ?? e)] }));
+    if ((decoded as { warning?: string }).warning) {
+      (result.values as ExtractedValues).warnings = [...((result.values as ExtractedValues).warnings ?? []), (decoded as { warning: string }).warning];
+    }
     const status = result.confidence > 0 ? 'lido' : 'erro_leitura';
     const { data: updated, error } = await supabase.from('tax_reform_documents').update({
       reading_status: status,
