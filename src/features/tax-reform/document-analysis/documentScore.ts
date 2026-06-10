@@ -41,7 +41,13 @@ export function buildTaxReformAnalysisInput({
   documents?: TaxReformDocument[];
   extractedValues?: TaxReformExtractedValues;
 }): TaxReformAnalysisInput {
-  const readDocuments = documents.filter((doc) => doc.readingStatus === 'lido' && (doc.extractionConfidence ?? 0) >= 0.45);
+  const readDocuments = documents.filter((doc) => {
+    if (doc.readingStatus !== 'lido') return false;
+    const conf = doc.extractionConfidence ?? 0;
+    // Folha exige confiança alta (≥ 0.7); demais tipos mantêm o piso histórico de 0.45.
+    const min = doc.documentType === 'folha_pagamento' ? 0.7 : 0.45;
+    return conf >= min;
+  });
   const aggregatedRaw = extractedValues ?? aggregateExtractedValues(readDocuments);
   const aggregated = computeCrossDocPayroll(aggregatedRaw);
   const adjustedAnswers: AnswerMap = { ...answers };
