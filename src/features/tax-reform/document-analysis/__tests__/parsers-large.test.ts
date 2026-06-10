@@ -95,6 +95,74 @@ describe('parsePayrollSummaryDocument — robustez em larga escala', () => {
   });
 });
 
+describe('parsePayrollSummaryDocument — Folha PDF Zimmermann (ordem docling/visual)', () => {
+  // Mesma linha "Total:" com 11 valores na ordem visual (Salário, S.Fam, BaseINSS, INSS, BaseIRRF, IRRF, BaseFGTS, FGTS, Prov, Desc, Líq)
+  const head = [
+    'Empresa: ESCRITORIO CONTABIL ZIMMERMANN LTDA',
+    'Inscr. Fed.: 88.736.335/0001-13',
+    'Período: 01/05/2026 à 31/05/2026',
+    'RESUMO DE CÁLCULO',
+    'Empregado Salário S. Fam. Base INSS INSS Base IRRF IRRF Base FGTS FGTS Prov./Vant. Descontos Líquido',
+  ].join('\n');
+
+  it('Total: e valores na MESMA linha (docling)', () => {
+    const text = `${head}\nTotal: 22.680,85 0,00 24.565,24 2.343,08 19.673,40 321,79 22.944,24 1.835,52 24.565,24 4.072,87 20.492,37\nTotal de empregados: 7\n`;
+    const r = parsePayrollSummaryDocument(text);
+    expect(r.values.period).toBe('05/2026');
+    expect(r.values.employeesCount).toBe(7);
+    expect(r.values.salaryTotal).toBe(22680.85);
+    expect(r.values.familySalary).toBe(0);
+    expect(r.values.inssBase).toBe(24565.24);
+    expect(r.values.inssValue).toBe(2343.08);
+    expect(r.values.irrfBase).toBe(19673.40);
+    expect(r.values.irrfValue).toBe(321.79);
+    expect(r.values.fgtsBase).toBe(22944.24);
+    expect(r.values.fgtsValue).toBe(1835.52);
+    expect(r.values.grossPayroll).toBe(24565.24);
+    expect(r.values.discounts).toBe(4072.87);
+    expect(r.values.netPayroll).toBe(20492.37);
+    expect(r.confidence).toBeGreaterThanOrEqual(0.7);
+  });
+
+  it('Total: em linha separada + valores na linha seguinte (ordem docling)', () => {
+    const text = `${head}\nTotal:\n22.680,85 0,00 24.565,24 2.343,08 19.673,40 321,79 22.944,24 1.835,52 24.565,24 4.072,87 20.492,37\nTotal de empregados:\n7\n`;
+    const r = parsePayrollSummaryDocument(text);
+    expect(r.values.employeesCount).toBe(7);
+    expect(r.values.grossPayroll).toBe(24565.24);
+    expect(r.values.netPayroll).toBe(20492.37);
+    expect(r.values.irrfBase).toBe(19673.40);
+    expect(r.values.fgtsValue).toBe(1835.52);
+  });
+
+  it('fallback D: soma de empregados quando não há linha Total', () => {
+    const emp = (id: number) =>
+      `00004${id} EMPREGADO ${id} 1.000,00 0,00 1.000,00 95,00 800,00 0,00 1.000,00 80,00 1.000,00 100,00 900,00`;
+    const text = [head, emp(1), emp(2), emp(3), 'Total de empregados: 3'].join('\n');
+    const r = parsePayrollSummaryDocument(text);
+    expect(r.values.salaryTotal).toBe(3000);
+    expect(r.values.grossPayroll).toBe(3000);
+    expect(r.values.netPayroll).toBe(2700);
+    expect(r.values.employeesCount).toBe(3);
+    expect(r.warnings.some((w) => /fallback/i.test(w))).toBe(true);
+  });
+
+  it('bloco Total incoerente (Líquido ≠ Bruto − Descontos) → sem campos decisivos', () => {
+    const text = `${head}\nTotal: 1.000,00 0,00 1.000,00 95,00 800,00 0,00 1.000,00 80,00 1.000,00 200,00 999,00\nTotal de empregados: 2\n`;
+    const r = parsePayrollSummaryDocument(text);
+    expect(r.values.salaryTotal).toBeUndefined();
+    expect(r.values.netPayroll).toBeUndefined();
+    expect(r.confidence).toBe(0);
+    expect(r.warnings.some((w) => /incoerentes/i.test(w))).toBe(true);
+  });
+
+  it('Total de empregados na mesma linha vs próxima linha', () => {
+    const t1 = `${head}\nTotal: 1.000,00 0,00 1.000,00 95,00 800,00 0,00 1.000,00 80,00 1.000,00 100,00 900,00\nTotal de empregados: 4\n`;
+    expect(parsePayrollSummaryDocument(t1).values.employeesCount).toBe(4);
+    const t2 = `${head}\nTotal: 1.000,00 0,00 1.000,00 95,00 800,00 0,00 1.000,00 80,00 1.000,00 100,00 900,00\nTotal de empregados:\n5\n`;
+    expect(parsePayrollSummaryDocument(t2).values.employeesCount).toBe(5);
+  });
+});
+
 describe('parsePgdasDocument — robustez', () => {
   it('extrai PGDAS mesmo com layout intermediário (linhas vazias)', () => {
     const text = [
