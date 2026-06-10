@@ -177,6 +177,24 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
   values.accountsReceivable = findValueByLabels(map, ['CLIENTES'], { fromLine: activoLine, toLine: ativoEnd });
   values.nonCurrentAssets = findValueByLabels(map, ['ATIVO NAO CIRCULANTE', 'ATIVO NÃO CIRCULANTE'], { fromLine: activoLine, toLine: ativoEnd });
 
+  // ---- Perfil de clientes pelo saldo da conta CLIENTES (apenas evidência comercial) ----
+  if (values.accountsReceivable !== undefined) {
+    const balanceClients = extractBalanceClients(text);
+    if (balanceClients.total > 0) {
+      values.balanceClientsTotal = Number(balanceClients.total.toFixed(2));
+      values.b2bBalanceAmount = Number(balanceClients.b2b.toFixed(2));
+      values.b2cBalanceAmount = Number(balanceClients.b2c.toFixed(2));
+      values.entityBalanceAmount = Number(balanceClients.entity.toFixed(2));
+      values.b2bPercentFromBalanceClients = Number(((balanceClients.b2b / balanceClients.total) * 100).toFixed(2));
+      values.b2cPercentFromBalanceClients = Number(((balanceClients.b2c / balanceClients.total) * 100).toFixed(2));
+      values.entityPercentFromBalanceClients = Number(((balanceClients.entity / balanceClients.total) * 100).toFixed(2));
+      const top10Sum = [...balanceClients.amounts].sort((a, b) => b - a).slice(0, 10).reduce((s, v) => s + v, 0);
+      values.top10BalanceClientsConcentration = Number(((top10Sum / balanceClients.total) * 100).toFixed(2));
+      values.clientProfileSource = 'balance_clients_account';
+      values.clientProfileConfidence = 'medium';
+    }
+  }
+
   // ---- BALANÇO PASSIVO ----
   if (passivoLine > 0) {
     values.liabilitiesTotal = findValueByLabels(map, ['P A S S I V O', 'PASSIVO'], { fromLine: passivoLine, toLine: passivoEnd });
