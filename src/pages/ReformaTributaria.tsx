@@ -237,6 +237,8 @@ function scoreToAnalysisFields(company: TaxReformCompany | undefined, analysis: 
     requireDocuments: true,
     requireMainActivity: true,
   });
+  const confidenceLevel = computeConfidenceLevel(documents);
+  const confidenceReason = computeConfidenceReasons(documents).join(' ');
   return {
     scoreTotal: score.total,
     scoreClients: score.clients,
@@ -245,6 +247,8 @@ function scoreToAnalysisFields(company: TaxReformCompany | undefined, analysis: 
     riskLevel: score.riskLevel,
     recommendation: score.recommendation,
     automaticSummary: score.summary,
+    confidenceLevel,
+    confidenceReason,
   };
 }
 
