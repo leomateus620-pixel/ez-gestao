@@ -276,15 +276,14 @@ const sanitizeFileName = (fileName: string) => fileName
   .replace(/-+/g, '-')
   .replace(/^-|-$/g, '');
 
-export type TaxReformUploadResult =
-  | {
-      ok: true;
-      storageBucket: string;
-      storagePath: string;
-      fileUrl: string;
-      uploadedBy?: string;
-    }
-  | { ok: false; error: string };
+export interface TaxReformUploadResult {
+  ok: boolean;
+  storageBucket?: string;
+  storagePath?: string;
+  fileUrl?: string;
+  uploadedBy?: string;
+  error?: string;
+}
 
 export async function uploadTaxReformDocumentFile(
   companyId: string,
