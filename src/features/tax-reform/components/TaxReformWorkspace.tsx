@@ -1191,6 +1191,23 @@ export default function ReformaTributaria() {
     if (failures) toast.error(`${failures} documento(s) não puderam ser lidos.`);
   };
 
+  const removeDocument = async (doc: TaxReformDocument) => {
+    setStore((prev) => ({
+      ...prev,
+      documents: prev.documents.filter((item) => item.id !== doc.id),
+    }));
+    if (doc.uploadStatus === 'enviado') {
+      try {
+        await deleteTaxReformDocument({ id: doc.id, storagePath: doc.storagePath, storageBucket: doc.storageBucket });
+      } catch (error) {
+        console.error('[reforma-tributaria] falha ao remover documento', error);
+        toast.error('Não foi possível remover o documento agora.');
+        return;
+      }
+    }
+    toast.success('Documento removido.');
+  };
+
   const generateReport = () => {
     if (!selectedCompany || !selectedAnalysis) return;
     window.setTimeout(() => window.print(), 150);
