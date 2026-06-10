@@ -1216,7 +1216,26 @@ export default function ReformaTributaria() {
     let nonProcessable = 0;
     for (const doc of processableDocuments) {
       try {
-        const updated = await processTaxReformDocument(doc.id);
+        // Garante a linha no banco antes da Edge Function tentar lê-la.
+        try {
+          await upsertTaxReformDocument(doc);
+        } catch (syncError) {
+          console.warn('[reforma-tributaria] pré-sync do documento falhou; tentando processar mesmo assim', syncError);
+        }
+        let updated: TaxReformDocument | null = null;
+        try {
+          updated = await processTaxReformDocument(doc.id);
+        } catch (firstError) {
+          const msg = firstError instanceof Error ? firstError.message : String(firstError);
+          if (/n[aã]o encontrado|not found|no rows|404/i.test(msg)) {
+            // Race: aguarda e re-tenta uma vez após reconfirmar persistência.
+            await new Promise((resolve) => setTimeout(resolve, 1200));
+            await upsertTaxReformDocument(doc);
+            updated = await processTaxReformDocument(doc.id);
+          } else {
+            throw firstError;
+          }
+        }
         if (updated) {
           processed.push(updated);
           if (updated.readingStatus === 'nao_processavel') nonProcessable += 1;
