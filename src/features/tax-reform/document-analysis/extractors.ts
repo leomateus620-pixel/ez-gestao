@@ -295,10 +295,25 @@ export function parsePayrollSummaryDocument(text: string, documentType = 'folha_
   const periodMatch = text.match(/Per[ií]odo:\s*\d{2}\/(\d{2})\/(\d{4})/i);
   if (periodMatch) values.period = `${periodMatch[1]}/${periodMatch[2]}`;
 
-  const empCountSame = text.match(/Total de empregados:\s*(\d+)/i);
-  const empCountNext = text.match(/Total de empregados:\s*\n\s*(\d+)/i);
-  if (empCountSame) values.employeesCount = Number(empCountSame[1]);
-  else if (empCountNext) values.employeesCount = Number(empCountNext[1]);
+  // employeesCount: localiza "Total de empregados:" e busca a próxima linha que seja
+  // SOMENTE um inteiro (sem vírgula/ponto/letras), tolerando linhas monetárias intermediárias.
+  {
+    const _lines = text.replace(/\r/g, '\n').split('\n');
+    let total = 0;
+    for (let i = 0; i < _lines.length; i += 1) {
+      if (!/Total de empregados:/i.test(_lines[i])) continue;
+      // mesma linha?
+      const sameLine = _lines[i].match(/Total de empregados:\s*(\d{1,5})\s*$/i);
+      if (sameLine) { total += Number(sameLine[1]); continue; }
+      for (let j = i + 1; j < Math.min(_lines.length, i + 6); j += 1) {
+        const t = _lines[j].trim();
+        if (!t) continue;
+        if (/^\d{1,5}$/.test(t)) { total += Number(t); break; }
+        // linha não-inteira (ex.: numérica monetária) → continua procurando
+      }
+    }
+    if (total > 0) values.employeesCount = total;
+  }
 
   // Itera TODOS os blocos "Total:" — multi-estabelecimento ou multi-página.
   // Para cada bloco, junta linhas seguintes (até 30) ignorando rodapés e parando em barreiras.
