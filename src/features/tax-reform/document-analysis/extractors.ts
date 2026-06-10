@@ -296,30 +296,58 @@ export function parsePayrollSummaryDocument(text: string, documentType = 'folha_
   const periodMatch = text.match(/Per[ií]odo:\s*\d{2}\/(\d{2})\/(\d{4})/i);
   if (periodMatch) values.period = `${periodMatch[1]}/${periodMatch[2]}`;
 
-  // "Total de empregados:" pode aparecer antes ou depois da linha numérica.
-  const empCountMatch = text.match(/Total de empregados:\s*\n?\s*([\s\S]*?)(?:\n|$)/i);
-  // Pega o último número isolado após o bloco Total: ... empregados
-  const totalBlockMatch = text.match(/Total:\s*\n?Total de empregados:\s*\n?([^\n]+)\n?\s*(\d+)/);
-  if (totalBlockMatch) {
-    const numericLine = totalBlockMatch[1];
-    values.employeesCount = Number(totalBlockMatch[2]);
-    const nums = extractAllNumbers(numericLine);
-    // Order observed in JB Folha "RESUMO DE CÁLCULO" totals line (extração unpdf):
-    // [0]=Salário, [1]=S.Fam, [2]=BaseINSS, [3]=INSS, [4]=FGTS, [5]=IRRF, [6]=BaseFGTS, [7]=BaseIRRF, [8]=Prov./Vant., [9]=Descontos, [10]=Líquido
-    if (nums.length >= 11) {
-      values.salaryTotal = nums[0];
-      values.inssBase = nums[2];
-      values.inssValue = nums[3];
-      values.fgtsValue = nums[4];
-      values.irrfValue = nums[5];
-      values.fgtsBase = nums[6];
-      values.irrfBase = nums[7];
-      values.grossPayroll = nums[8];
-      values.discounts = nums[9];
-      values.netPayroll = nums[10];
+  const empCountSame = text.match(/Total de empregados:\s*(\d+)/i);
+  const empCountNext = text.match(/Total de empregados:\s*\n\s*(\d+)/i);
+  if (empCountSame) values.employeesCount = Number(empCountSame[1]);
+  else if (empCountNext) values.employeesCount = Number(empCountNext[1]);
+
+  // Itera TODOS os blocos "Total:" — multi-estabelecimento ou multi-página.
+  // Para cada bloco, junta linhas seguintes (até 30) ignorando rodapés e parando em barreiras.
+  // Aceita só blocos com 11 números coerentes (|Líquido − (Bruto − Descontos)| ≤ 1).
+  const moneyRe = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g;
+  const lines = text.replace(/\r/g, '\n').split('\n');
+  const skipRe = /^(?:\s*)(?:P[áa]gina|JB Folha|Pacote|Sistema|Data\s*:|Hora\s*:|Usu[aá]rio|Fls\.?\s*\d)/i;
+  const barrierRe = /^(?:\s*)(?:Empregado|Empresa\s*:|Inscr\.?\s*Fed|CNPJ\s*:|RESUMO|Total\s*:|Cargo\s*:|Departamento\s*:)/i;
+  const totalIdxs: number[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (/^\s*Total:/i.test(lines[i])) totalIdxs.push(i);
+  }
+  const blocks: number[][] = [];
+  for (const idx of totalIdxs) {
+    let buf = lines[idx].replace(/^\s*Total:/i, ' ');
+    let nums = buf.match(moneyRe) ?? [];
+    for (let j = idx + 1; j < Math.min(lines.length, idx + 31) && nums.length < 11; j += 1) {
+      const line = lines[j];
+      if (!line || !line.trim()) continue;
+      if (skipRe.test(line)) continue;
+      if (j !== idx + 1 && barrierRe.test(line)) break;
+      buf += ' ' + line;
+      nums = buf.match(moneyRe) ?? [];
     }
+    const parsed = nums.map((n) => normalizeNumber(n)).filter((n): n is number => n !== undefined);
+    if (parsed.length >= 11) {
+      const liq = parsed[10]; const bruto = parsed[8]; const desc = parsed[9];
+      if (Math.abs(liq - (bruto - desc)) <= 1) blocks.push(parsed.slice(0, 11));
+      else warnings.push(`Bloco Total descartado por incoerência: Líquido ${liq} ≠ ${bruto} − ${desc}.`);
+    }
+  }
+  if (!blocks.length) {
+    warnings.push(totalIdxs.length
+      ? 'Linha Total encontrada mas sem 11 valores coerentes — folha não interpretada.'
+      : 'Linha "Total" não encontrada no relatório de folha.');
   } else {
-    warnings.push('Linha "Total" não encontrada no relatório de folha.');
+    const sum = (k: number) => Number(blocks.reduce((s, b) => s + b[k], 0).toFixed(2));
+    values.salaryTotal = sum(0);
+    values.inssBase = sum(2);
+    values.inssValue = sum(3);
+    values.fgtsValue = sum(4);
+    values.irrfValue = sum(5);
+    values.fgtsBase = sum(6);
+    values.irrfBase = sum(7);
+    values.grossPayroll = sum(8);
+    values.discounts = sum(9);
+    values.netPayroll = sum(10);
+    if (blocks.length > 1) (values as Record<string, unknown>).establishmentsAggregated = blocks.length;
   }
 
   pushFinding(findings, documentType, 'cnpj', values.cnpj, 0.9, 'Folha');
