@@ -393,73 +393,41 @@ export function parsePayrollSummaryDocument(text: string, documentType = 'folha_
   const periodMatch = text.match(/Per[ií]odo:\s*\d{2}\/(\d{2})\/(\d{4})/i);
   if (periodMatch) values.period = `${periodMatch[1]}/${periodMatch[2]}`;
 
-  // employeesCount: localiza "Total de empregados:" e busca a próxima linha que seja
-  // SOMENTE um inteiro (sem vírgula/ponto/letras), tolerando linhas monetárias intermediárias.
-  {
-    const _lines = text.replace(/\r/g, '\n').split('\n');
-    let total = 0;
-    for (let i = 0; i < _lines.length; i += 1) {
-      if (!/Total de empregados:/i.test(_lines[i])) continue;
-      // mesma linha?
-      const sameLine = _lines[i].match(/Total de empregados:\s*(\d{1,5})\s*$/i);
-      if (sameLine) { total += Number(sameLine[1]); continue; }
-      for (let j = i + 1; j < Math.min(_lines.length, i + 6); j += 1) {
-        const t = _lines[j].trim();
-        if (!t) continue;
-        if (/^\d{1,5}$/.test(t)) { total += Number(t); break; }
-        // linha não-inteira (ex.: numérica monetária) → continua procurando
-      }
-    }
-    if (total > 0) values.employeesCount = total;
-  }
+  // employeesCount: aceita mesma linha OU próximas 6 linhas com inteiro isolado.
+  values.employeesCount = extractEmployeesCount(text);
 
-  // Itera TODOS os blocos "Total:" — multi-estabelecimento ou multi-página.
-  // Para cada bloco, junta linhas seguintes (até 30) ignorando rodapés e parando em barreiras.
-  // Aceita só blocos com 11 números coerentes (|Líquido − (Bruto − Descontos)| ≤ 1).
-  const moneyRe = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g;
-  const lines = text.replace(/\r/g, '\n').split('\n');
-  const skipRe = /^(?:\s*)(?:P[áa]gina|JB Folha|Pacote|Sistema|Data\s*:|Hora\s*:|Usu[aá]rio|Fls\.?\s*\d)/i;
-  const barrierRe = /^(?:\s*)(?:Empregado|Empresa\s*:|Inscr\.?\s*Fed|CNPJ\s*:|RESUMO|Total\s*:|Cargo\s*:|Departamento\s*:)/i;
-  const totalIdxs: number[] = [];
-  for (let i = 0; i < lines.length; i += 1) {
-    if (/^\s*Total:/i.test(lines[i])) totalIdxs.push(i);
-  }
-  const blocks: number[][] = [];
-  for (const idx of totalIdxs) {
-    let buf = lines[idx].replace(/^\s*Total:/i, ' ');
-    let nums = buf.match(moneyRe) ?? [];
-    for (let j = idx + 1; j < Math.min(lines.length, idx + 31) && nums.length < 11; j += 1) {
-      const line = lines[j];
-      if (!line || !line.trim()) continue;
-      if (skipRe.test(line)) continue;
-      if (j !== idx + 1 && barrierRe.test(line)) break;
-      buf += ' ' + line;
-      nums = buf.match(moneyRe) ?? [];
+  // Detecta blocos "Total:" em 4 camadas (A: regex full text, B: line-based, C: footer fallback, D: soma de empregados).
+  const rawBlocks = findPayrollTotalBlocks(text, warnings);
+  const validBlocks: ReturnType<typeof mapPayrollColumns>[] = [];
+  for (const cols of rawBlocks) {
+    const mapped = mapPayrollColumns(cols);
+    if (!mapped) continue;
+    if (!isPayrollBlockCoherent(mapped)) {
+      warnings.push(`Bloco Total descartado: valores incoerentes (Líquido=${mapped.netPayroll}, Bruto=${mapped.grossPayroll}, Descontos=${mapped.discounts}).`);
+      continue;
     }
-    const parsed = nums.map((n) => normalizeNumber(n)).filter((n): n is number => n !== undefined);
-    if (parsed.length >= 11) {
-      const liq = parsed[10]; const bruto = parsed[8]; const desc = parsed[9];
-      if (Math.abs(liq - (bruto - desc)) <= 1) blocks.push(parsed.slice(0, 11));
-      else warnings.push(`Bloco Total descartado por incoerência: Líquido ${liq} ≠ ${bruto} − ${desc}.`);
-    }
+    validBlocks.push(mapped);
   }
-  if (!blocks.length) {
-    warnings.push(totalIdxs.length
-      ? 'Linha Total encontrada mas sem 11 valores coerentes — folha não interpretada.'
-      : 'Linha "Total" não encontrada no relatório de folha.');
-  } else {
-    const sum = (k: number) => Number(blocks.reduce((s, b) => s + b[k], 0).toFixed(2));
-    values.salaryTotal = sum(0);
-    values.inssBase = sum(2);
-    values.inssValue = sum(3);
-    values.fgtsValue = sum(4);
-    values.irrfValue = sum(5);
-    values.fgtsBase = sum(6);
-    values.irrfBase = sum(7);
-    values.grossPayroll = sum(8);
-    values.discounts = sum(9);
-    values.netPayroll = sum(10);
-    if (blocks.length > 1) (values as Record<string, unknown>).establishmentsAggregated = blocks.length;
+  if (rawBlocks.length && !validBlocks.length) {
+    warnings.push('Linha Total encontrada, mas valores incoerentes.');
+  } else if (!rawBlocks.length) {
+    warnings.push('Linha "Total" não encontrada no relatório de folha.');
+  }
+  if (validBlocks.length) {
+    const sumKey = (k: keyof NonNullable<ReturnType<typeof mapPayrollColumns>>) =>
+      Number(validBlocks.reduce((s, b) => s + (b as Record<string, number>)[k as string], 0).toFixed(2));
+    values.salaryTotal = sumKey('salaryTotal');
+    values.familySalary = sumKey('familySalary');
+    values.inssBase = sumKey('inssBase');
+    values.inssValue = sumKey('inssValue');
+    values.irrfBase = sumKey('irrfBase');
+    values.irrfValue = sumKey('irrfValue');
+    values.fgtsBase = sumKey('fgtsBase');
+    values.fgtsValue = sumKey('fgtsValue');
+    values.grossPayroll = sumKey('grossPayroll');
+    values.discounts = sumKey('discounts');
+    values.netPayroll = sumKey('netPayroll');
+    if (validBlocks.length > 1) values.establishmentsAggregated = validBlocks.length;
   }
 
   pushFinding(findings, documentType, 'cnpj', values.cnpj, 0.9, 'Folha');
@@ -471,8 +439,152 @@ export function parsePayrollSummaryDocument(text: string, documentType = 'folha_
   pushFinding(findings, documentType, 'grossPayroll', values.grossPayroll, 0.9, 'Folha', 'Coluna Prov./Vant. da linha Total.');
   pushFinding(findings, documentType, 'netPayroll', values.netPayroll, 0.85, 'Folha');
 
-  const confidence = confidenceFromFindings(findings, 0.45);
+  // Campos decisivos: período + salaryTotal + grossPayroll + netPayroll.
+  const decisiveMissing: string[] = [];
+  if (!values.period) decisiveMissing.push('Período');
+  if (values.salaryTotal === undefined) decisiveMissing.push('Total de salários');
+  if (values.grossPayroll === undefined) decisiveMissing.push('Proventos/Vantagens');
+  if (values.netPayroll === undefined) decisiveMissing.push('Líquido a pagar');
+  if (decisiveMissing.length) warnings.push(`Campos decisivos ausentes: ${decisiveMissing.join(', ')}.`);
+  const confidence = decisiveMissing.length ? 0 : confidenceFromFindings(findings, 0.45);
   return { documentType, values: { ...values, warnings, confidence }, findings, summary: summarizeExtractedValues(values), confidence, warnings };
+}
+
+// ============================================================
+// Folha — helpers compartilháveis (4 camadas + mapeamento auto)
+// ============================================================
+const PAYROLL_MONEY_RE = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g;
+function toMoneyNum(s: string): number {
+  return Number(s.replace(/\./g, '').replace(',', '.'));
+}
+
+function extractEmployeesCount(text: string): number | undefined {
+  const lines = text.replace(/\r/g, '\n').split('\n');
+  let total = 0;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!/Total de empregados/i.test(line)) continue;
+    const sameLine = line.match(/Total de empregados\s*:?\s*(\d{1,5})\b/i);
+    if (sameLine) { total += Number(sameLine[1]); continue; }
+    for (let j = i + 1; j < Math.min(lines.length, i + 7); j += 1) {
+      const t = (lines[j] ?? '').trim();
+      if (!t) continue;
+      if (/\d{2}\/\d{2}\/\d{4}/.test(t)) continue;
+      if (/P[áa]gina|Pacote|JB Folha/i.test(t)) continue;
+      if (/,\d{2}/.test(t)) continue;
+      const m = t.match(/^(\d{1,5})$/);
+      if (m) { total += Number(m[1]); break; }
+    }
+  }
+  return total > 0 ? total : undefined;
+}
+
+function mapPayrollColumns(cols: number[]) {
+  if (cols.length < 11) return null;
+  const c = cols.slice(0, 11);
+  const inssBase = c[2];
+  let irrfBase: number, irrfValue: number, fgtsBase: number, fgtsValue: number;
+  // Auto-detecta ordem das colunas 4..7:
+  // - Ordem visual/docling: BaseIRRF, IRRF, BaseFGTS, FGTS → c[4] é "base" (magnitude alta).
+  // - Ordem pdfjs/unpdf:    FGTS,    IRRF, BaseFGTS, BaseIRRF → c[4] é "valor" (magnitude baixa).
+  if (c[4] >= inssBase * 0.3) {
+    irrfBase = c[4]; irrfValue = c[5]; fgtsBase = c[6]; fgtsValue = c[7];
+  } else {
+    fgtsValue = c[4]; irrfValue = c[5]; fgtsBase = c[6]; irrfBase = c[7];
+  }
+  return {
+    salaryTotal: c[0], familySalary: c[1],
+    inssBase, inssValue: c[3],
+    irrfBase, irrfValue,
+    fgtsBase, fgtsValue,
+    grossPayroll: c[8], discounts: c[9], netPayroll: c[10],
+  };
+}
+
+function isPayrollBlockCoherent(m: NonNullable<ReturnType<typeof mapPayrollColumns>>): boolean {
+  if (Math.abs(m.netPayroll - (m.grossPayroll - m.discounts)) > 1) return false;
+  if (m.salaryTotal > m.grossPayroll + 1) return false;
+  if (m.inssValue > m.inssBase + 1) return false;
+  if (m.fgtsValue > m.fgtsBase + 1) return false;
+  if (m.irrfValue > m.irrfBase + 1) return false;
+  return true;
+}
+
+function findPayrollTotalBlocks(text: string, warnings: string[]): number[][] {
+  const blocks: number[][] = [];
+  // ---- Camada A: regex direto no texto completo ----
+  const fullRe = /\bTotal\s*:\s*((?:-?\d{1,3}(?:\.\d{3})*,\d{2}\s+){10}-?\d{1,3}(?:\.\d{3})*,\d{2})/gi;
+  let mm: RegExpExecArray | null;
+  while ((mm = fullRe.exec(text)) !== null) {
+    const nums = (mm[1].match(PAYROLL_MONEY_RE) ?? []).map(toMoneyNum);
+    if (nums.length >= 11) blocks.push(nums.slice(0, 11));
+  }
+  if (blocks.length) return blocks;
+
+  // ---- Camada B: busca linha-a-linha com acumulação até 30 linhas ----
+  const lines = text.replace(/\r/g, '\n').split('\n');
+  const skipRe = /^\s*(?:P[áa]gina|JB Folha|Pacote|Sistema|Data\s*:|Hora\s*:|Usu[aá]rio|Fls\.?\s*\d)/i;
+  const barrierRe = /\b(Empregado|Empresa\s*:|Inscr\.?\s*Fed|CNPJ\s*:|RESUMO|Cargo\s*:|Departamento\s*:|Total\s*:)/i;
+  const totalIdxs: number[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (/Total de empregados/i.test(lines[i])) continue;
+    if (/\bTotal\s*:/i.test(lines[i])) totalIdxs.push(i);
+  }
+  for (const idx of totalIdxs) {
+    let buf = lines[idx].replace(/.*?\bTotal\s*:/i, ' ');
+    let nums = buf.match(PAYROLL_MONEY_RE) ?? [];
+    for (let j = idx + 1; j < Math.min(lines.length, idx + 31) && nums.length < 11; j += 1) {
+      const ln = lines[j];
+      if (!ln || !ln.trim()) continue;
+      if (skipRe.test(ln)) continue;
+      if (barrierRe.test(ln)) break;
+      buf += ' ' + ln;
+      nums = buf.match(PAYROLL_MONEY_RE) ?? [];
+    }
+    if (nums.length >= 11) blocks.push(nums.slice(0, 11).map(toMoneyNum));
+  }
+  if (blocks.length) return blocks;
+
+  // ---- Camada C: bloco monetário no rodapé (últimas 80 linhas) ----
+  const hasMarkers = /RESUMO DE C[ÁA]LCULO/i.test(text)
+    && /Empregado/i.test(text)
+    && /Prov\.?\s*\/?\s*Vant/i.test(text)
+    && /Descontos/i.test(text)
+    && /L[ií]quido/i.test(text);
+  if (hasMarkers) {
+    const tail = lines.slice(Math.max(0, lines.length - 80));
+    for (let i = 0; i < tail.length; i += 1) {
+      let buf = tail[i] ?? '';
+      let nums = buf.match(PAYROLL_MONEY_RE) ?? [];
+      for (let j = i + 1; j < tail.length && nums.length < 11; j += 1) {
+        if (barrierRe.test(tail[j])) break;
+        buf += ' ' + tail[j];
+        nums = buf.match(PAYROLL_MONEY_RE) ?? [];
+      }
+      if (nums.length === 11) {
+        blocks.push(nums.map(toMoneyNum));
+        warnings.push('Linha Total não encontrada; usado bloco monetário do rodapé como fallback.');
+        return blocks;
+      }
+    }
+  }
+
+  // ---- Camada D: soma de linhas de empregados (^\s*\d{6}\s+) ----
+  if (hasMarkers) {
+    const empRows: number[][] = [];
+    for (const ln of lines) {
+      if (!/^\s*\d{6}\s+/.test(ln)) continue;
+      const nums = (ln.match(PAYROLL_MONEY_RE) ?? []).map(toMoneyNum);
+      if (nums.length === 11) empRows.push(nums);
+    }
+    if (empRows.length > 0) {
+      const sum = Array.from({ length: 11 }, (_, k) =>
+        Number(empRows.reduce((s, r) => s + r[k], 0).toFixed(2)));
+      blocks.push(sum);
+      warnings.push(`Linha Total não encontrada; valores somados de ${empRows.length} empregados (fallback).`);
+    }
+  }
+  return blocks;
 }
 
 // ============================================================

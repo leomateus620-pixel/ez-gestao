@@ -104,6 +104,8 @@ export type TaxReformExtractedValues = {
   grossPayroll?: number;
   discounts?: number;
   netPayroll?: number;
+  familySalary?: number;
+  establishmentsAggregated?: number;
 
   // ---- Folha × PGDAS (cross-document) ----
   payrollPercentByMonthlyRevenue?: number;
