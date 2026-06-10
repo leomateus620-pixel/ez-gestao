@@ -116,7 +116,9 @@ export function findSectionLine(text: string, markers: string[]): number {
 /** Lista todos os valores numéricos (R$/percent) presentes em uma string. */
 export function extractAllNumbers(text: string): number[] {
   const result: number[] = [];
-  const re = new RegExp(parenMoneyRegex.source, 'g');
+  // Estrito: exige parte decimal ",XX" para evitar capturar dígitos soltos
+  // (ex.: "12" em "RBT12" ou "1" em "Anexo 1").
+  const re = /\(?-?\d{1,3}(?:\.\d{3})*,\d{2}\)?/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
     const value = normalizeNumber(match[0]);
