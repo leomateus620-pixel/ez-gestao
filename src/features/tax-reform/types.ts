@@ -17,6 +17,16 @@ export type Recommendation =
   | 'permanecer_lucro_presumido'
   | 'avaliar_simples_nacional'
   | 'analise_manual_necessaria';
+export type FinalDecision =
+  | ''
+  | 'permanecer_regime_atual'
+  | 'migrar_para_simples'
+  | 'migrar_para_lucro_presumido'
+  | 'rodar_simulacao_detalhada'
+  | 'coletar_dados_adicionais';
+
+export type TaxReformAlertType = 'commercial_risk' | 'likely_simples' | 'missing_documents' | 'manual_review';
+export type TaxReformAlertSeverity = 'info' | 'warning' | 'critical';
 
 export type AnswerValue = string | number | string[] | null | undefined;
 export type AnswerMap = Record<string, AnswerValue>;
@@ -28,7 +38,6 @@ export interface TaxReformCompany {
   currentTaxRegime: TaxRegime;
   mainActivity: MainActivity;
   responsibleUser: string;
-  analysisYear: number;
   rbt12?: number;
   projectedRevenue?: number;
   effectiveTaxRate?: number;
@@ -40,6 +49,7 @@ export interface TaxReformCompany {
 export interface TaxReformAnalysis {
   id: string;
   companyId: string;
+  analysisYear: number;
   status: AnalysisStatus;
   answers: AnswerMap;
   scoreTotal: number;
@@ -50,7 +60,7 @@ export interface TaxReformAnalysis {
   recommendation: Recommendation;
   automaticSummary: string;
   manualOpinion: string;
-  finalDecision: string;
+  finalDecision: FinalDecision;
   createdAt: string;
   updatedAt: string;
 }
@@ -68,11 +78,12 @@ export interface TaxReformDocument {
   extractedSummary?: string;
   extractionError?: string;
   uploadedAt: string;
+  updatedAt: string;
 }
 
 export interface TaxReformAlert {
-  alertType: 'commercial_risk' | 'likely_simples' | 'missing_documents' | 'manual_review';
-  severity: 'info' | 'warning' | 'critical';
+  alertType: TaxReformAlertType;
+  severity: TaxReformAlertSeverity;
   title: string;
   message: string;
 }
@@ -81,6 +92,7 @@ export interface TaxReformAlertRecord extends TaxReformAlert {
   id: string;
   analysisId: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface ScoreBreakdown {
@@ -94,10 +106,12 @@ export interface ScoreBreakdown {
   alerts: TaxReformAlert[];
   answeredRequired: number;
   insufficientData: boolean;
+  missingRequiredData: string[];
 }
 
 export interface DocumentLike {
   documentType: string;
+  readingStatus?: ReadingStatus;
 }
 
 export interface TaxReformStore {
