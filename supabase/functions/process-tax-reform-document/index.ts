@@ -400,9 +400,12 @@ Deno.serve(async (req) => {
       (result.values as ExtractedValues).warnings = [...((result.values as ExtractedValues).warnings ?? []), (decoded as { warning: string }).warning];
     }
     const status = result.confidence > 0 ? 'lido' : 'erro_leitura';
+    const extractionError = status === 'lido'
+      ? null
+      : ((result.values as ExtractedValues).warnings ?? []).join(' ') || 'Nenhum campo decisivo pôde ser extraído do arquivo.';
     const { data: updated, error } = await supabase.from('tax_reform_documents').update({
       reading_status: status,
-      extraction_error: status === 'lido' ? null : 'Nenhum texto ou campo decisivo pôde ser extraído do arquivo.',
+      extraction_error: extractionError,
       extracted_summary: result.summary,
       extracted_values: result.values,
       extracted_findings: result.findings,
