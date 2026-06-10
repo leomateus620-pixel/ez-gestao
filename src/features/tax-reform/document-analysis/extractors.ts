@@ -537,6 +537,7 @@ function findPayrollTotalBlocks(text: string, warnings: string[]): number[][] {
       const ln = lines[j];
       if (!ln || !ln.trim()) continue;
       if (skipRe.test(ln)) continue;
+      if (/Total de empregados/i.test(ln)) continue;
       if (barrierRe.test(ln)) break;
       buf += ' ' + ln;
       nums = buf.match(PAYROLL_MONEY_RE) ?? [];
