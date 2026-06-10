@@ -110,6 +110,18 @@ export type TaxReformExtractedValues = {
   payrollWithChargesPercentByMonthlyRevenue?: number;
   annualizedPayrollPercentByRbt12?: number;
   annualizedPayrollWithChargesPercentByRbt12?: number;
+
+  // ---- Perfil comercial estimado pelo saldo CLIENTES do Balanço ----
+  balanceClientsTotal?: number;
+  b2bBalanceAmount?: number;
+  b2cBalanceAmount?: number;
+  entityBalanceAmount?: number;
+  b2bPercentFromBalanceClients?: number;
+  b2cPercentFromBalanceClients?: number;
+  entityPercentFromBalanceClients?: number;
+  top10BalanceClientsConcentration?: number;
+  clientProfileSource?: 'balance_clients_account' | 'faturamento_cliente';
+  clientProfileConfidence?: 'low' | 'medium' | 'high';
 };
 
 export type TaxReformDocumentFinding = {

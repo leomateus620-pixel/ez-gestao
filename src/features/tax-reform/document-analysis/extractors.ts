@@ -19,6 +19,69 @@ const pct = (numerator: number | undefined, denominator: number | undefined) => 
   return Number(((Math.abs(numerator) / denominator) * 100).toFixed(2));
 };
 
+/**
+ * Extrai a relação CLIENTES (saldo a receber) do Balanço, classificando cada
+ * sacado por heurística de razão social. Usado apenas como evidência de perfil
+ * comercial — NÃO substitui relatório de faturamento por cliente.
+ */
+function extractBalanceClients(text: string): {
+  total: number; b2b: number; b2c: number; entity: number; amounts: number[];
+} {
+  const lines = text.replace(/\r/g, '\n').split('\n').map((l) => l.trim());
+  // Localiza o cabeçalho da conta "CLIENTES" dentro do Balanço.
+  // O JB Contábil emite duas linhas "CLIENTES" seguidas (grupo + conta), com o
+  // total da conta entre elas. Saltamos AMBAS para evitar que o total da conta
+  // seja contado como um cliente.
+  let start = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (/^CLIENTES\s*$/.test(lines[i])) {
+      let j = i + 1;
+      while (j < lines.length && (!lines[j] || /^-?\d{1,3}(?:\.\d{3})*,\d{2}$/.test(lines[j]) || /^CLIENTES\s*$/.test(lines[j]))) j += 1;
+      start = j;
+      break;
+    }
+  }
+  if (start < 0) return { total: 0, b2b: 0, b2c: 0, entity: 0, amounts: [] };
+  // Stop ao encontrar próxima seção contábil em CAIXA ALTA.
+  const stopRe = /^(ADIANTAMENTOS|CR[EÉ]DITOS\s|OUTROS\s+CR|ATIVO\s+NAO|ATIVO\s+N[ÃA]O|INVESTIMENTOS|IMOBILIZADO|INTANGIVEL|P\s+A\s+S\s+S\s+I\s+V\s+O|PASSIVO|DEPRECIA)/i;
+  const noiseRe = /^(Empresa:|Emp\.:|CEP:|Bairro:|Cidade:|NIRE:|CRPJ|Per[ií]odo:|Data do NIRE|IE:|CNPJ:|Endere|Fone|BALAN[ÇC]O|A T I V O|P A S S I V O|ValorContas|Folha:|Contas Cont|_{5,}|S[OÓ]CIO|CONTADOR|RG:|CPF:|CRC:|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$|\d{2,}-\d{3}$|0{4,}\d|^$)/;
+  const moneyOnly = /^-?\d{1,3}(?:\.\d{3})*,\d{2}$/;
+  const out = { total: 0, b2b: 0, b2c: 0, entity: 0, amounts: [] as number[] };
+  let nameBuf: string[] = [];
+  // Pula a linha imediatamente após o cabeçalho se for o total da conta (já está em accountsReceivable).
+  for (let i = start; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line) { continue; }
+    if (stopRe.test(line)) break;
+    if (noiseRe.test(line)) { nameBuf = []; continue; }
+    if (moneyOnly.test(line)) {
+      const amount = Number(line.replace(/\./g, '').replace(',', '.'));
+      if (!Number.isFinite(amount)) { nameBuf = []; continue; }
+      // Ignora o total inicial (147.536,81 logo após "CLIENTES").
+      if (!nameBuf.length) continue;
+      const name = nameBuf.join(' ').replace(/\s+/g, ' ').trim();
+      const cls = classifyClientName(name);
+      out.total += amount;
+      out.amounts.push(amount);
+      if (cls === 'b2b') out.b2b += amount;
+      else if (cls === 'entity') out.entity += amount;
+      else out.b2c += amount;
+      nameBuf = [];
+      continue;
+    }
+    // Linha textual = parte do nome do cliente
+    nameBuf.push(line);
+  }
+  return out;
+}
+
+function classifyClientName(name: string): 'b2b' | 'b2c' | 'entity' {
+  const u = name.toUpperCase();
+  if (/(\bASSOC(?:IACAO|IAÇÃO|\.)|\bCOND(?:OM[IÍ]NIO|\.)|\bEDIF[IÍ]CIO|\bROTARY|\bCLUBE|\bLOJA\s+SIMB[OÓ]LICA|\bIGREJA|\bPAR[OÓ]QUIA)/.test(u)) return 'entity';
+  if (/(\bLTDA\b|\bEIRELI\b|\bS\/?A\b|\bSA\b|\bCIA\b|\bME\b|\bEPP\b|\bMEI\b|ADVOG\.?\s*ASSOC|CORRETORA|TRANSPORTES|TURISMO|TELECOM|CL[IÍ]NICA|PRODUTORA|REPRES|REPRESENTA|IND[\.\s]|COM[\.\s]|COMERCIO|COM[ÉE]RCIO|IND[ÚU]STRIA|SERV[\.IÇOS]|& CIA|EIR\b)/.test(u)) return 'b2b';
+  return 'b2c';
+}
+
 function confidenceFromFindings(findings: TaxReformDocumentFinding[], base = 0.35) {
   if (!findings.length) return 0;
   return clampConfidence(Math.min(0.95, base + findings.length * 0.08));
@@ -177,6 +240,24 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
   values.accountsReceivable = findValueByLabels(map, ['CLIENTES'], { fromLine: activoLine, toLine: ativoEnd });
   values.nonCurrentAssets = findValueByLabels(map, ['ATIVO NAO CIRCULANTE', 'ATIVO NÃO CIRCULANTE'], { fromLine: activoLine, toLine: ativoEnd });
 
+  // ---- Perfil de clientes pelo saldo da conta CLIENTES (apenas evidência comercial) ----
+  if (values.accountsReceivable !== undefined) {
+    const balanceClients = extractBalanceClients(text);
+    if (balanceClients.total > 0) {
+      values.balanceClientsTotal = Number(balanceClients.total.toFixed(2));
+      values.b2bBalanceAmount = Number(balanceClients.b2b.toFixed(2));
+      values.b2cBalanceAmount = Number(balanceClients.b2c.toFixed(2));
+      values.entityBalanceAmount = Number(balanceClients.entity.toFixed(2));
+      values.b2bPercentFromBalanceClients = Number(((balanceClients.b2b / balanceClients.total) * 100).toFixed(2));
+      values.b2cPercentFromBalanceClients = Number(((balanceClients.b2c / balanceClients.total) * 100).toFixed(2));
+      values.entityPercentFromBalanceClients = Number(((balanceClients.entity / balanceClients.total) * 100).toFixed(2));
+      const top10Sum = [...balanceClients.amounts].sort((a, b) => b - a).slice(0, 10).reduce((s, v) => s + v, 0);
+      values.top10BalanceClientsConcentration = Number(((top10Sum / balanceClients.total) * 100).toFixed(2));
+      values.clientProfileSource = 'balance_clients_account';
+      values.clientProfileConfidence = 'medium';
+    }
+  }
+
   // ---- BALANÇO PASSIVO ----
   if (passivoLine > 0) {
     values.liabilitiesTotal = findValueByLabels(map, ['P A S S I V O', 'PASSIVO'], { fromLine: passivoLine, toLine: passivoEnd });
@@ -218,23 +299,40 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
     values.netProfit = findValueByLabels(map, ['RESULTADO LÍQUIDO DO EXERCÍCIO', 'RESULTADO LIQUIDO DO EXERCICIO'], { fromLine: dreLine })
       ?? findValueByLabels(map, ['RESULTADO LÍQUIDO ANTES DAS PROVISÕES'], { fromLine: dreLine });
 
-    // Folha anual a partir de contas explícitas (NÃO usar regex genérica "folha").
-    const payrollAccounts = [
-      'Decimo Terceiro Salário', 'Décimo Terceiro Salário', '13º Salário',
-      'F.G.T.S.', 'FGTS',
-      'Ferias', 'Férias',
-      'Ordenados e Gratificações', 'Ordenados e Gratificacoes',
-      'Aviso Previo', 'Aviso Prévio',
-      'Despesas C/ Estagiários', 'Despesas C/ Estagiarios', 'Estagiários',
-      'Ajuda de Custo',
-      'Pro-Labore', 'Pró-Labore',
-    ];
+    // Folha anual a partir de contas explícitas — uma única passagem pelo map
+    // para impedir que variantes do mesmo rótulo somem a mesma linha duas vezes
+    // (ex.: "Decimo Terceiro" e "Décimo Terceiro" normalizam para a mesma chave).
+    const payrollTargets = new Set<string>([
+      'decimo terceiro salario',
+      '13 salario',
+      'f.g.t.s.',
+      'fgts',
+      'ferias',
+      'ordenados e gratificacoes',
+      'aviso previo',
+      'despesas c/ estagiarios',
+      'estagiarios',
+      'ajuda de custo',
+      'pro-labore',
+    ]);
+    const normLabel = (s: string) => s
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s./()-]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const usedLines = new Set<number>();
     let payrollSum = 0;
     let payrollHits = 0;
-    payrollAccounts.forEach((account) => {
-      const v = findValueByLabels(map, [account], { exact: true, fromLine: dreLine });
-      if (v !== undefined) { payrollSum += Math.abs(v); payrollHits += 1; }
-    });
+    for (const entry of map) {
+      if (entry.lineIndex < dreLine) continue;
+      if (usedLines.has(entry.lineIndex)) continue;
+      if (!payrollTargets.has(normLabel(entry.label))) continue;
+      payrollSum += Math.abs(entry.value);
+      payrollHits += 1;
+      usedLines.add(entry.lineIndex);
+    }
     if (payrollHits > 0) {
       values.annualPayrollFromDre = Number(payrollSum.toFixed(2));
       if (values.grossRevenue) values.payrollPercentFromDre = pct(payrollSum, values.grossRevenue);

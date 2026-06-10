@@ -83,12 +83,35 @@ function extract(documentType: string, text: string) {
   if (documentType === 'dre' || documentType === 'balancete') {
     const revenue = numberAfter(text, ['receita bruta', 'receita operacional bruta', 'faturamento bruto', 'receitas', 'receita']);
     const costs = numberAfter(text, ['cmv', 'cpv', 'custo dos serviços', 'custo dos servicos', 'custos', 'compras']);
-    // Folha em DRE: somar contas explícitas (evita pegar uma única linha "Folha" residual).
-    const payrollAccounts = ['Ordenados e Gratifica', '13[º°o]\\s*Sal[aá]rio', 'Decimo Terceiro Sal', 'F\\.?G\\.?T\\.?S', 'F[eé]rias', 'Aviso Pr[eé]vio', 'Pro-?Labore', 'Pr[oó]-?Labore', 'Estagi[aá]rios', 'Ajuda de Custo'];
+    // Folha em DRE: itera linha-a-linha somando contas trabalhistas explícitas
+    // UMA única vez por linha de origem, evitando que variantes do mesmo rótulo
+    // dupliquem a mesma conta (ex.: "Decimo Terceiro" e "Décimo Terceiro").
+    const payrollTargets = new Set<string>([
+      'decimo terceiro salario', '13 salario',
+      'f.g.t.s.', 'fgts',
+      'ferias', 'ordenados e gratificacoes',
+      'aviso previo', 'despesas c/ estagiarios', 'estagiarios',
+      'ajuda de custo', 'pro-labore',
+    ]);
+    const normLbl = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s./()-]/g,'').replace(/\s+/g,' ').trim();
+    const _lines = text.replace(/\r/g,'\n').split('\n').map(l=>l.trim());
     let payroll = 0; let payrollHits = 0;
-    for (const acc of payrollAccounts) {
-      const v = numberAfter(text, [acc]);
-      if (v !== undefined) { payroll += Math.abs(v); payrollHits += 1; }
+    const usedLines = new Set<number>();
+    for (let i = 0; i < _lines.length; i += 1) {
+      const label = _lines[i];
+      if (!label || /\d/.test(label)) continue;
+      if (!payrollTargets.has(normLbl(label))) continue;
+      // Próxima linha numérica (até 3 linhas à frente).
+      for (let j = i + 1; j < Math.min(_lines.length, i + 4); j += 1) {
+        const nxt = _lines[j];
+        if (!nxt) continue;
+        if (!/^\(?-?\d{1,3}(?:\.\d{3})*,\d{2}\)?$/.test(nxt)) break;
+        const n = normalizeNumber(nxt.replace(/^\(|\)$/g,''));
+        if (n !== undefined && !usedLines.has(i)) {
+          payroll += Math.abs(n); payrollHits += 1; usedLines.add(i);
+        }
+        break;
+      }
     }
     const grossProfit = numberAfter(text, ['lucro bruto', 'resultado bruto']);
     const expenses = numberAfter(text, ['despesas operacionais', 'despesas']);
