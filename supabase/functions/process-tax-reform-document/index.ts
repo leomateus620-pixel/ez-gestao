@@ -443,6 +443,13 @@ Deno.serve(async (req) => {
       Promise.resolve().then(() => extract(document.document_type, decoded.text ?? '')),
       new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Tempo limite de 50s excedido ao interpretar o documento.')), 50_000)),
     ]).catch((e) => ({ values: { warnings: [String(e?.message ?? e)], confidence: 0 }, findings: [], confidence: 0, summary: 'Tempo limite excedido na leitura.', warnings: [String(e?.message ?? e)] }));
+    console.info('[process-tax-reform-document] extração concluída', {
+      documentId,
+      type: document.document_type,
+      confidence: result.confidence,
+      findings: result.findings.length,
+      warnings: (result.values as ExtractedValues).warnings ?? [],
+    });
     if ((decoded as { warning?: string }).warning) {
       (result.values as ExtractedValues).warnings = [...((result.values as ExtractedValues).warnings ?? []), (decoded as { warning: string }).warning];
     }
