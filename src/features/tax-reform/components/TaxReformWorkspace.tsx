@@ -691,7 +691,7 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
   );
 }
 
-function ScoreAndRecommendation({ company, analysis, documents }: { company: TaxReformCompany; analysis: TaxReformAnalysis; documents: TaxReformDocument[] }) {
+function ScoreAndRecommendation({ company, analysis, documents, remotePersisted = true }: { company: TaxReformCompany; analysis: TaxReformAnalysis; documents: TaxReformDocument[]; remotePersisted?: boolean }) {
   const score = calculateTaxReformScore(company.currentTaxRegime, analysis.answers, documents, {
     mainActivity: company.mainActivity,
     requireDocuments: true,
@@ -704,7 +704,9 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
   const uploaded = documents.filter((doc) => doc.uploadStatus !== 'erro_upload');
   const failed = documents.filter((doc) => doc.uploadStatus === 'erro_upload');
   let analysisStatus: { label: string; tone: string; description: string };
-  if (essentialMissing.length > 0) {
+  if (!remotePersisted) {
+    analysisStatus = { label: 'Rascunho local', tone: 'border-amber-300 bg-amber-50 text-amber-900', description: 'Os dados não foram salvos na nuvem. Sincronize antes de tratar como decisão final.' };
+  } else if (essentialMissing.length > 0) {
     analysisStatus = { label: 'Bloqueada', tone: 'border-rose-200 bg-rose-50 text-rose-900', description: 'Responda as perguntas decisivas para liberar a recomendação confiável.' };
   } else if (score.recommendation === 'analise_manual_necessaria') {
     analysisStatus = { label: 'Revisão manual', tone: 'border-amber-200 bg-amber-50 text-amber-900', description: 'O cenário exige parecer manual do contador antes da decisão final.' };
@@ -978,6 +980,9 @@ export default function ReformaTributaria() {
           setRemotePersistenceEnabled(false);
           setSyncStatus('error');
           setSyncMessage('Modo local: alterações não estão salvas na nuvem. O cache local foi preservado apenas como rascunho temporário.');
+          toast.warning('Modo rascunho local', {
+            description: 'As alterações não foram salvas na nuvem. Use "Tentar sincronizar" antes de tratar a análise como definitiva.',
+          });
         });
     }, 700);
 
@@ -1162,8 +1167,8 @@ export default function ReformaTributaria() {
           {step === 'empresa' && <CompanyForm initial={selectedCompany} analysisYear={selectedAnalysis.analysisYear} compact onSave={upsertCompany} />}
           {step === 'questionario' && <Questionnaire analysis={selectedAnalysis} onAnswersChange={(answers) => updateAnalysis(selectedAnalysis.id, { answers, status: 'questionario_pendente' })} />}
           {step === 'documentos' && <DocumentUpload company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} onAddDocuments={(docs) => { setStore((prev) => ({ ...prev, documents: [...docs, ...prev.documents], analyses: prev.analyses.map((analysis) => analysis.id === selectedAnalysis.id ? { ...analysis, status: 'documentos_anexados', updatedAt: nowIso() } : analysis) })); }} onAnalyze={analyzeDocuments} />}
-          {step === 'resultado' && <ScoreAndRecommendation company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} />}
-          {step === 'parecer' && <><ScoreAndRecommendation company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} /><ManualOpinion analysis={selectedAnalysis} onChange={(patch) => updateAnalysis(selectedAnalysis.id, patch)} /></>}
+          {step === 'resultado' && <ScoreAndRecommendation company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} remotePersisted={syncStatus === 'supabase'} />}
+          {step === 'parecer' && <><ScoreAndRecommendation company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} remotePersisted={syncStatus === 'supabase'} /><ManualOpinion analysis={selectedAnalysis} onChange={(patch) => updateAnalysis(selectedAnalysis.id, patch)} /></>}
 
           <div className="flex justify-between">
             <Button variant="outline" disabled={currentIndex === 0} onClick={() => navigateStep(-1)} className="gap-2"><ArrowLeft className="h-4 w-4" />Voltar</Button>
