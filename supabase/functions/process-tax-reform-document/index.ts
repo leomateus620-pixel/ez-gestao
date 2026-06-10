@@ -1,8 +1,11 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.103.2';
+import { createClient } from 'npm:@supabase/supabase-js@2';
+import { extractText, getDocumentProxy } from 'npm:unpdf@0.12.1';
+import * as XLSX from 'npm:xlsx@0.18.5';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 type ExtractedValues = Record<string, unknown> & { warnings?: string[]; confidence?: number };
@@ -111,30 +114,75 @@ function extract(documentType: string, text: string) {
 
 function decodeText(fileName: string, mimeType: string, bytes: ArrayBuffer) {
   const lower = fileName.toLowerCase();
-  if (lower.endsWith('.xlsx') || mimeType.includes('spreadsheetml')) {
-    return { text: '', nonProcessable: true, reason: 'XLSX exige parser estruturado ainda não disponível nesta Edge Function. Reenvie como CSV ou finalize a integração com parser XLSX.' };
+  if (mimeType.startsWith('image/') || lower.match(/\.(png|jpe?g|gif|webp|bmp|tiff?)$/)) {
+    return Promise.resolve({ text: '', nonProcessable: true, reason: 'Documento parece imagem/escaneado. OCR ainda não está disponível.' });
   }
-  if (lower.endsWith('.xls')) {
-    return { text: '', nonProcessable: true, reason: 'XLS legado binário exige parser estruturado. Reenvie como CSV/XLSX com parser conectado.' };
+  if (lower.endsWith('.xlsx') || lower.endsWith('.xls') || mimeType.includes('spreadsheetml') || mimeType.includes('ms-excel')) {
+    return Promise.resolve(parseSpreadsheet(bytes));
   }
-  const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
   if (lower.endsWith('.pdf') || mimeType.includes('pdf')) {
-    const text = decoded.replace(/[^\x09\x0A\x0D\x20-\x7EÀ-ÿ]+/g, ' ');
-    return { text };
+    return parsePdf(bytes);
   }
-  if (mimeType.startsWith('image/')) return { text: '', nonProcessable: true, reason: 'Imagem exige OCR real conectado; nenhum dado foi simulado.' };
-  return { text: decoded };
+  // CSV/TXT/HTML/JSON
+  const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  return Promise.resolve({ text: decoded });
+}
+
+function parseSpreadsheet(bytes: ArrayBuffer) {
+  try {
+    const workbook = XLSX.read(new Uint8Array(bytes), { type: 'array' });
+    const parts: string[] = [];
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      const csv = XLSX.utils.sheet_to_csv(sheet, { FS: ';', blankrows: false });
+      if (csv.trim()) parts.push(`# ${sheetName}\n${csv}`);
+    }
+    const text = parts.join('\n\n');
+    if (!text.trim()) return { text: '', nonProcessable: true, reason: 'Planilha sem conteúdo legível.' };
+    return { text };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { text: '', nonProcessable: true, reason: `Não foi possível ler a planilha: ${message}` };
+  }
+}
+
+async function parsePdf(bytes: ArrayBuffer) {
+  try {
+    const pdf = await getDocumentProxy(new Uint8Array(bytes));
+    const { text } = await extractText(pdf, { mergePages: true });
+    const clean = (typeof text === 'string' ? text : Array.isArray(text) ? text.join('\n') : '').trim();
+    if (clean.length < 40) {
+      return { text: '', nonProcessable: true, reason: 'PDF sem camada de texto (provável escaneado). OCR ainda não está disponível.' };
+    }
+    return { text: clean };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { text: '', nonProcessable: true, reason: `Falha ao ler PDF: ${message}` };
+  }
 }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   try {
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) return new Response(JSON.stringify({ error: 'Autenticação obrigatória.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
     const { document_id: documentId } = await req.json();
     if (!documentId) return new Response(JSON.stringify({ error: 'document_id é obrigatório.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')!;
-    const supabase = createClient(supabaseUrl, serviceKey, { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } });
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY')!;
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? anonKey;
+
+    // Valida usuário autenticado.
+    const authClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
+    const { data: userData, error: userError } = await authClient.auth.getUser();
+    if (userError || !userData?.user) {
+      return new Response(JSON.stringify({ error: 'Sessão inválida.' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Service role para leitura/escrita do documento e download do storage privado.
+    const supabase = createClient(supabaseUrl, serviceKey);
 
     const { data: document, error: fetchError } = await supabase.from('tax_reform_documents').select('*').eq('id', documentId).single();
     if (fetchError) throw fetchError;
@@ -144,7 +192,7 @@ Deno.serve(async (req) => {
     const bucket = document.storage_bucket || 'tax-reform-documents';
     const { data: blob, error: downloadError } = await supabase.storage.from(bucket).download(document.storage_path);
     if (downloadError) throw downloadError;
-    const decoded = decodeText(document.file_name, document.mime_type ?? '', await blob.arrayBuffer());
+    const decoded = await decodeText(document.file_name, document.mime_type ?? '', await blob.arrayBuffer());
     if (decoded.nonProcessable) {
       const { data: updated, error } = await supabase.from('tax_reform_documents').update({
         reading_status: 'nao_processavel',
