@@ -17,6 +17,7 @@ import {
   Plus,
   Save,
   Search,
+  Trash2,
   Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -43,6 +44,7 @@ import {
   uploadTaxReformDocumentFile,
   getTaxReformDocumentSignedUrl,
   processTaxReformDocument,
+  deleteTaxReformDocument,
 } from '@/features/tax-reform/persistence';
 import { computeConfidenceLevel, computeConfidenceReasons, confidenceLabels } from '@/features/tax-reform/confidence';
 import type {
@@ -578,12 +580,13 @@ function Questionnaire({ analysis, onAnswersChange }: { analysis: TaxReformAnaly
   );
 }
 
-function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyze }: {
+function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyze, onRemoveDocument }: {
   company: TaxReformCompany;
   analysis: TaxReformAnalysis;
   documents: TaxReformDocument[];
   onAddDocuments: (docs: TaxReformDocument[]) => void;
   onAnalyze: () => void;
+  onRemoveDocument: (doc: TaxReformDocument) => void;
 }) {
   const [documentType, setDocumentType] = useState('dre');
   const [uploading, setUploading] = useState(false);
@@ -651,7 +654,7 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
       if (validDocs.length) {
         onAddDocuments(validDocs);
         const success = validDocs.filter((doc) => doc.uploadStatus === 'enviado').length;
-        if (success) toast.success(`${success} documento(s) enviado(s) ao Storage.`);
+        if (success) toast.success(`${success} documento(s) anexado(s).`);
       }
     } finally {
       setUploading(false);
