@@ -16,11 +16,20 @@ export const REQUIRED_QUESTION_KEYS = [
   'partners_main_goal',
 ];
 
+/**
+ * Perguntas decisivas (sem elas a recomendação não é confiável).
+ * Inclui regime e atividade principal, validados separadamente.
+ */
 export const ESSENTIAL_QUESTION_KEYS = [
   'sales_b2c_percent',
   'sales_b2b_percent',
   'clients_use_tax_credits',
+  'client_loss_risk',
+  'b2b_lucro_real_percent',
   'inputs_revenue_percent',
+  'supplier_regime',
+  'partners_main_goal',
+  'business_complexity_acceptance',
 ];
 
 export const REQUIRED_DOCUMENT_TYPES = ['dre', 'balancete', 'pgdas', 'faturamento_cliente', 'fornecedores'];
@@ -71,8 +80,20 @@ export function isValidMainActivity(value?: string | null): value is MainActivit
   return value === 'comercio' || value === 'industria' || value === 'servicos' || value === 'misto';
 }
 
+/**
+ * Considera apenas documentos efetivamente enviados ao Storage.
+ * Documentos com upload_status='erro_upload' ou sem storage_path não contam.
+ */
+export function isValidStorageDocument(doc: DocumentLike) {
+  if (doc.uploadStatus && doc.uploadStatus !== 'enviado') return false;
+  // Se o registro não trouxe metadados de storage (estado legado), aceitamos por
+  // compatibilidade — o caminho novo sempre preenche storagePath.
+  if (doc.storagePath === null) return false;
+  return true;
+}
+
 export function getMissingDocumentTypes(documents: DocumentLike[] = [], requiredTypes = REQUIRED_DOCUMENT_TYPES) {
-  const uploaded = new Set(documents.map((doc) => doc.documentType));
+  const uploaded = new Set(documents.filter(isValidStorageDocument).map((doc) => doc.documentType));
   return requiredTypes.filter((type) => !uploaded.has(type));
 }
 
@@ -93,6 +114,15 @@ export function getMissingRequiredData({
     if (isUnknown(answers[key])) missing.push(key);
   });
 
+  // Alíquota efetiva é decisiva apenas no Simples.
+  if (currentRegime === 'simples_nacional' && isUnknown(answers.effective_tax_rate)) {
+    missing.push('effective_tax_rate');
+  }
+  // Proximidade do limite do Simples é decisiva apenas no Simples.
+  if (currentRegime === 'simples_nacional' && isUnknown(answers.near_simples_limit)) {
+    missing.push('near_simples_limit');
+  }
+
   if (requireDocuments) {
     missing.push(...getMissingDocumentTypes(documents).map((type) => `documento:${type}`));
   }
@@ -112,20 +142,41 @@ export function calculateScoreParts(currentRegime: TaxRegime | null | undefined,
   let costs = 0;
   let currentTax = 0;
 
-  if (toNumber(answers.sales_b2b_percent) > 70) clients += 20;
-  if (toNumber(answers.b2b_lucro_real_percent) > 50) clients += 15;
+  // --- Perfil dos clientes (até 60) --------------------------------
+  const b2b = toNumber(answers.sales_b2b_percent);
+  if (b2b > 70) clients += 20;
+  else if (b2b >= 40) clients += 10;
+
+  const b2bLR = toNumber(answers.b2b_lucro_real_percent);
+  if (b2bLR > 50) clients += 15;
+  else if (b2bLR >= 20) clients += 8;
+
   if (isYes(answers.top_clients_over_50)) clients += 10;
   if (answers.clients_use_tax_credits === 'sim') clients += 10;
-  if (answers.clients_use_tax_credits === 'parcialmente') clients += 5;
-  if (answers.client_loss_risk === 'alto' || answers.client_loss_risk === 'medio') clients += 5;
+  else if (answers.clients_use_tax_credits === 'parcialmente') clients += 5;
+
+  if (answers.client_loss_risk === 'alto') clients += 5;
+  else if (answers.client_loss_risk === 'medio') clients += 3;
   clients = Math.min(clients, 60);
 
-  if (answers.inputs_revenue_percent === '41_60' || answers.inputs_revenue_percent === 'acima_60') costs += 10;
-  if (answers.supplier_regime === 'lucro_real' || answers.supplier_regime === 'lucro_presumido') costs += 5;
-  if (hasOneOf(answers.credit_potential_items, ['fretes', 'energia_eletrica', 'servicos_contratados'])) costs += 5;
-  if (hasOneOf(answers.credit_potential_items, ['maquinas_equipamentos', 'tecnologia_softwares'])) costs += 5;
+  // --- Custos, fornecedores e créditos (até 25) --------------------
+  if (answers.inputs_revenue_percent === 'acima_60') costs += 10;
+  else if (answers.inputs_revenue_percent === '41_60') costs += 8;
+  else if (answers.inputs_revenue_percent === '21_40') costs += 4;
+
+  if (answers.supplier_regime === 'lucro_real') costs += 5;
+  else if (answers.supplier_regime === 'lucro_presumido') costs += 3;
+
+  if (hasOneOf(answers.credit_potential_items, [
+    'fretes', 'energia_eletrica', 'servicos_contratados', 'maquinas_equipamentos', 'tecnologia_softwares',
+  ])) costs += 5;
+
+  const payrollPct = toNumber(answers.payroll_revenue_percent);
+  if (payrollPct >= 20) costs += 5;
+  else if (payrollPct >= 10) costs += 3;
   costs = Math.min(costs, 25);
 
+  // --- Situação tributária atual (até 15) --------------------------
   if (currentRegime === 'simples_nacional' && toNumber(answers.effective_tax_rate) >= 12) currentTax += 5;
   if (isYes(answers.near_simples_limit)) currentTax += 5;
   if (hasOneOf(answers.relevant_operations, ['produtos_monofasicos', 'substituicao_tributaria', 'iss_retido', 'exportacao'])) currentTax += 5;
