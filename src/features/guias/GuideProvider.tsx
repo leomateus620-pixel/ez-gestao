@@ -1,5 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any, react-refresh/only-export-components */
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -123,11 +124,13 @@ const GuideContext = createContext<GuideContextValue | null>(null);
 
 export function GuideProvider({ children }: { children: React.ReactNode }) {
   const client = useQueryClient();
+  const { pathname } = useLocation();
+  const guidesEnabled = pathname.startsWith('/guias') || pathname.startsWith('/integracoes') || pathname === '/';
   const [eventsEnabled, setEventsEnabled] = useState(false);
-  const guidesQuery = useQuery({ queryKey: ['guias'], queryFn: () => rows('guias', 'received_at').then((data) => data.map(mapGuide)) });
-  const dispatchQuery = useQuery({ queryKey: ['guia_envios'], queryFn: () => rows('guia_envios').then((data) => data.map(mapDispatch)) });
-  const exceptionsQuery = useQuery({ queryKey: ['guia_excecoes'], queryFn: () => rows('guia_excecoes').then((data) => data.map(mapException)) });
-  const eventsQuery = useQuery({ queryKey: ['guia_eventos'], queryFn: () => rows('guia_eventos').then((data) => data.map(mapEvent)), enabled: eventsEnabled });
+  const guidesQuery = useQuery({ queryKey: ['guias'], queryFn: () => rows('guias', 'received_at').then((data) => data.map(mapGuide)), enabled: guidesEnabled });
+  const dispatchQuery = useQuery({ queryKey: ['guia_envios'], queryFn: () => rows('guia_envios').then((data) => data.map(mapDispatch)), enabled: guidesEnabled });
+  const exceptionsQuery = useQuery({ queryKey: ['guia_excecoes'], queryFn: () => rows('guia_excecoes').then((data) => data.map(mapException)), enabled: guidesEnabled });
+  const eventsQuery = useQuery({ queryKey: ['guia_eventos'], queryFn: () => rows('guia_eventos').then((data) => data.map(mapEvent)), enabled: guidesEnabled && eventsEnabled });
   const integrationsQuery = useQuery({
     queryKey: ['integracoes_guias'],
     queryFn: async () => {
@@ -135,6 +138,7 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       return (data || []).map(mapIntegration);
     },
+    enabled: guidesEnabled,
   });
 
   const refresh = () => {

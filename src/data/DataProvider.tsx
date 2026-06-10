@@ -1,4 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, react-refresh/only-export-components */
 import React, { createContext, useCallback, useContext, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -174,13 +176,21 @@ function errMsg(e: any) {
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
+  const { pathname } = useLocation();
+  const dataDemand = useMemo(() => ({
+    dashboard: pathname === '/',
+    empresas: pathname === '/' || pathname.startsWith('/empresas'),
+    documentos: pathname === '/' || pathname.startsWith('/documentos') || pathname.startsWith('/empresas/'),
+    envios: pathname === '/' || pathname.startsWith('/envios') || pathname.startsWith('/empresas/'),
+    alertas: pathname === '/' || pathname.startsWith('/alertas') || pathname.startsWith('/empresas/'),
+  }), [pathname]);
   const [logsEnabled, setLogsEnabled] = React.useState(false);
   const [auditEnabled, setAuditEnabled] = React.useState(false);
 
-  const { data: empresas = [], isLoading: loadingEmpresas } = useQuery({ queryKey: ['empresas'], queryFn: fetchEmpresas });
-  const { data: documentos = [], isLoading: loadingDocumentos } = useQuery({ queryKey: ['documentos'], queryFn: fetchDocumentos });
-  const { data: envios = [], isLoading: loadingEnvios } = useQuery({ queryKey: ['envios'], queryFn: fetchEnvios });
-  const { data: alertas = [], isLoading: loadingAlertas } = useQuery({ queryKey: ['alertas'], queryFn: fetchAlertas });
+  const { data: empresas = [], isLoading: loadingEmpresas } = useQuery({ queryKey: ['empresas'], queryFn: fetchEmpresas, enabled: dataDemand.empresas });
+  const { data: documentos = [], isLoading: loadingDocumentos } = useQuery({ queryKey: ['documentos'], queryFn: fetchDocumentos, enabled: dataDemand.documentos });
+  const { data: envios = [], isLoading: loadingEnvios } = useQuery({ queryKey: ['envios'], queryFn: fetchEnvios, enabled: dataDemand.envios });
+  const { data: alertas = [], isLoading: loadingAlertas } = useQuery({ queryKey: ['alertas'], queryFn: fetchAlertas, enabled: dataDemand.alertas });
   const { data: logs = [], isLoading: loadingLogs } = useQuery({ queryKey: ['logs'], queryFn: fetchLogs, enabled: logsEnabled });
   const { data: auditTrail = [] } = useQuery({ queryKey: ['auditTrail'], queryFn: fetchAuditTrail, enabled: auditEnabled });
 
