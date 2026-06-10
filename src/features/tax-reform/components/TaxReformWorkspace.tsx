@@ -687,9 +687,23 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
               <p className="font-semibold">{doc.fileName}</p>
               <p className="text-xs text-foreground">{documentTypeLabels[doc.documentType]} · {Math.ceil(doc.fileSize / 1024)} KB · enviado em {formatDate(doc.uploadedAt)}</p>
               {doc.extractedSummary && <p className="mt-1 text-xs text-foreground">{doc.extractedSummary}</p>}
-              {doc.extractionError && <p className="mt-1 text-xs text-amber-800">Upload/leitura: {doc.extractionError}</p>}
+              {doc.extractionError && <p className="mt-1 text-xs text-amber-800">Leitura: {doc.extractionError}</p>}
             </div>
-            <Badge variant="outline">{readingStatusLabels[doc.readingStatus]}</Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">{readingStatusLabels[doc.readingStatus]}</Badge>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label={`Remover ${doc.fileName}`}
+                onClick={() => {
+                  if (window.confirm(`Remover o documento "${doc.fileName}"?`)) onRemoveDocument(doc);
+                }}
+                className="h-8 w-8 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         ))}
       </div>
