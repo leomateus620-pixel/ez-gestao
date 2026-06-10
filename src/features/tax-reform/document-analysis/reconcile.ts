@@ -11,9 +11,41 @@ export function aggregateExtractedValues(documents: TaxReformDocument[]): TaxRef
   const priorities: Record<string, string[]> = {
     effectiveTaxRate: ['pgdas'],
     grossRevenue12m: ['pgdas'],
+    monthlyRevenue: ['pgdas'],
+    dasTotal: ['pgdas'],
+    rba: ['pgdas'],
+    rbaa: ['pgdas'],
+    simplesLimit: ['pgdas'],
+    simplesLimitUsagePercent: ['pgdas'],
+    sublimitUsagePercent: ['pgdas'],
+    nearSimplesLimit: ['pgdas'],
+    factorRStatus: ['pgdas'],
+    shouldCalculateFactorR: ['pgdas'],
     revenue: ['pgdas', 'dre', 'balancete'],
+    grossRevenue: ['dre', 'balancete'],
+    serviceRevenue: ['dre', 'balancete'],
+    simplesNacionalExpense: ['dre', 'balancete'],
+    netRevenue: ['dre', 'balancete'],
+    serviceCosts: ['dre', 'balancete'],
+    grossProfit: ['dre', 'balancete'],
+    netProfit: ['dre', 'balancete'],
+    grossMargin: ['dre', 'balancete'],
+    netMargin: ['dre', 'balancete'],
+    annualEffectiveTaxRate: ['dre', 'balancete'],
+    annualPayrollFromDre: ['dre', 'balancete'],
+    payrollPercentFromDre: ['dre', 'balancete'],
     inputCostPercent: ['dre', 'balancete', 'fornecedores'],
     payrollPercent: ['folha_pagamento', 'dre', 'balancete'],
+    grossPayroll: ['folha_pagamento'],
+    netPayroll: ['folha_pagamento'],
+    salaryTotal: ['folha_pagamento'],
+    inssValue: ['folha_pagamento'],
+    fgtsValue: ['folha_pagamento'],
+    irrfValue: ['folha_pagamento'],
+    employeesCount: ['folha_pagamento'],
+    assetsTotal: ['balancete', 'dre'],
+    equity: ['balancete', 'dre'],
+    afac: ['balancete', 'dre'],
     b2bPercent: ['faturamento_cliente'],
     b2cPercent: ['faturamento_cliente'],
     governmentPercent: ['faturamento_cliente'],
@@ -47,9 +79,10 @@ export function reconcileQuestionnaireWithDocuments(
   answers: AnswerMap,
   documentsOrValues: TaxReformDocument[] | TaxReformExtractedValues,
 ): ReconciliationAlert[] {
-  const extracted = Array.isArray(documentsOrValues) ? aggregateExtractedValues(documentsOrValues) : documentsOrValues;
+  const docs = Array.isArray(documentsOrValues) ? documentsOrValues : undefined;
+  const extracted = docs ? aggregateExtractedValues(docs) : (documentsOrValues as TaxReformExtractedValues);
   const alerts: ReconciliationAlert[] = [];
-  if (!extracted || (extracted.confidence ?? 0) < 0.35) return alerts;
+  if (!extracted) return alerts;
 
   const add = (field: string, title: string, message: string, critical = false) => alerts.push({
     field,
@@ -58,6 +91,42 @@ export function reconcileQuestionnaireWithDocuments(
     severity: critical ? 'critical' : 'warning',
     manualReviewRecommended: critical,
   });
+
+  // -------- Cruzamentos documentais (independentes da confiança) --------
+  if (docs && docs.length > 1) {
+    const cnpjs = new Set(
+      docs
+        .map((doc) => (doc.extractedValues?.cnpj as string | undefined)?.replace(/\D/g, ''))
+        .filter((cnpj): cnpj is string => Boolean(cnpj)),
+    );
+    if (cnpjs.size > 1) {
+      add('cnpj', 'CNPJ divergente entre documentos', `Foram encontrados CNPJs diferentes nos documentos anexados (${cnpjs.size} valores distintos).`, true);
+    }
+  }
+
+  const pgdas = docs?.find((doc) => doc.documentType === 'pgdas')?.extractedValues;
+  const dre = docs?.find((doc) => doc.documentType === 'dre' || doc.documentType === 'balancete')?.extractedValues;
+
+  if (pgdas?.rbaa && dre?.grossRevenue) {
+    const diff = Math.abs(pgdas.rbaa - dre.grossRevenue) / pgdas.rbaa;
+    if (diff > 0.01) {
+      add('grossRevenue', 'Receita anual DRE diverge do RBAA do PGDAS',
+        `DRE indica R$ ${dre.grossRevenue.toFixed(2)} e PGDAS (RBAA) indica R$ ${pgdas.rbaa.toFixed(2)}.`, true);
+    }
+  }
+
+  if (pgdas?.effectiveTaxRate !== undefined && dre?.annualEffectiveTaxRate !== undefined) {
+    const diff = Math.abs(pgdas.effectiveTaxRate - dre.annualEffectiveTaxRate);
+    if (diff > 0.5) {
+      add('annualEffectiveTaxRate', 'Alíquota anual da DRE diverge do PGDAS',
+        `DRE: ${dre.annualEffectiveTaxRate}% · PGDAS: ${pgdas.effectiveTaxRate}%.`, false);
+    }
+  }
+
+  // Folha DRE × Folha mensal anualizada — apenas coerência, nunca crítico.
+  // (DRE inclui 13º, férias, FGTS, pró-labore → tende a ser maior.)
+
+  if (extracted.confidence !== undefined && extracted.confidence < 0.35) return alerts;
 
   const answerB2b = toNumber(answers.sales_b2b_percent);
   if (extracted.b2bPercent !== undefined && answerB2b > 0 && Math.abs(extracted.b2bPercent - answerB2b) >= 30) {
