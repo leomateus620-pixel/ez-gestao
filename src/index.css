@@ -502,6 +502,35 @@
   }
 }
 
+/* Scoped readability fix for the Reforma Tributária module.
+   Glass/translucent surfaces combined with foreground-with-opacity utilities
+   produced low-contrast ("apagado") text across the wizard, dashboard and
+   document panels. We force opacity-modified foreground colors to full text
+   tokens within this module only — no other modules are affected. */
+.tax-reform-readable [class*="text-foreground/"] {
+  color: hsl(var(--text-primary)) !important;
+}
+.tax-reform-readable thead [class*="text-foreground/"],
+.tax-reform-readable .uppercase[class*="text-foreground/"] {
+  color: hsl(var(--text-secondary)) !important;
+}
+.tax-reform-readable .text-muted-foreground {
+  color: hsl(var(--text-secondary)) !important;
+}
+/* Inactive step buttons / pill toggles use bg-white/45 + text-foreground/90
+   over a warm glass canvas, which still reads as faded. Lift the surface so
+   text contrast meets the rest of the UI. */
+.tax-reform-readable button.bg-white\/45,
+.tax-reform-readable button.bg-white\/50,
+.tax-reform-readable div.bg-white\/45 {
+  background-color: hsl(0 0% 100% / 0.78) !important;
+  color: hsl(var(--text-primary)) !important;
+}
+.tax-reform-readable .opacity-95,
+.tax-reform-readable .opacity-80 {
+  opacity: 1 !important;
+}
+
 @keyframes slide-in {
   from {
     opacity: 0;
