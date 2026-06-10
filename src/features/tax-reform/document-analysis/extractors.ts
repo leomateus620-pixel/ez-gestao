@@ -42,15 +42,17 @@ export function parsePgdasDocument(text: string, documentType = 'pgdas'): TaxRef
   // (ou da próxima linha se a atual não tiver número).
   const firstNumberNear = (regex: RegExp): number | undefined => {
     const lines = text.replace(/\r/g, '\n').split('\n');
+    let last: number | undefined;
     for (let i = 0; i < lines.length; i += 1) {
       if (!regex.test(lines[i])) continue;
-      // Busca primeiro número em até 3 linhas a partir daqui.
-      for (let j = i; j < Math.min(lines.length, i + 4); j += 1) {
+      // Busca número em até 10 linhas, parando em outra linha de rótulo conhecido.
+      for (let j = i; j < Math.min(lines.length, i + 10); j += 1) {
         const nums = extractAllNumbers(lines[j]);
-        if (nums.length) return nums[0];
+        if (nums.length) { last = nums[0]; break; }
+        if (j > i && /[A-Za-zÀ-ú]{6,}/.test(lines[j]) && !regex.test(lines[j])) break;
       }
     }
-    return undefined;
+    return last;
   };
 
   values.monthlyRevenue = firstNumberNear(/Receita Bruta do PA/i);
