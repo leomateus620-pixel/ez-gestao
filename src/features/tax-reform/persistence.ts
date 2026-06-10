@@ -119,7 +119,7 @@ function mapAlert(row: any): TaxReformAlertRecord {
   };
 }
 
-export async function fetchTaxReformStore(): Promise<TaxReformStore> {
+export async function fetchTaxReformWorkspace(): Promise<TaxReformStore> {
   if (!isSupabaseConfigured) {
     throw new Error('Supabase não configurado para Reforma Tributária.');
   }
@@ -151,122 +151,201 @@ export async function fetchTaxReformStore(): Promise<TaxReformStore> {
   };
 }
 
+export const fetchTaxReformStore = fetchTaxReformWorkspace;
+
+const companyToRow = (company: TaxReformCompany) => ({
+  id: company.id,
+  company_name: company.companyName,
+  cnpj: company.cnpj,
+  current_tax_regime: company.currentTaxRegime,
+  main_activity: company.mainActivity,
+  responsible_user: company.responsibleUser,
+  rbt12: company.rbt12 ?? null,
+  projected_revenue: company.projectedRevenue ?? null,
+  effective_tax_rate: company.effectiveTaxRate ?? null,
+  notes: company.notes ?? null,
+  created_at: company.createdAt,
+  updated_at: company.updatedAt,
+});
+
+const analysisToRow = (analysis: TaxReformAnalysis) => ({
+  id: analysis.id,
+  company_id: analysis.companyId,
+  analysis_year: analysis.analysisYear,
+  status: analysis.status,
+  score_total: analysis.scoreTotal,
+  score_clients: analysis.scoreClients,
+  score_costs: analysis.scoreCosts,
+  score_current_tax: analysis.scoreCurrentTax,
+  risk_level: analysis.riskLevel,
+  recommendation: analysis.recommendation,
+  automatic_summary: analysis.automaticSummary,
+  manual_opinion: analysis.manualOpinion,
+  final_decision: analysis.finalDecision,
+  confidence_level: analysis.confidenceLevel ?? null,
+  confidence_reason: analysis.confidenceReason ?? null,
+  created_at: analysis.createdAt,
+  updated_at: analysis.updatedAt,
+});
+
+const documentToRow = (document: TaxReformDocument) => ({
+  id: document.id,
+  company_id: document.companyId,
+  analysis_id: document.analysisId,
+  document_type: document.documentType,
+  file_name: document.fileName,
+  file_url: document.fileUrl,
+  file_size: document.fileSize,
+  mime_type: document.mimeType,
+  reading_status: document.readingStatus,
+  extracted_summary: document.extractedSummary ?? null,
+  extraction_error: document.extractionError ?? null,
+  storage_bucket: document.storageBucket ?? null,
+  storage_path: document.storagePath ?? null,
+  upload_status: document.uploadStatus ?? null,
+  upload_error: document.uploadError ?? null,
+  uploaded_by: document.uploadedBy ?? null,
+  extraction_confidence: document.extractionConfidence ?? null,
+  document_confidence_weight: document.documentConfidenceWeight ?? null,
+  uploaded_at: document.uploadedAt,
+  updated_at: document.updatedAt,
+});
+
+const answerToRow = (analysis: TaxReformAnalysis, key: string, value: AnswerValue) => ({
+  analysis_id: analysis.id,
+  question_key: key,
+  question_label: key,
+  answer_value: value,
+  answer_type: answerTypeFromValue(key, value),
+  created_at: analysis.createdAt,
+  updated_at: analysis.updatedAt,
+});
+
+const alertToRow = (alert: TaxReformAlertRecord) => ({
+  id: alert.id,
+  analysis_id: alert.analysisId,
+  alert_type: alert.alertType,
+  severity: alert.severity,
+  title: alert.title,
+  message: alert.message,
+  created_at: alert.createdAt,
+  updated_at: alert.updatedAt,
+});
+
+export async function upsertTaxReformCompany(company: TaxReformCompany) {
+  if (!isSupabaseConfigured) throw new Error('Supabase não configurado para Reforma Tributária.');
+  const { error } = await db().from('tax_reform_companies').upsert(companyToRow(company), { onConflict: 'id' });
+  if (error) throw error;
+}
+
+export async function createTaxReformAnalysis(analysis: TaxReformAnalysis) {
+  if (!isSupabaseConfigured) throw new Error('Supabase não configurado para Reforma Tributária.');
+  const { error } = await db().from('tax_reform_analyses').upsert(analysisToRow(analysis), { onConflict: 'id' });
+  if (error) throw error;
+}
+
+export async function upsertTaxReformAnswer(analysis: TaxReformAnalysis, questionKey: string, value: AnswerValue) {
+  if (!isSupabaseConfigured) throw new Error('Supabase não configurado para Reforma Tributária.');
+  if (!valueIsPresent(value)) {
+    const { error } = await db()
+      .from('tax_reform_answers')
+      .delete()
+      .eq('analysis_id', analysis.id)
+      .eq('question_key', questionKey);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await db()
+    .from('tax_reform_answers')
+    .upsert(answerToRow(analysis, questionKey, value), { onConflict: 'analysis_id,question_key' });
+  if (error) throw error;
+}
+
+export async function upsertTaxReformDocument(document: TaxReformDocument) {
+  if (!isSupabaseConfigured) throw new Error('Supabase não configurado para Reforma Tributária.');
+  const { error } = await db().from('tax_reform_documents').upsert(documentToRow(document), { onConflict: 'id' });
+  if (error) throw error;
+}
+
+export async function updateTaxReformAnalysisScore(analysis: TaxReformAnalysis) {
+  if (!isSupabaseConfigured) throw new Error('Supabase não configurado para Reforma Tributária.');
+  const { error } = await db()
+    .from('tax_reform_analyses')
+    .update({
+      status: analysis.status,
+      score_total: analysis.scoreTotal,
+      score_clients: analysis.scoreClients,
+      score_costs: analysis.scoreCosts,
+      score_current_tax: analysis.scoreCurrentTax,
+      risk_level: analysis.riskLevel,
+      recommendation: analysis.recommendation,
+      automatic_summary: analysis.automaticSummary,
+      confidence_level: analysis.confidenceLevel ?? null,
+      confidence_reason: analysis.confidenceReason ?? null,
+      updated_at: analysis.updatedAt,
+    })
+    .eq('id', analysis.id);
+  if (error) throw error;
+}
+
+export async function updateTaxReformManualOpinion(analysisId: string, manualOpinion: string, updatedAt: string) {
+  if (!isSupabaseConfigured) throw new Error('Supabase não configurado para Reforma Tributária.');
+  const { error } = await db()
+    .from('tax_reform_analyses')
+    .update({ manual_opinion: manualOpinion, updated_at: updatedAt })
+    .eq('id', analysisId);
+  if (error) throw error;
+}
+
+export async function updateTaxReformFinalDecision(analysisId: string, finalDecision: FinalDecision, status: AnalysisStatus, updatedAt: string) {
+  if (!isSupabaseConfigured) throw new Error('Supabase não configurado para Reforma Tributária.');
+  const { error } = await db()
+    .from('tax_reform_analyses')
+    .update({ final_decision: finalDecision, status, updated_at: updatedAt })
+    .eq('id', analysisId);
+  if (error) throw error;
+}
+
+export async function upsertTaxReformAlerts(analysisId: string, alerts: TaxReformAlertRecord[]) {
+  if (!isSupabaseConfigured) throw new Error('Supabase não configurado para Reforma Tributária.');
+  const expectedTypes = alerts.map((alert) => alert.alertType);
+
+  if (expectedTypes.length) {
+    const { error } = await db()
+      .from('tax_reform_alerts')
+      .delete()
+      .eq('analysis_id', analysisId)
+      .not('alert_type', 'in', `(${expectedTypes.map((type) => `"${type}"`).join(',')})`);
+    if (error) throw error;
+  } else {
+    const { error } = await db().from('tax_reform_alerts').delete().eq('analysis_id', analysisId);
+    if (error) throw error;
+    return;
+  }
+
+  const { error } = await db()
+    .from('tax_reform_alerts')
+    .upsert(alerts.map(alertToRow), { onConflict: 'analysis_id,alert_type' });
+  if (error) throw error;
+}
+
 export async function saveTaxReformStore(store: TaxReformStore) {
-  if (!isSupabaseConfigured) return;
+  if (!isSupabaseConfigured) throw new Error('Supabase não configurado para Reforma Tributária.');
 
-  const database = db();
-  const companies = store.companies.map((company) => ({
-    id: company.id,
-    company_name: company.companyName,
-    cnpj: company.cnpj,
-    current_tax_regime: company.currentTaxRegime,
-    main_activity: company.mainActivity,
-    responsible_user: company.responsibleUser,
-    rbt12: company.rbt12 ?? null,
-    projected_revenue: company.projectedRevenue ?? null,
-    effective_tax_rate: company.effectiveTaxRate ?? null,
-    notes: company.notes ?? null,
-    created_at: company.createdAt,
-    updated_at: company.updatedAt,
-  }));
-
-  const analyses = store.analyses.map((analysis) => ({
-    id: analysis.id,
-    company_id: analysis.companyId,
-    analysis_year: analysis.analysisYear,
-    status: analysis.status,
-    score_total: analysis.scoreTotal,
-    score_clients: analysis.scoreClients,
-    score_costs: analysis.scoreCosts,
-    score_current_tax: analysis.scoreCurrentTax,
-    risk_level: analysis.riskLevel,
-    recommendation: analysis.recommendation,
-    automatic_summary: analysis.automaticSummary,
-    manual_opinion: analysis.manualOpinion,
-    final_decision: analysis.finalDecision,
-    confidence_level: analysis.confidenceLevel ?? null,
-    confidence_reason: analysis.confidenceReason ?? null,
-    created_at: analysis.createdAt,
-    updated_at: analysis.updatedAt,
-  }));
-
-  if (companies.length) {
-    const { error } = await database.from('tax_reform_companies').upsert(companies, { onConflict: 'id' });
-    if (error) throw error;
+  for (const company of store.companies) await upsertTaxReformCompany(company);
+  for (const analysis of store.analyses) {
+    await createTaxReformAnalysis(analysis);
+    await Promise.all(Object.entries(analysis.answers).map(([key, value]) => upsertTaxReformAnswer(analysis, key, value)));
+    await updateTaxReformAnalysisScore(analysis);
   }
-
-  if (analyses.length) {
-    const { error } = await database.from('tax_reform_analyses').upsert(analyses, { onConflict: 'id' });
-    if (error) throw error;
-  }
-
-  await Promise.all(store.analyses.map(async (analysis) => {
-    const { error: deleteError } = await database.from('tax_reform_answers').delete().eq('analysis_id', analysis.id);
-    if (deleteError) throw deleteError;
-
-    const rows = Object.entries(analysis.answers)
-      .filter(([, value]) => valueIsPresent(value))
-      .map(([key, value]) => ({
-        analysis_id: analysis.id,
-        question_key: key,
-        question_label: key,
-        answer_value: value,
-        answer_type: answerTypeFromValue(key, value),
-        created_at: analysis.createdAt,
-        updated_at: analysis.updatedAt,
-      }));
-
-    if (!rows.length) return;
-    const { error } = await database.from('tax_reform_answers').insert(rows);
-    if (error) throw error;
-  }));
-
-  if (store.documents.length) {
-    const documents = store.documents.map((document) => ({
-      id: document.id,
-      company_id: document.companyId,
-      analysis_id: document.analysisId,
-      document_type: document.documentType,
-      file_name: document.fileName,
-      file_url: document.fileUrl,
-      file_size: document.fileSize,
-      mime_type: document.mimeType,
-      reading_status: document.readingStatus,
-      extracted_summary: document.extractedSummary ?? null,
-      extraction_error: document.extractionError ?? null,
-      storage_bucket: document.storageBucket ?? null,
-      storage_path: document.storagePath ?? null,
-      upload_status: document.uploadStatus ?? null,
-      upload_error: document.uploadError ?? null,
-      uploaded_by: document.uploadedBy ?? null,
-      extraction_confidence: document.extractionConfidence ?? null,
-      document_confidence_weight: document.documentConfidenceWeight ?? null,
-      uploaded_at: document.uploadedAt,
-      updated_at: document.updatedAt,
-    }));
-    const { error } = await database.from('tax_reform_documents').upsert(documents, { onConflict: 'id' });
-    if (error) throw error;
-  }
-
-  await Promise.all(store.analyses.map(async (analysis) => {
-    const { error } = await database.from('tax_reform_alerts').delete().eq('analysis_id', analysis.id);
-    if (error) throw error;
-  }));
-
-  if (store.alerts.length) {
-    const alerts = store.alerts.map((alert) => ({
-      id: alert.id,
-      analysis_id: alert.analysisId,
-      alert_type: alert.alertType,
-      severity: alert.severity,
-      title: alert.title,
-      message: alert.message,
-      created_at: alert.createdAt,
-      updated_at: alert.updatedAt,
-    }));
-    const { error } = await database.from('tax_reform_alerts').insert(alerts);
-    if (error) throw error;
-  }
+  await Promise.all(store.documents.map(upsertTaxReformDocument));
+  const alertsByAnalysis = new Map<string, TaxReformAlertRecord[]>();
+  store.alerts.forEach((alert) => {
+    const current = alertsByAnalysis.get(alert.analysisId) ?? [];
+    current.push(alert);
+    alertsByAnalysis.set(alert.analysisId, current);
+  });
+  await Promise.all([...alertsByAnalysis.entries()].map(([analysisId, alerts]) => upsertTaxReformAlerts(analysisId, alerts)));
 }
 
 const sanitizeFileName = (fileName: string) => fileName

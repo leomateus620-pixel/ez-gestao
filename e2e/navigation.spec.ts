@@ -142,6 +142,11 @@ const rowsByTable: Record<string, unknown[]> = {
   classifica_rules: [],
   classifica_review_queue: [],
   classifica_processing_logs: [],
+  tax_reform_companies: [],
+  tax_reform_analyses: [],
+  tax_reform_answers: [],
+  tax_reform_documents: [],
+  tax_reform_alerts: [],
   whatsapp_messages: [],
 };
 
@@ -214,6 +219,7 @@ const menuItems: MenuExpectation[] = [
   { label: 'Abrir empresas', path: '/empresas', heading: /Empresas/i },
   { label: 'Abrir integracoes', path: '/integracoes', heading: /Integra/i },
   { label: 'Abrir modulo Fator R', path: '/fator-r', heading: /Fator R/i },
+  { label: 'Abrir Reforma Tributária', path: '/reforma-tributaria', heading: /Reforma Tributária/i },
   { label: 'Abrir modulo Classifica', path: '/classifica', heading: /Classifica/i },
   { label: 'Abrir envios', path: '/envios', heading: /Envios/i },
   { label: 'Abrir alertas', path: '/alertas', heading: /Alertas/i },
@@ -292,6 +298,19 @@ async function expectSingleNavigationClick(page: Page, item: MenuExpectation) {
   expect(snapshot.loadingMounts, `${item.label} should not mount loading fallback twice`).toBeLessThanOrEqual(1);
   expect(snapshot.urlChanges.filter((path) => path === item.path), `${item.label} should push target URL once`).toHaveLength(item.path === '/' ? 0 : 1);
 }
+
+
+test('abre Reforma Tributária pelo menu e exibe dashboard operacional', async ({ page }) => {
+  await page.goto('/');
+  await installNavigationMonitor(page);
+
+  await page.getByLabel('Abrir Reforma Tributária').click();
+  await expect(page).toHaveURL('/reforma-tributaria');
+  await expect(page.getByRole('heading', { name: /Reforma Tributária/i })).toBeVisible();
+  await expect(page.getByText(/Empresas cadastradas/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Nova empresa/i })).toBeVisible();
+  await expect(page.getByText(/Erro ao carregar|Página não encontrada|Algo deu errado/i)).toHaveCount(0);
+});
 
 test('navega pelos menus principais sem depender de topbar ou submenus removidos', async ({ page }) => {
   const consoleErrors: string[] = [];
