@@ -697,36 +697,88 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
     requireDocuments: true,
     requireMainActivity: true,
   });
+  const confidenceLevel = computeConfidenceLevel(documents);
+  const confidenceReasons = computeConfidenceReasons(documents);
+  const essentialMissing = score.missingRequiredData.filter((key) => !key.startsWith('documento:'));
+  const missingDocs = score.missingRequiredData.filter((key) => key.startsWith('documento:'));
+  const uploaded = documents.filter((doc) => doc.uploadStatus !== 'erro_upload');
+  const failed = documents.filter((doc) => doc.uploadStatus === 'erro_upload');
+  let analysisStatus: { label: string; tone: string; description: string };
+  if (essentialMissing.length > 0) {
+    analysisStatus = { label: 'Bloqueada', tone: 'border-rose-200 bg-rose-50 text-rose-900', description: 'Responda as perguntas decisivas para liberar a recomendação confiável.' };
+  } else if (score.recommendation === 'analise_manual_necessaria') {
+    analysisStatus = { label: 'Revisão manual', tone: 'border-amber-200 bg-amber-50 text-amber-900', description: 'O cenário exige parecer manual do contador antes da decisão final.' };
+  } else if (confidenceLevel === 'alta' && missingDocs.length === 0) {
+    analysisStatus = { label: 'Confiável', tone: 'border-emerald-200 bg-emerald-50 text-emerald-900', description: 'Perguntas decisivas respondidas e documentos suficientes enviados.' };
+  } else {
+    analysisStatus = { label: 'Preliminar', tone: 'border-sky-200 bg-sky-50 text-sky-900', description: 'Recomendação inicial. Envie mais documentos para subir a confiança.' };
+  }
+  const openSignedUrl = async (doc: TaxReformDocument) => {
+    if (!doc.storagePath) { toast.error('Documento sem storage path. Reenvie o arquivo.'); return; }
+    const url = await getTaxReformDocumentSignedUrl(doc.storagePath, 3600, doc.storageBucket);
+    if (!url) { toast.error('Não foi possível gerar link temporário.'); return; }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
   return (
     <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
       <GlassCard className="space-y-4">
-        <div className="flex items-center justify-between"><h3 className="font-bold">Score da análise</h3><Badge>{riskLabels[score.riskLevel]}</Badge></div>
+        <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Score da análise</h3><div className="flex flex-wrap gap-1.5"><Badge>{riskLabels[score.riskLevel]}</Badge><Badge variant="outline">{confidenceLabels[confidenceLevel]}</Badge></div></div>
         <div className="text-center"><div className="text-6xl font-black tracking-tight text-primary">{score.total}</div><p className="text-sm text-foreground/60">de 100 pontos</p></div>
         <div className="space-y-3 text-sm">
           <div><div className="mb-1 flex justify-between"><span>Perfil dos clientes</span><b>{score.clients}/60</b></div><Progress value={(score.clients / 60) * 100} /></div>
           <div><div className="mb-1 flex justify-between"><span>Custos e créditos</span><b>{score.costs}/25</b></div><Progress value={(score.costs / 25) * 100} /></div>
           <div><div className="mb-1 flex justify-between"><span>Situação atual</span><b>{score.currentTax}/15</b></div><Progress value={(score.currentTax / 15) * 100} /></div>
         </div>
+        <div className={cn('rounded-2xl border p-3 text-xs', analysisStatus.tone)}>
+          <div className="font-bold uppercase tracking-[0.14em]">Status · {analysisStatus.label}</div>
+          <p className="mt-1 text-[11px] opacity-80">{analysisStatus.description}</p>
+          {confidenceReasons.length > 0 && (
+            <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[11px] opacity-80">
+              {confidenceReasons.map((reason) => <li key={reason}>{reason}</li>)}
+            </ul>
+          )}
+        </div>
       </GlassCard>
       <GlassCard className="space-y-4">
         <div><h3 className="font-bold">Resultado e recomendação</h3><p className="text-sm text-foreground/65">Triagem inicial. Não substitui parecer técnico ou simulação tributária.</p></div>
         <div className="rounded-3xl border border-primary/20 bg-primary/5 p-4"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Recomendação automática</p><p className="mt-2 text-2xl font-black">{recommendationLabels[score.recommendation]}</p><p className="mt-2 text-sm text-foreground/70">{score.summary}</p></div>
-        {score.insufficientData && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><b>Dados pendentes:</b> {score.missingRequiredData.map(formatMissingData).join(', ')}.</div>}
+        {essentialMissing.length > 0 && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-950"><b>Perguntas decisivas faltantes:</b> {essentialMissing.map(formatMissingData).join(', ')}.</div>}
+        {missingDocs.length > 0 && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><b>Documentos faltantes:</b> {missingDocs.map(formatMissingData).join(', ')}.</div>}
         <div className="grid gap-2 md:grid-cols-4"><Badge variant="outline">{company.companyName}</Badge><Badge variant="outline">{company.cnpj}</Badge><Badge variant="outline">{regimeLabels[company.currentTaxRegime]}</Badge><Badge variant="outline">Ano-base {analysis.analysisYear}</Badge></div>
         <div className="space-y-2">
           <h4 className="font-semibold">Alertas automáticos</h4>
           {score.alerts.length === 0 ? <p className="text-sm text-foreground/60">Nenhum alerta automático com os dados atuais.</p> : score.alerts.map((alert) => <div key={alert.alertType} className={cn('rounded-2xl border p-3 text-sm', alert.severity === 'critical' ? 'border-rose-200 bg-rose-50 text-rose-950' : alert.severity === 'warning' ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-emerald-200 bg-emerald-50 text-emerald-950')}><b>{alert.title}:</b> {alert.message}</div>)}
         </div>
-        <div className="text-sm text-foreground/65">Perguntas obrigatórias respondidas: <b>{score.answeredRequired}</b>. Documentos usados: <b>{documents.length}</b>.</div>
+        <div className="text-sm text-foreground/65">Perguntas obrigatórias respondidas: <b>{score.answeredRequired}</b>. Documentos enviados: <b>{uploaded.length}</b>{failed.length > 0 && <span className="text-rose-700"> · {failed.length} com erro</span>}.</div>
         <div className="grid gap-3 lg:grid-cols-2">
           <div className="rounded-2xl border border-white/60 bg-white/45 p-3">
             <h4 className="mb-2 text-sm font-semibold">Documentos usados</h4>
-            {documents.length === 0 ? <p className="text-xs text-foreground/60">Nenhum documento anexado.</p> : documents.map((doc) => <p key={doc.id} className="text-xs text-foreground/70">{documentTypeLabels[doc.documentType]} · {doc.fileName} · {readingStatusLabels[doc.readingStatus]}</p>)}
+            {documents.length === 0 ? (
+              <p className="text-xs text-foreground/60">Nenhum documento anexado.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {documents.map((doc) => (
+                  <li key={doc.id} className="flex items-center justify-between gap-2 text-xs text-foreground/70">
+                    <span className="truncate"><b>{documentTypeLabels[doc.documentType]}</b> · {doc.fileName}</span>
+                    {doc.uploadStatus === 'enviado' && doc.storagePath ? (
+                      <button type="button" onClick={() => openSignedUrl(doc)} className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/20">Abrir</button>
+                    ) : (
+                      <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700">Erro upload</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           <div className="rounded-2xl border border-white/60 bg-white/45 p-3">
             <h4 className="mb-2 text-sm font-semibold">Perguntas respondidas</h4>
             {Object.entries(analysis.answers).filter(([, value]) => value !== '' && value !== undefined && value !== null).slice(0, 8).map(([key, value]) => <p key={key} className="text-xs text-foreground/70"><b>{questionLabelByKey[key] ?? key}:</b> {formatAnswerValue(key, value)}</p>)}
           </div>
+        </div>
+        <div className="rounded-2xl border border-white/60 bg-white/45 p-3 text-sm">
+          <h4 className="mb-1 font-semibold">Decisão consolidada</h4>
+          <p className="text-xs text-foreground/70"><b>Parecer manual:</b> {analysis.manualOpinion?.trim() ? analysis.manualOpinion : 'Pendente — registre na etapa "Parecer manual".'}</p>
+          <p className="text-xs text-foreground/70"><b>Decisão final:</b> {finalDecisionLabels[analysis.finalDecision]}</p>
         </div>
       </GlassCard>
     </div>
