@@ -229,10 +229,21 @@ function parsePayrollTotals(text: string, warnings: string[]): ExtractedValues {
   const periodMatch = text.match(/Per[ií]odo:\s*\d{2}\/(\d{2})\/(\d{4})/i);
   if (periodMatch) out.period = `${periodMatch[1]}/${periodMatch[2]}`;
   // employeesCount pode estar na linha seguinte (multi-linha do unpdf)
-  const empCountSame = text.match(/Total de empregados:\s*(\d+)/i);
-  const empCountNext = text.match(/Total de empregados:\s*\n\s*(\d+)/i);
-  const empCount = empCountSame ?? empCountNext;
-  if (empCount) out.employeesCount = Number(empCount[1]);
+  {
+    const _lines = text.replace(/\r/g, '\n').split('\n');
+    let total = 0;
+    for (let i = 0; i < _lines.length; i += 1) {
+      if (!/Total de empregados:/i.test(_lines[i])) continue;
+      const sameLine = _lines[i].match(/Total de empregados:\s*(\d{1,5})\s*$/i);
+      if (sameLine) { total += Number(sameLine[1]); continue; }
+      for (let j = i + 1; j < Math.min(_lines.length, i + 6); j += 1) {
+        const t = _lines[j].trim();
+        if (!t) continue;
+        if (/^\d{1,5}$/.test(t)) { total += Number(t); break; }
+      }
+    }
+    if (total > 0) out.employeesCount = total;
+  }
 
   const moneyRe = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g;
   const lines = text.split(/\n/);
