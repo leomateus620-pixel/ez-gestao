@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useRef } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -45,6 +46,7 @@ import {
   processTaxReformDocument,
   deleteTaxReformDocument,
   upsertTaxReformDocument,
+  upsertTaxReformAnswer,
 } from '@/features/tax-reform/persistence';
 import { computeConfidenceLevel, computeConfidenceReasons, confidenceLabels } from '@/features/tax-reform/confidence';
 import type {
