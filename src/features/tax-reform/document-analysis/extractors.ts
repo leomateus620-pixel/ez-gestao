@@ -218,23 +218,40 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
     values.netProfit = findValueByLabels(map, ['RESULTADO LÍQUIDO DO EXERCÍCIO', 'RESULTADO LIQUIDO DO EXERCICIO'], { fromLine: dreLine })
       ?? findValueByLabels(map, ['RESULTADO LÍQUIDO ANTES DAS PROVISÕES'], { fromLine: dreLine });
 
-    // Folha anual a partir de contas explícitas (NÃO usar regex genérica "folha").
-    const payrollAccounts = [
-      'Decimo Terceiro Salário', 'Décimo Terceiro Salário', '13º Salário',
-      'F.G.T.S.', 'FGTS',
-      'Ferias', 'Férias',
-      'Ordenados e Gratificações', 'Ordenados e Gratificacoes',
-      'Aviso Previo', 'Aviso Prévio',
-      'Despesas C/ Estagiários', 'Despesas C/ Estagiarios', 'Estagiários',
-      'Ajuda de Custo',
-      'Pro-Labore', 'Pró-Labore',
-    ];
+    // Folha anual a partir de contas explícitas — uma única passagem pelo map
+    // para impedir que variantes do mesmo rótulo somem a mesma linha duas vezes
+    // (ex.: "Decimo Terceiro" e "Décimo Terceiro" normalizam para a mesma chave).
+    const payrollTargets = new Set<string>([
+      'decimo terceiro salario',
+      '13 salario',
+      'f.g.t.s.',
+      'fgts',
+      'ferias',
+      'ordenados e gratificacoes',
+      'aviso previo',
+      'despesas c/ estagiarios',
+      'estagiarios',
+      'ajuda de custo',
+      'pro-labore',
+    ]);
+    const normLabel = (s: string) => s
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s./()-]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const usedLines = new Set<number>();
     let payrollSum = 0;
     let payrollHits = 0;
-    payrollAccounts.forEach((account) => {
-      const v = findValueByLabels(map, [account], { exact: true, fromLine: dreLine });
-      if (v !== undefined) { payrollSum += Math.abs(v); payrollHits += 1; }
-    });
+    for (const entry of map) {
+      if (entry.lineIndex < dreLine) continue;
+      if (usedLines.has(entry.lineIndex)) continue;
+      if (!payrollTargets.has(normLabel(entry.label))) continue;
+      payrollSum += Math.abs(entry.value);
+      payrollHits += 1;
+      usedLines.add(entry.lineIndex);
+    }
     if (payrollHits > 0) {
       values.annualPayrollFromDre = Number(payrollSum.toFixed(2));
       if (values.grossRevenue) values.payrollPercentFromDre = pct(payrollSum, values.grossRevenue);
