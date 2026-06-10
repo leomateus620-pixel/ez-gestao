@@ -745,7 +745,7 @@ function formatExtractedField(field: string, value: unknown) {
   return `${label}: ${String(value)}`;
 }
 
-function ScoreAndRecommendation({ company, analysis, documents, remotePersisted = true }: { company: TaxReformCompany; analysis: TaxReformAnalysis; documents: TaxReformDocument[]; remotePersisted?: boolean }) {
+function ScoreAndRecommendation({ company, analysis, documents }: { company: TaxReformCompany; analysis: TaxReformAnalysis; documents: TaxReformDocument[] }) {
   const score = calculateTaxReformScore(company.currentTaxRegime, analysis.answers, documents, {
     mainActivity: company.mainActivity,
     requireDocuments: true,
@@ -761,9 +761,7 @@ function ScoreAndRecommendation({ company, analysis, documents, remotePersisted 
   const pendingReading = documents.filter((doc) => doc.uploadStatus !== 'erro_upload' && (doc.readingStatus === 'aguardando_leitura' || doc.readingStatus === 'lendo'));
   const hasCriticalDivergence = score.alerts.some((alert) => alert.alertType === 'document_divergence' && alert.severity === 'critical');
   let analysisStatus: { label: string; tone: string; description: string };
-  if (!remotePersisted) {
-    analysisStatus = { label: 'Rascunho local', tone: 'border-amber-300 bg-amber-50 text-amber-900', description: 'Os dados não foram salvos na nuvem. Sincronize antes de tratar como decisão final.' };
-  } else if (essentialMissing.length > 0) {
+  if (essentialMissing.length > 0) {
     analysisStatus = { label: 'Bloqueada', tone: 'border-rose-200 bg-rose-50 text-rose-900', description: 'Responda as perguntas decisivas para liberar a recomendação confiável.' };
   } else if (score.recommendation === 'analise_manual_necessaria' || hasCriticalDivergence) {
     analysisStatus = { label: 'Revisão manual', tone: 'border-amber-200 bg-amber-50 text-amber-900', description: 'O cenário exige parecer manual do contador antes da decisão final.' };
@@ -1011,8 +1009,6 @@ export default function ReformaTributaria() {
   const [step, setStep] = useState<WizardStep>('empresa');
   const [persistenceReady, setPersistenceReady] = useState(false);
   const [remotePersistenceEnabled, setRemotePersistenceEnabled] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'loading' | 'local' | 'supabase' | 'saving' | 'error'>('loading');
-  const [syncMessage, setSyncMessage] = useState('Carregando dados da Reforma Tributária...');
 
   useEffect(() => {
     let cancelled = false;
@@ -1021,15 +1017,11 @@ export default function ReformaTributaria() {
         if (cancelled) return;
         setStore(withDerivedScores(remoteStore));
         setRemotePersistenceEnabled(true);
-        setSyncStatus('supabase');
-        setSyncMessage('Dados sincronizados com Supabase.');
       })
       .catch((error) => {
         if (cancelled) return;
-        console.warn('[reforma-tributaria] usando cache local', error);
+        console.warn('[reforma-tributaria] backend indisponível', error);
         setRemotePersistenceEnabled(false);
-        setSyncStatus('local');
-        setSyncMessage('Modo local: alterações não estão salvas na nuvem. O cache local é apenas um rascunho temporário.');
       })
       .finally(() => {
         if (!cancelled) setPersistenceReady(true);
@@ -1049,50 +1041,16 @@ export default function ReformaTributaria() {
     if (!persistenceReady || !isSupabaseConfigured || !remotePersistenceEnabled) return undefined;
 
     const handle = window.setTimeout(() => {
-      setSyncStatus('saving');
       saveTaxReformStore(withDerivedScores(store))
-        .then(() => {
-          setSyncStatus('supabase');
-          setSyncMessage('Alterações salvas no Supabase.');
-        })
         .catch((error) => {
-          console.error('[reforma-tributaria] falha ao persistir no Supabase', error);
+          console.error('[reforma-tributaria] falha ao persistir alterações', error);
           setRemotePersistenceEnabled(false);
-          setSyncStatus('error');
-          setSyncMessage('Modo local: alterações não estão salvas na nuvem. O cache local foi preservado apenas como rascunho temporário.');
-          toast.warning('Modo rascunho local', {
-            description: 'As alterações não foram salvas na nuvem. Use "Tentar sincronizar" antes de tratar a análise como definitiva.',
-          });
+          toast.error('Não foi possível salvar agora. Tente novamente em instantes.');
         });
     }, 700);
 
     return () => window.clearTimeout(handle);
   }, [persistenceReady, remotePersistenceEnabled, store]);
-
-
-  const retryCloudSync = async () => {
-    if (!isSupabaseConfigured) {
-      setSyncStatus('local');
-      setSyncMessage('Modo local: alterações não estão salvas na nuvem. Configure o Supabase para sincronizar.');
-      toast.error('Supabase não configurado', { description: 'O rascunho local não será tratado como salvamento em nuvem.' });
-      return;
-    }
-
-    try {
-      setSyncStatus('saving');
-      await saveTaxReformStore(withDerivedScores(store));
-      setRemotePersistenceEnabled(true);
-      setSyncStatus('supabase');
-      setSyncMessage('Alterações salvas no Supabase.');
-      toast.success('Rascunho sincronizado com Supabase.');
-    } catch (error) {
-      console.error('[reforma-tributaria] falha ao sincronizar rascunho local', error);
-      setRemotePersistenceEnabled(false);
-      setSyncStatus('error');
-      setSyncMessage('Modo local: alterações não estão salvas na nuvem. Revise a conexão e tente sincronizar novamente.');
-      toast.error('Não foi possível sincronizar com Supabase.');
-    }
-  };
 
   const selectedAnalysis = selectedAnalysisId ? store.analyses.find((analysis) => analysis.id === selectedAnalysisId) ?? null : null;
   const selectedCompany = selectedAnalysis ? store.companies.find((company) => company.id === selectedAnalysis.companyId) ?? null : null;
