@@ -302,7 +302,7 @@ export function parsePayrollSummaryDocument(text: string, documentType = 'folha_
     const numericLine = totalBlockMatch[1];
     values.employeesCount = Number(totalBlockMatch[2]);
     const nums = extractAllNumbers(numericLine);
-    // Order observed in JB Folha "RESUMO DE CÁLCULO" totals line:
+    // Order observed in JB Folha "RESUMO DE CÁLCULO" totals line (extração unpdf):
     // [0]=Salário, [1]=S.Fam, [2]=BaseINSS, [3]=INSS, [4]=FGTS, [5]=IRRF, [6]=BaseFGTS, [7]=BaseIRRF, [8]=Prov./Vant., [9]=Descontos, [10]=Líquido
     if (nums.length >= 11) {
       values.salaryTotal = nums[0];
