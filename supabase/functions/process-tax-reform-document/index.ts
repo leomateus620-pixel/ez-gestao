@@ -111,7 +111,7 @@ function extract(documentType: string, text: string) {
     if (empCount) values.employeesCount = Number(empCount[1]);
 
     // Localiza a linha que começa com "Total:" e junta linhas seguintes até obter 11 números.
-    const moneyRe = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}|\b0\b/g;
+    const moneyRe = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g;
     const lines = text.split(/\n/);
     let totalIdx = -1;
     for (let i = 0; i < lines.length; i++) {
