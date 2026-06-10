@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -45,6 +45,7 @@ import {
   processTaxReformDocument,
   deleteTaxReformDocument,
   upsertTaxReformDocument,
+  upsertTaxReformAnswer,
 } from '@/features/tax-reform/persistence';
 import { computeConfidenceLevel, computeConfidenceReasons, confidenceLabels } from '@/features/tax-reform/confidence';
 import type {
@@ -1063,23 +1064,38 @@ const wizardSteps = [
 type WizardStep = typeof wizardSteps[number]['id'];
 
 export default function ReformaTributaria() {
-  const [store, setStore] = useState<TaxReformStore>(() => loadLocalStore());
+  const [store, setStore] = useState<TaxReformStore>(() => (isSupabaseConfigured ? emptyStore : loadLocalStore()));
   const [selectedAnalysisId, setSelectedAnalysisId] = useState<string | null>(null);
   const [step, setStep] = useState<WizardStep>('empresa');
   const [persistenceReady, setPersistenceReady] = useState(false);
   const [remotePersistenceEnabled, setRemotePersistenceEnabled] = useState(false);
+  const lastSavedHashRef = useRef<string>('');
+  const previousAnswersRef = useRef<Map<string, AnswerMap>>(new Map());
+  const pendingSaveRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     fetchTaxReformStore()
       .then((remoteStore) => {
         if (cancelled) return;
-        setStore(withDerivedScores(remoteStore));
+        const derived = withDerivedScores(remoteStore);
+        setStore(derived);
         setRemotePersistenceEnabled(true);
+        // Snapshot inicial: evita re-save imediato e habilita diff de respostas removidas.
+        lastSavedHashRef.current = JSON.stringify(derived);
+        const map = new Map<string, AnswerMap>();
+        derived.analyses.forEach((a) => map.set(a.id, { ...a.answers }));
+        previousAnswersRef.current = map;
+        console.info('[reforma-tributaria] fetch carregado', {
+          analyses: derived.analyses.length,
+          answersTotal: derived.analyses.reduce((acc, a) => acc + Object.keys(a.answers).length, 0),
+        });
       })
       .catch((error) => {
         if (cancelled) return;
         console.warn('[reforma-tributaria] backend indisponível', error);
+        // Fallback offline: usa snapshot local apenas quando o backend falhar.
+        setStore(loadLocalStore());
         setRemotePersistenceEnabled(false);
       })
       .finally(() => {
@@ -1096,20 +1112,69 @@ export default function ReformaTributaria() {
   }, [store]);
 
   useEffect(() => {
+    if (!persistenceReady) return undefined;
+    // Só grava localStorage depois do fetch remoto resolver — evita envenenar o cache
+    // com o seed antigo antes do Cloud responder.
     localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-    if (!persistenceReady || !isSupabaseConfigured || !remotePersistenceEnabled) return undefined;
+    if (!isSupabaseConfigured || !remotePersistenceEnabled) return undefined;
+
+    const derived = withDerivedScores(store);
+    const hash = JSON.stringify(derived);
+    if (hash === lastSavedHashRef.current) return undefined;
+
+    const previousAnswers = new Map(previousAnswersRef.current);
+    const doSave = async () => {
+      try {
+        await saveTaxReformStore(derived);
+        // Diff: apaga respostas que existiam antes e foram removidas/limpas.
+        for (const analysis of derived.analyses) {
+          const prev = previousAnswers.get(analysis.id);
+          if (!prev) continue;
+          for (const key of Object.keys(prev)) {
+            if (!(key in analysis.answers)) {
+              try { await upsertTaxReformAnswer(analysis, key, ''); } catch (e) {
+                console.warn('[reforma-tributaria] falha ao apagar resposta removida', key, e);
+              }
+            }
+          }
+        }
+        lastSavedHashRef.current = hash;
+        const nextMap = new Map<string, AnswerMap>();
+        derived.analyses.forEach((a) => nextMap.set(a.id, { ...a.answers }));
+        previousAnswersRef.current = nextMap;
+      } catch (error) {
+        console.error('[reforma-tributaria] falha ao persistir alterações', error);
+        setRemotePersistenceEnabled(false);
+        toast.error('Não foi possível salvar agora. Tente novamente em instantes.');
+      }
+    };
+    pendingSaveRef.current = doSave;
 
     const handle = window.setTimeout(() => {
-      saveTaxReformStore(withDerivedScores(store))
-        .catch((error) => {
-          console.error('[reforma-tributaria] falha ao persistir alterações', error);
-          setRemotePersistenceEnabled(false);
-          toast.error('Não foi possível salvar agora. Tente novamente em instantes.');
-        });
+      pendingSaveRef.current = null;
+      void doSave();
     }, 700);
 
     return () => window.clearTimeout(handle);
   }, [persistenceReady, remotePersistenceEnabled, store]);
+
+  // Flush em reload/navegação: garante que a última alteração não fique presa no debounce.
+  useEffect(() => {
+    const flush = () => {
+      const pending = pendingSaveRef.current;
+      if (pending) {
+        pendingSaveRef.current = null;
+        void pending();
+      }
+    };
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('beforeunload', flush);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
 
   const selectedAnalysis = selectedAnalysisId ? store.analyses.find((analysis) => analysis.id === selectedAnalysisId) ?? null : null;
   const selectedCompany = selectedAnalysis ? store.companies.find((company) => company.id === selectedAnalysis.companyId) ?? null : null;
