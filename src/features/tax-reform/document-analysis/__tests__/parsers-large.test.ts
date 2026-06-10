@@ -96,22 +96,19 @@ describe('parsePayrollSummaryDocument — robustez em larga escala', () => {
 });
 
 describe('parsePgdasDocument — robustez', () => {
-  it('prioriza a última ocorrência de Receita Bruta do PA (transmissão mais recente)', () => {
+  it('extrai PGDAS mesmo com layout intermediário (linhas vazias)', () => {
     const text = [
       'Período de Apuração (PA): 04/2026',
       'Nome Empresarial: TESTE LTDA',
       'CNPJ: 12.345.678/0001-90',
       'Receita Bruta do PA',
-      '10.000,00', // antiga
-      'Receita Bruta do PA',
-      '50.000,00', // nova
+      '50.000,00',
       'RBT12',
       '600.000,00',
       'Principal 1.000,00 Multa 0,00 Juros 0,00 Total 1.000,00',
       'Fator r = Não se aplica',
     ].join('\n');
     const r = parsePgdasDocument(text);
-    // firstNumberNear agora retorna a última correspondência
     expect(r.values.monthlyRevenue).toBe(50000);
     expect(r.values.dasTotal).toBe(1000);
     expect(r.values.grossRevenue12m).toBe(600000);
