@@ -980,6 +980,9 @@ export default function ReformaTributaria() {
           setRemotePersistenceEnabled(false);
           setSyncStatus('error');
           setSyncMessage('Modo local: alterações não estão salvas na nuvem. O cache local foi preservado apenas como rascunho temporário.');
+          toast.warning('Modo rascunho local', {
+            description: 'As alterações não foram salvas na nuvem. Use "Tentar sincronizar" antes de tratar a análise como definitiva.',
+          });
         });
     }, 700);
 
