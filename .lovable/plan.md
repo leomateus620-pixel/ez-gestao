@@ -1,77 +1,87 @@
+## Diagnóstico
 
-## Causa raiz do "duplo carregamento"
+Verifiquei o estado real do Lovable Cloud e do código já mergeado:
 
-Ao clicar em um menu, o usuário vê **dois loaders em sequência** dentro da mesma área `<main>`:
+- **Migrations não aplicadas.** Os arquivos `20260609120000_tax_reform_analysis.sql` e `20260610120000_tax_reform_v2_hardening.sql` existem no repo, mas no banco real **nenhuma** tabela `tax_reform_*` foi criada e o bucket `tax-reform-documents` **não existe**. Buckets atuais: `certidoes`, `automation-artifacts`, `empresa-documentos`.
+- **Upload com fallback permissivo.** `uploadTaxReformDocumentFile` devolve `local://arquivo` quando o Storage falha e o resto do app trata isso como documento válido.
+- **Schema atual está incompleto** para o que você pediu (sem `storage_path`, `storage_bucket`, `upload_status`, `uploaded_by`, `extraction_confidence`, `document_confidence_weight`, e sem status de upload `enviado`/`erro_upload`).
+- **GRANTs ausentes** nas migrations existentes (RLS sozinho não basta — PostgREST exige GRANT no schema `public`).
+- **Score, perguntas decisivas e confiança** vivem em `score.ts` / `rules.ts` / `recommendation.ts` e cobrem só uma fração do que foi pedido (granularidade B2B 40-70%, faixas de insumos 21-40% / 41-60% / >60%, folha de pagamento, confiança baixa/média/alta etc.).
 
-1. **Loader nº 1 — Suspense de rota (`LoadingFallback` em `src/App.tsx`)**
-   Toda rota é `lazy()`. Enquanto o chunk JS baixa, o `<Suspense fallback={<LoadingFallback />}>` substitui o conteúdo principal por um spinner grande centralizado (`min-h-[60vh]`, com `liquid-stage`). Mesmo quando o chunk já está em cache (preload), há 1 frame de fallback porque `lazy()` resolve assíncrono.
+Layout, providers, navegação e demais módulos não serão tocados.
 
-2. **Loader nº 2 — loading interno da página**
-   Logo após o Suspense liberar, a página monta com `animate-slide-in` (0.35s) e mostra seu próprio loader (ex.: `Guias.tsx` linha 124 → "Carregando guias", outras páginas usam padrão equivalente) enquanto `useDataStore`/`useGuides` ainda não terminaram a 1ª query. Em navegações posteriores, como `refetchOnMount: false` + `staleTime: 60s`, os dados já estão no cache, mas o flag `isLoading` ainda fica `true` por um frame se a query estiver inativa, e a animação `slide-in` se repete a cada troca de rota — reforçando a sensação de "recarregou tudo".
+## Plano
 
-Componentes que **não** estão remontando (verificado em `App.tsx`): `QueryClientProvider`, `AuthProvider`, `DataProvider`, `GuideProvider`, `AppLayout`, `SmartNavigationShell`. O shell e providers ficam estáveis — o problema é **puramente visual**, dentro do `<main>`.
+### 1. Consolidar schema no Supabase real (uma migration única)
 
-`AuthProvider` está OK: usa `cachedSession` e só seta `isLoading=true` quando não há cache. `onAuthStateChange` dispara apenas em mudanças reais; sessões idênticas não causam remount do app autenticado em navegação interna.
+Criar `supabase/migrations/<novo_timestamp>_tax_reform_v2_consolidate.sql` que é idempotente e:
 
-## O que mudar
+1. Cria todas as tabelas `tax_reform_companies | analyses | answers | documents | alerts` com o schema final (inclui colunas novas).
+2. Emite **GRANTs** corretos em cada tabela: `GRANT SELECT, INSERT, UPDATE, DELETE ... TO authenticated; GRANT ALL ... TO service_role;` (sem `anon`).
+3. Habilita RLS e cria as policies para `authenticated` (mesmo padrão atual).
+4. Cria índices, FKs compostas, triggers `updated_at` e a função `tax_reform_touch_updated_at()`.
+5. Cria bucket privado `tax-reform-documents` com `file_size_limit = 50MB` e MIME types permitidos, e as 4 policies em `storage.objects` para `authenticated`.
 
-### 1. `src/App.tsx` — Suspense fallback sutil e não-bloqueante
-- Substituir o `LoadingFallback` cheio (spinner gigante centralizado) por um fallback **mínimo e localizado**: uma barra de progresso fininha no topo do `<main>` ou um placeholder transparente (`<div className="h-px" />`) que ocupe a área sem mostrar spinner durante o carregamento do chunk (que tipicamente leva < 100ms com preload).
-- Manter o `LoadingFallback` antigo apenas para o estado `isLoading` do `AuthenticatedApp` (verificação de sessão sem cache).
-- Adicionar preload no hover/focus dos itens do sidebar (chamando `loadX()` em `onMouseEnter`/`onFocus`) para que o chunk já esteja pronto antes do clique. Reusa o cache de `route-loaders.ts`.
+Colunas novas em `tax_reform_documents`:
 
-### 2. Páginas com loader próprio — não mostrar loader se já há dados em cache
-Em `src/pages/guias/Guias.tsx`, `Dashboard.tsx`, `Empresas.tsx`, `Envios.tsx`, `Alertas.tsx`, `Logs.tsx`, `FatorR.tsx`, `Classifica.tsx`, `guias/IntegracoesGuias.tsx`, `admin/WhatsApp.tsx`, `Configuracoes.tsx`:
-- Só mostrar o loader interno quando `isLoading && dados.length === 0` (primeira carga absoluta).
-- Em refetch em segundo plano, manter os dados antigos visíveis (stale-while-revalidate). Opcionalmente, marcador discreto (badge ou shimmer em header).
-- Para o caso específico de `Guias.tsx`, expor `hasLoadedOnce` em `GuideProvider` (true depois da 1ª resposta de qualquer status) e usar isso no lugar de `isLoading` para o estado vazio inicial.
+- `storage_bucket text` (default `'tax-reform-documents'`)
+- `storage_path text` (caminho real no bucket; usado para signed URL)
+- `upload_status text check in ('enviado','erro_upload') not null default 'enviado'`
+- `upload_error text`
+- `uploaded_by uuid` (= `auth.uid()` no momento do upload)
+- `extraction_confidence numeric(5,2)` (0–100, nullable)
+- `document_confidence_weight numeric(5,2) default 1.0`
+- Expandir CHECK de `reading_status` mantendo os 4 estados atuais.
 
-### 3. Animação `animate-slide-in` — aplicar só no primeiro mount real
-- Remover `animate-slide-in` dos roots das páginas (ou movê-lo para um wrapper controlado por flag `useFirstMount` que só dispara 1x por sessão).
-- Alternativa mais simples: reduzir duração da animação para 150ms e aplicar em elementos específicos (header), não no container inteiro — o conteúdo principal aparece estável.
+Coluna nova em `tax_reform_analyses`:
 
-### 4. Providers — separar `initialLoading` de `backgroundFetching` (opcional, baixo risco)
-- `DataProvider`: trocar `isLoading` derivado de `loadingEmpresas || ...` por algo como `isInitialLoading` (verdadeiro apenas até a primeira resposta de cada query — usar `query.isPending && !query.data`).
-- Atualmente `isLoading` do `useDataStore` não é consumido para bloquear a UI, então o impacto é só nas páginas que olham para isso.
+- `confidence_level text check in ('baixa','media','alta') default 'baixa'`
+- `confidence_reason text`
 
-### 5. Pré-carregar dados ao montar providers
-- `DataProvider` e `GuideProvider` já disparam queries no mount global (não na rota). Bom. Vamos garantir que o sidebar não dispare nenhum loader visual enquanto isso ocorre.
+### 2. Upload real no Storage (sem fallback “válido”)
 
-## Validação
+Refatorar `src/features/tax-reform/persistence.ts` → `uploadTaxReformDocumentFile`:
 
-- **Manual no preview**: navegar entre `/empresas → /guias → /dashboard → /fator-r`; observar que não há mais 2 spinners em sequência e que o sidebar/shell ficam estáveis.
-- **Testes E2E (`e2e/navigation.spec.ts`)**: adicionar caso que conta quantas vezes `[data-testid="route-fallback"]` aparece por navegação (deve ser ≤ 1) e verifica que `[data-testid="app-shell"]` permanece no DOM com o mesmo ID em todas as transições. Verificar `performance.getEntriesByType('navigation').length === 1` (sem reload real).
-- **Build + testes**: `npm run build`, `npm run test`, `npm run test:e2e`.
+- Se Supabase não configurado **ou** `storage.upload` falhar → retornar `{ ok: false, error }`. **Nunca** retornar `local://...` como caminho válido.
+- Sucesso: devolver `{ ok: true, storagePath, storageBucket, uploadedBy }`.
+- Chamadores devem inserir o documento **apenas** quando `ok: true`. Em falha: `toast.error`, não criar registro em `tax_reform_documents`, alerta de “documentos pendentes” continua ativo.
+- Persistir `storage_path` (caminho cru no bucket) + `storage_bucket`. Manter `file_url` legado opcional.
+- Acrescentar `getTaxReformDocumentSignedUrl(doc)` que chama `storage.from(bucket).createSignedUrl(storagePath, 300)`. Visualizar/baixar usam essa URL assinada (bucket é privado).
+- Migrar callers em `src/pages/ReformaTributaria.tsx` e em qualquer hook/serviço de upload do módulo para o novo contrato.
 
-## Fora de escopo
+### 3. Score, perguntas decisivas e recomendação
 
-- Não tocar no `SmartSidebar` nem na lógica de menu expansivo.
-- Não remover `lazy()` nem o cache de `route-loaders.ts`.
-- Não alterar `AuthProvider` (já está correto com cache de sessão).
-- Não criar topbar; não alterar rotas; não silenciar erros.
+Atualizar `src/features/tax-reform/score.ts`, `rules.ts`, `recommendation.ts` (+ testes em `rules.test.ts`):
 
-## Detalhes técnicos
+- **Perguntas decisivas (ampliadas)**: regime, atividade principal, % B2C, % B2B, clientes usam créditos, risco de perda comercial, % B2B no Lucro Real, % insumos sobre faturamento, regime predominante de fornecedores, objetivo dos sócios, aceitação de complexidade, alíquota efetiva (se Simples), proximidade do limite (quando aplicável).
+- Faltou pergunta decisiva → `recommendation = 'analise_manual_necessaria'`, `risk_level = 'dados_insuficientes'`, mensagem “Revisão manual necessária — faltam respostas decisivas para recomendação segura.” Permite salvar parcial, mas marca análise como **não confiável**.
+- **Score granular** (clientes ≤60 / custos ≤25 / tributário atual ≤15, total ≤100) seguindo exatamente as faixas do brief (B2B 40-70%, insumos 21-40/41-60/>60, fornecedores LR vs LP, fretes/energia/serviços/máquinas/tecnologia até +5, folha de pagamento até +5, etc.).
+- **Recomendação** mais rígida e dependente do regime atual (Simples → permanecer / avaliar LP / revisão manual; LP → permanecer / avaliar Simples / revisão manual), seguindo as regras do brief.
 
-```text
-Antes:
-  click menu
-   └─ <Suspense fallback={LoadingFallback grande/centralizado}>   ← #1
-        └─ Página monta (animate-slide-in)
-             └─ loader interno "Carregando guias"                  ← #2
-                  └─ conteúdo renderiza
+### 4. Nível de confiança
 
-Depois:
-  click menu (chunk preloadado no hover)
-   └─ <Suspense fallback={barra fina topo OR placeholder vazio}>
-        └─ Página monta sem animação reset
-             └─ se dados em cache → renderiza direto
-                se 1ª carga absoluta → skeleton sutil dentro do card
-```
+Novo módulo `src/features/tax-reform/confidence.ts`:
 
-Arquivos esperados a editar:
-- `src/App.tsx` (novo fallback leve `RouteFallback`, manter `LoadingFallback` para auth)
-- `src/navigation/components/SmartSidebar.tsx` (preload em hover/focus)
-- `src/pages/guias/Guias.tsx`, `src/pages/Empresas.tsx`, `src/pages/Dashboard.tsx`, `src/pages/FatorR.tsx`, `src/pages/Classifica.tsx`, `src/pages/guias/IntegracoesGuias.tsx`, `src/pages/Envios.tsx`, `src/pages/Alertas.tsx`, `src/pages/Logs.tsx`, `src/pages/Configuracoes.tsx`, `src/pages/admin/WhatsApp.tsx` (condicionar loader a `!hasData`; remover ou neutralizar `animate-slide-in`)
-- `src/features/guias/GuideProvider.tsx` (opcional: expor `hasLoadedOnce`)
-- `src/data/DataProvider.tsx` (opcional: `isInitialLoading`)
-- `e2e/navigation.spec.ts` (cenário anti-duplo-loader)
+- Considera só documentos com `upload_status='enviado'` e `storage_path` preenchido. `local://` e `erro_upload` não contam.
+- Regras: 0 principais → `baixa`; 1–2 → `media`; 3+ → `alta`; combo DRE+PGDAS+faturamento_cliente força `alta`.
+- Retorna `{ level, reason, validDocs[], missingDocs[] }`.
+- Persistido em `tax_reform_analyses.confidence_level / confidence_reason`.
+
+### 5. Tela de Resultado
+
+Em `src/pages/ReformaTributaria.tsx` (apenas o painel de Resultado, sem mexer no resto do layout):
+
+- Badge de status da análise: **Preliminar | Confiável | Bloqueada por dados insuficientes | Revisão manual necessária**.
+- Exibir: empresa, CNPJ, regime atual, ano-base, score total, score por bloco, decisivas respondidas vs faltantes, documentos válidos (com link assinado), documentos pendentes, nível de confiança + motivo, recomendação, principais fatores que pesaram, alertas, parecer manual, decisão final.
+
+### 6. Validação
+
+- `bunx vitest run src/features/tax-reform` (atualizar `rules.test.ts` para nova grade).
+- Smoke manual no preview: cadastrar empresa → recarregar → responder blocos → recarregar → anexar PDF (sucesso e simulação de erro) → recarregar → gerar resultado → salvar parecer/decisão → recarregar.
+- `supabase--read_query` para confirmar persistência em cada passo.
+
+## Fora do escopo
+
+- Redesign de layout, providers, navegação, outras páginas.
+- Pipeline real de extração (mantém `aguardando_leitura` / `nao_processavel`).
+- Autenticação por dono (RLS continua para `authenticated`).

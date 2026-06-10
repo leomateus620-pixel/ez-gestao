@@ -31,6 +31,9 @@ export type TaxReformAlertSeverity = 'info' | 'warning' | 'critical';
 export type AnswerValue = string | number | string[] | null | undefined;
 export type AnswerMap = Record<string, AnswerValue>;
 
+export type UploadStatus = 'enviado' | 'erro_upload';
+export type ConfidenceLevel = 'baixa' | 'media' | 'alta';
+
 export interface TaxReformCompany {
   id: string;
   companyName: string;
@@ -61,6 +64,8 @@ export interface TaxReformAnalysis {
   automaticSummary: string;
   manualOpinion: string;
   finalDecision: FinalDecision;
+  confidenceLevel?: ConfidenceLevel;
+  confidenceReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -77,6 +82,13 @@ export interface TaxReformDocument {
   readingStatus: ReadingStatus;
   extractedSummary?: string;
   extractionError?: string;
+  storageBucket?: string;
+  storagePath?: string;
+  uploadStatus?: UploadStatus;
+  uploadError?: string;
+  uploadedBy?: string;
+  extractionConfidence?: number;
+  documentConfidenceWeight?: number;
   uploadedAt: string;
   updatedAt: string;
 }
@@ -112,6 +124,8 @@ export interface ScoreBreakdown {
 export interface DocumentLike {
   documentType: string;
   readingStatus?: ReadingStatus;
+  uploadStatus?: UploadStatus;
+  storagePath?: string | null;
 }
 
 export interface TaxReformStore {
