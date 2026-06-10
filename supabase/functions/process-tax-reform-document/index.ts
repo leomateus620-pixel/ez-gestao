@@ -38,6 +38,9 @@ const summary = (values: ExtractedValues) => {
   if (typeof values.effectiveTaxRate === 'number') parts.push(`alíquota efetiva ${values.effectiveTaxRate}%`);
   if (typeof values.inputCostPercent === 'number') parts.push(`custos/insumos ${values.inputCostPercent}%`);
   if (typeof values.b2bPercent === 'number') parts.push(`B2B ${values.b2bPercent}%`);
+  if (typeof values.salaryTotal === 'number') parts.push(`salários R$ ${values.salaryTotal}`);
+  if (typeof values.netPayroll === 'number') parts.push(`líquido R$ ${values.netPayroll}`);
+  if (typeof values.employeesCount === 'number') parts.push(`${values.employeesCount} funcionários`);
   return parts.length ? `Dados extraídos: ${parts.join('; ')}.` : 'Nenhum campo tributário decisivo foi identificado com segurança no documento.';
 };
 
