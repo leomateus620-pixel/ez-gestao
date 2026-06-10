@@ -29,9 +29,17 @@ function extractBalanceClients(text: string): {
 } {
   const lines = text.replace(/\r/g, '\n').split('\n').map((l) => l.trim());
   // Localiza o cabeçalho da conta "CLIENTES" dentro do Balanço.
+  // O JB Contábil emite duas linhas "CLIENTES" seguidas (grupo + conta), com o
+  // total da conta entre elas. Saltamos AMBAS para evitar que o total da conta
+  // seja contado como um cliente.
   let start = -1;
   for (let i = 0; i < lines.length; i += 1) {
-    if (/^CLIENTES\s*$/.test(lines[i])) { start = i + 1; break; }
+    if (/^CLIENTES\s*$/.test(lines[i])) {
+      let j = i + 1;
+      while (j < lines.length && (!lines[j] || /^-?\d{1,3}(?:\.\d{3})*,\d{2}$/.test(lines[j]) || /^CLIENTES\s*$/.test(lines[j]))) j += 1;
+      start = j;
+      break;
+    }
   }
   if (start < 0) return { total: 0, b2b: 0, b2c: 0, entity: 0, amounts: [] };
   // Stop ao encontrar próxima seção contábil em CAIXA ALTA.
