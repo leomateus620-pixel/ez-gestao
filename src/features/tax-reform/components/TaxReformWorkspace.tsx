@@ -349,12 +349,12 @@ function MetricTile({ label, value, caption, icon: Icon, tone = 'blue' }: {
     <div className="liquid-stat-card">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground/85">{label}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground">{label}</p>
           <p className="mt-2 text-3xl font-black tracking-tight text-foreground">{value}</p>
         </div>
         <div className={cn('rounded-2xl border bg-gradient-to-br to-white/40 p-2.5 shadow-inner', tones[tone])}><Icon className="h-4 w-4" /></div>
       </div>
-      <p className="mt-2 text-xs font-medium text-foreground/85">{caption}</p>
+      <p className="mt-2 text-xs font-medium text-foreground">{caption}</p>
     </div>
   );
 }
@@ -503,7 +503,7 @@ function CompanyForm({ onSave, initial, analysisYear = currentYear, compact = fa
 
   return (
     <GlassCard className="space-y-4">
-      {!compact && <div><h2 className="text-lg font-bold">Cadastrar empresa</h2><p className="text-sm text-foreground/85">Informe os dados base para abrir uma análise por ano-base.</p></div>}
+      {!compact && <div><h2 className="text-lg font-bold">Cadastrar empresa</h2><p className="text-sm text-foreground">Informe os dados base para abrir uma análise por ano-base.</p></div>}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="space-y-2"><Label>Nome da empresa <span className="text-destructive">*</span></Label><Input value={form.companyName} onChange={(e) => update('companyName', e.target.value)} placeholder="Ex.: Empresa ABC Ltda" /></div>
         <div className="space-y-2"><Label>CNPJ <span className="text-destructive">*</span></Label><Input value={form.cnpj} onChange={(e) => update('cnpj', e.target.value)} placeholder="00.000.000/0000-00" /></div>
@@ -547,7 +547,7 @@ function QuestionRenderer({ question, value, onChange }: {
             key={optionValue}
             type="button"
             onClick={() => onChange(active ? selected.filter((item) => item !== optionValue) : [...selected, optionValue])}
-            className={cn('rounded-full border px-3 py-1.5 text-xs font-semibold transition', active ? 'border-primary bg-primary text-white' : 'border-white/70 bg-white/50 text-foreground/90 hover:bg-white/80')}
+            className={cn('rounded-full border px-3 py-1.5 text-xs font-semibold transition', active ? 'border-primary bg-primary text-white' : 'border-white/70 bg-white/50 text-foreground hover:bg-white/80')}
           >
             {label}
           </button>
@@ -563,7 +563,7 @@ function Questionnaire({ analysis, onAnswersChange }: { analysis: TaxReformAnaly
     <div className="space-y-4">
       {questionBlocks.map((block) => (
         <GlassCard key={block.title} className="space-y-4">
-          <div><h3 className="font-bold">{block.title}</h3><p className="text-xs text-foreground/85">Respostas são salvas e recalculam score, alertas e recomendação.</p></div>
+          <div><h3 className="font-bold">{block.title}</h3><p className="text-xs text-foreground">Respostas são salvas e recalculam score, alertas e recomendação.</p></div>
           <div className="grid gap-4 lg:grid-cols-2">
             {block.questions.map((question) => (
               <div key={question.key} className="rounded-2xl border border-white/60 bg-white/45 p-3 shadow-sm backdrop-blur-xl">
@@ -662,7 +662,7 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
   return (
     <GlassCard className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div><h3 className="font-bold">Documentos e planilhas</h3><p className="text-sm text-foreground/85">Arquivos vinculados a {company.companyName} · ano-base {analysis.analysisYear}.</p></div>
+        <div><h3 className="font-bold">Documentos e planilhas</h3><p className="text-sm text-foreground">Arquivos vinculados a {company.companyName} · ano-base {analysis.analysisYear}.</p></div>
         <Button onClick={onAnalyze} variant="outline" className="gap-2" disabled={!documents.length}><FileSpreadsheet className="h-4 w-4" />Analisar documentos</Button>
       </div>
       {missing.length > 0 && <div className="rounded-2xl border border-amber-200/70 bg-amber-50/70 p-3 text-sm text-amber-900"><b>Faltam documentos-chave:</b> {missing.map((type) => documentTypeLabels[type]).join(', ')}.</div>}
@@ -678,12 +678,12 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
         </div>
       </div>
       <div className="space-y-2">
-        {documents.length === 0 ? <div className="rounded-2xl border border-white/60 bg-white/45 p-4 text-sm text-foreground/85">Nenhum documento anexado ainda.</div> : documents.map((doc) => (
+        {documents.length === 0 ? <div className="rounded-2xl border border-white/60 bg-white/45 p-4 text-sm text-foreground">Nenhum documento anexado ainda.</div> : documents.map((doc) => (
           <div key={doc.id} className="flex flex-col gap-2 rounded-2xl border border-white/60 bg-white/45 p-3 text-sm md:flex-row md:items-center md:justify-between">
             <div>
               <p className="font-semibold">{doc.fileName}</p>
-              <p className="text-xs text-foreground/85">{documentTypeLabels[doc.documentType]} · {Math.ceil(doc.fileSize / 1024)} KB · enviado em {formatDate(doc.uploadedAt)}</p>
-              {doc.extractedSummary && <p className="mt-1 text-xs text-foreground/85">{doc.extractedSummary}</p>}
+              <p className="text-xs text-foreground">{documentTypeLabels[doc.documentType]} · {Math.ceil(doc.fileSize / 1024)} KB · enviado em {formatDate(doc.uploadedAt)}</p>
+              {doc.extractedSummary && <p className="mt-1 text-xs text-foreground">{doc.extractedSummary}</p>}
               {doc.extractionError && <p className="mt-1 text-xs text-amber-800">Upload/leitura: {doc.extractionError}</p>}
             </div>
             <Badge variant="outline">{readingStatusLabels[doc.readingStatus]}</Badge>
@@ -767,7 +767,7 @@ function ScoreAndRecommendation({ company, analysis, documents, remotePersisted 
     <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
       <GlassCard className="space-y-4">
         <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Score da análise</h3><div className="flex flex-wrap gap-1.5"><Badge>{riskLabels[score.riskLevel]}</Badge><Badge variant="outline">{confidenceLabels[confidenceLevel]}</Badge></div></div>
-        <div className="text-center"><div className="text-6xl font-black tracking-tight text-primary">{score.total}</div><p className="text-sm text-foreground/85">de 100 pontos</p></div>
+        <div className="text-center"><div className="text-6xl font-black tracking-tight text-primary">{score.total}</div><p className="text-sm text-foreground">de 100 pontos</p></div>
         <div className="space-y-3 text-sm">
           <div><div className="mb-1 flex justify-between"><span>Perfil dos clientes</span><b>{score.clients}/60</b></div><Progress value={(score.clients / 60) * 100} /></div>
           <div><div className="mb-1 flex justify-between"><span>Custos e créditos</span><b>{score.costs}/25</b></div><Progress value={(score.costs / 25) * 100} /></div>
@@ -784,25 +784,25 @@ function ScoreAndRecommendation({ company, analysis, documents, remotePersisted 
         </div>
       </GlassCard>
       <GlassCard className="space-y-4">
-        <div><h3 className="font-bold">Resultado e recomendação</h3><p className="text-sm text-foreground/85">Triagem inicial. Não substitui parecer técnico ou simulação tributária.</p></div>
-        <div className="rounded-3xl border border-primary/20 bg-primary/5 p-4"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Recomendação automática</p><p className="mt-2 text-2xl font-black">{recommendationLabels[score.recommendation]}</p><p className="mt-2 text-sm text-foreground/90">{score.summary}</p></div>
+        <div><h3 className="font-bold">Resultado e recomendação</h3><p className="text-sm text-foreground">Triagem inicial. Não substitui parecer técnico ou simulação tributária.</p></div>
+        <div className="rounded-3xl border border-primary/20 bg-primary/5 p-4"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Recomendação automática</p><p className="mt-2 text-2xl font-black">{recommendationLabels[score.recommendation]}</p><p className="mt-2 text-sm text-foreground">{score.summary}</p></div>
         {essentialMissing.length > 0 && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-950"><b>Perguntas decisivas faltantes:</b> {essentialMissing.map(formatMissingData).join(', ')}.</div>}
         {missingDocs.length > 0 && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><b>Documentos faltantes:</b> {missingDocs.map(formatMissingData).join(', ')}.</div>}
         <div className="grid gap-2 md:grid-cols-4"><Badge variant="outline">{company.companyName}</Badge><Badge variant="outline">{company.cnpj}</Badge><Badge variant="outline">{regimeLabels[company.currentTaxRegime]}</Badge><Badge variant="outline">Ano-base {analysis.analysisYear}</Badge></div>
         <div className="space-y-2">
           <h4 className="font-semibold">Alertas automáticos</h4>
-          {score.alerts.length === 0 ? <p className="text-sm text-foreground/85">Nenhum alerta automático com os dados atuais.</p> : score.alerts.map((alert) => <div key={alert.alertType} className={cn('rounded-2xl border p-3 text-sm', alert.severity === 'critical' ? 'border-rose-200 bg-rose-50 text-rose-950' : alert.severity === 'warning' ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-emerald-200 bg-emerald-50 text-emerald-950')}><b>{alert.title}:</b> {alert.message}</div>)}
+          {score.alerts.length === 0 ? <p className="text-sm text-foreground">Nenhum alerta automático com os dados atuais.</p> : score.alerts.map((alert) => <div key={alert.alertType} className={cn('rounded-2xl border p-3 text-sm', alert.severity === 'critical' ? 'border-rose-200 bg-rose-50 text-rose-950' : alert.severity === 'warning' ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-emerald-200 bg-emerald-50 text-emerald-950')}><b>{alert.title}:</b> {alert.message}</div>)}
         </div>
-        <div className="text-sm text-foreground/85">Perguntas obrigatórias respondidas: <b>{score.answeredRequired}</b>. Documentos enviados: <b>{uploaded.length}</b>{failed.length > 0 && <span className="text-rose-700"> · {failed.length} com erro</span>}.</div>
+        <div className="text-sm text-foreground">Perguntas obrigatórias respondidas: <b>{score.answeredRequired}</b>. Documentos enviados: <b>{uploaded.length}</b>{failed.length > 0 && <span className="text-rose-700"> · {failed.length} com erro</span>}.</div>
         <div className="grid gap-3 lg:grid-cols-2">
           <div className="rounded-2xl border border-white/60 bg-white/45 p-3">
             <h4 className="mb-2 text-sm font-semibold">Documentos usados</h4>
             {documents.length === 0 ? (
-              <p className="text-xs text-foreground/85">Nenhum documento anexado.</p>
+              <p className="text-xs text-foreground">Nenhum documento anexado.</p>
             ) : (
               <ul className="space-y-1.5">
                 {documents.map((doc) => (
-                  <li key={doc.id} className="flex items-center justify-between gap-2 text-xs text-foreground/90">
+                  <li key={doc.id} className="flex items-center justify-between gap-2 text-xs text-foreground">
                     <span className="truncate"><b>{documentTypeLabels[doc.documentType]}</b> · {doc.fileName}</span>
                     {doc.uploadStatus === 'enviado' && doc.storagePath ? (
                       <button type="button" onClick={() => openSignedUrl(doc)} className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/20">Abrir</button>
@@ -816,13 +816,13 @@ function ScoreAndRecommendation({ company, analysis, documents, remotePersisted 
           </div>
           <div className="rounded-2xl border border-white/60 bg-white/45 p-3">
             <h4 className="mb-2 text-sm font-semibold">Perguntas respondidas</h4>
-            {Object.entries(analysis.answers).filter(([, value]) => value !== '' && value !== undefined && value !== null).slice(0, 8).map(([key, value]) => <p key={key} className="text-xs text-foreground/90"><b>{questionLabelByKey[key] ?? key}:</b> {formatAnswerValue(key, value)}</p>)}
+            {Object.entries(analysis.answers).filter(([, value]) => value !== '' && value !== undefined && value !== null).slice(0, 8).map(([key, value]) => <p key={key} className="text-xs text-foreground"><b>{questionLabelByKey[key] ?? key}:</b> {formatAnswerValue(key, value)}</p>)}
           </div>
         </div>
         <div className="rounded-2xl border border-white/60 bg-white/45 p-3">
           <h4 className="mb-2 text-sm font-semibold">Dados extraídos dos documentos</h4>
           {documents.length === 0 ? (
-            <p className="text-xs text-foreground/85">Resultado preliminar baseado apenas no questionário. A leitura documental será exibida aqui após o processamento real.</p>
+            <p className="text-xs text-foreground">Resultado preliminar baseado apenas no questionário. A leitura documental será exibida aqui após o processamento real.</p>
           ) : (
             <div className="grid gap-2 md:grid-cols-2">
               {documents.map((doc) => {
@@ -830,9 +830,9 @@ function ScoreAndRecommendation({ company, analysis, documents, remotePersisted 
                 return (
                   <div key={doc.id} className="rounded-2xl border border-white/70 bg-white/55 p-3 text-xs">
                     <div className="flex items-start justify-between gap-2"><b>{documentTypeLabels[doc.documentType] ?? doc.documentType}</b><Badge variant="outline">{readingStatusLabels[doc.readingStatus]}</Badge></div>
-                    <p className="mt-1 text-foreground/85">{doc.extractedSummary || (doc.readingStatus === 'aguardando_leitura' ? 'Documento aguardando leitura real.' : 'Sem resumo extraído.')}</p>
-                    {doc.extractionConfidence !== undefined && <p className="mt-1 text-foreground/90"><b>Confiança:</b> {Math.round(doc.extractionConfidence * 100)}%</p>}
-                    {extractedEntries.length > 0 && <ul className="mt-2 list-disc space-y-0.5 pl-4 text-foreground/90">{extractedEntries.map(([field, value]) => <li key={field}>{formatExtractedField(field, value)}</li>)}</ul>}
+                    <p className="mt-1 text-foreground">{doc.extractedSummary || (doc.readingStatus === 'aguardando_leitura' ? 'Documento aguardando leitura real.' : 'Sem resumo extraído.')}</p>
+                    {doc.extractionConfidence !== undefined && <p className="mt-1 text-foreground"><b>Confiança:</b> {Math.round(doc.extractionConfidence * 100)}%</p>}
+                    {extractedEntries.length > 0 && <ul className="mt-2 list-disc space-y-0.5 pl-4 text-foreground">{extractedEntries.map(([field, value]) => <li key={field}>{formatExtractedField(field, value)}</li>)}</ul>}
                     {doc.storagePath && <button type="button" onClick={() => openSignedUrl(doc)} className="mt-2 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/20">Abrir documento</button>}
                   </div>
                 );
@@ -842,8 +842,8 @@ function ScoreAndRecommendation({ company, analysis, documents, remotePersisted 
         </div>
         <div className="rounded-2xl border border-white/60 bg-white/45 p-3 text-sm">
           <h4 className="mb-1 font-semibold">Decisão consolidada</h4>
-          <p className="text-xs text-foreground/90"><b>Parecer manual:</b> {analysis.manualOpinion?.trim() ? analysis.manualOpinion : 'Pendente — registre na etapa "Parecer manual".'}</p>
-          <p className="text-xs text-foreground/90"><b>Decisão final:</b> {finalDecisionLabels[analysis.finalDecision]}</p>
+          <p className="text-xs text-foreground"><b>Parecer manual:</b> {analysis.manualOpinion?.trim() ? analysis.manualOpinion : 'Pendente — registre na etapa "Parecer manual".'}</p>
+          <p className="text-xs text-foreground"><b>Decisão final:</b> {finalDecisionLabels[analysis.finalDecision]}</p>
         </div>
       </GlassCard>
     </div>
@@ -853,7 +853,7 @@ function ScoreAndRecommendation({ company, analysis, documents, remotePersisted 
 function ManualOpinion({ analysis, onChange }: { analysis: TaxReformAnalysis; onChange: (patch: Partial<TaxReformAnalysis>) => void }) {
   return (
     <GlassCard className="space-y-4">
-      <div><h3 className="font-bold">Parecer manual do contador</h3><p className="text-sm text-foreground/85">Complemente ou ajuste a conclusão automática antes da decisão final.</p></div>
+      <div><h3 className="font-bold">Parecer manual do contador</h3><p className="text-sm text-foreground">Complemente ou ajuste a conclusão automática antes da decisão final.</p></div>
       <div className="space-y-2"><Label>Parecer manual</Label><Textarea value={analysis.manualOpinion} onChange={(event) => onChange({ manualOpinion: event.target.value })} placeholder="Registre premissas, riscos, documentos analisados e próximos passos." className="min-h-32" /></div>
       <SelectField label="Decisão final" value={analysis.finalDecision} onChange={(value) => onChange({ finalDecision: value as FinalDecision })} options={Object.entries(finalDecisionLabels).map(([value, label]) => ({ value, label }))} />
     </GlassCard>
@@ -891,14 +891,14 @@ function HistoryPanel({ store, openAnalysis }: { store: TaxReformStore; openAnal
   return (
     <GlassCard className="space-y-3">
       <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Histórico de análises</h3><Badge variant="outline">{rows.length} análises</Badge></div>
-      {rows.length === 0 ? <p className="text-sm text-foreground/85">Nenhum histórico registrado ainda.</p> : rows.slice(0, 8).map(({ analysis, company }) => (
+      {rows.length === 0 ? <p className="text-sm text-foreground">Nenhum histórico registrado ainda.</p> : rows.slice(0, 8).map(({ analysis, company }) => (
         <button key={analysis.id} type="button" onClick={() => openAnalysis(analysis.id, 'resultado')} className="w-full rounded-2xl border border-white/60 bg-white/45 p-3 text-left text-sm transition hover:bg-white/70">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <b>{company.companyName}</b>
             <Badge variant="outline">Ano-base {analysis.analysisYear}</Badge>
           </div>
-          <p className="mt-1 text-foreground/90">Score {analysis.scoreTotal}/100 · {recommendationLabels[analysis.recommendation]} · {statusLabels[analysis.status]}</p>
-          <p className="mt-1 text-xs text-foreground/80">Atualizado em {formatDate(analysis.updatedAt)} · Decisão: {finalDecisionLabels[analysis.finalDecision]}</p>
+          <p className="mt-1 text-foreground">Score {analysis.scoreTotal}/100 · {recommendationLabels[analysis.recommendation]} · {statusLabels[analysis.status]}</p>
+          <p className="mt-1 text-xs text-foreground">Atualizado em {formatDate(analysis.updatedAt)} · Decisão: {finalDecisionLabels[analysis.finalDecision]}</p>
         </button>
       ))}
     </GlassCard>
@@ -939,18 +939,18 @@ function DashboardList({ store, openAnalysis, startNewAnalysis }: {
   return (
     <GlassCard className="space-y-4">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div><h2 className="font-bold">Empresas cadastradas</h2><p className="text-sm text-foreground/85">Abra, edite ou continue a última análise da empresa.</p></div>
+        <div><h2 className="font-bold">Empresas cadastradas</h2><p className="text-sm text-foreground">Abra, edite ou continue a última análise da empresa.</p></div>
         <Badge variant="outline">{rows.length} registros</Badge>
       </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_0.8fr_0.8fr_0.9fr]">
-        <div className="space-y-2"><Label>Buscar</Label><div className="relative"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-foreground/70" /><Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Empresa ou CNPJ" /></div></div>
+        <div className="space-y-2"><Label>Buscar</Label><div className="relative"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Empresa ou CNPJ" /></div></div>
         <SelectField label="Status" value={statusFilter} onChange={setStatusFilter} options={[{ value: 'todos', label: 'Todos' }, ...Object.entries(statusLabels).map(([value, label]) => ({ value, label }))]} />
         <SelectField label="Regime" value={regimeFilter} onChange={setRegimeFilter} options={[{ value: 'todos', label: 'Todos' }, { value: 'simples_nacional', label: 'Simples Nacional' }, { value: 'lucro_presumido', label: 'Lucro Presumido' }]} />
         <SelectField label="Recomendação" value={recommendationFilter} onChange={setRecommendationFilter} options={[{ value: 'todos', label: 'Todas' }, { value: 'permanecer', label: 'Permanecer' }, { value: 'trocar', label: 'Avaliar troca' }, { value: 'manual', label: 'Manual necessária' }]} />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[980px] text-left text-sm">
-          <thead className="text-xs uppercase tracking-[0.12em] text-foreground/80"><tr><th className="p-3">Empresa</th><th className="p-3">CNPJ</th><th className="p-3">Regime</th><th className="p-3">Ano-base</th><th className="p-3">Status</th><th className="p-3">Score</th><th className="p-3">Recomendação</th><th className="p-3">Última análise</th><th className="p-3" /></tr></thead>
+          <thead className="text-xs uppercase tracking-[0.12em] text-foreground"><tr><th className="p-3">Empresa</th><th className="p-3">CNPJ</th><th className="p-3">Regime</th><th className="p-3">Ano-base</th><th className="p-3">Status</th><th className="p-3">Score</th><th className="p-3">Recomendação</th><th className="p-3">Última análise</th><th className="p-3" /></tr></thead>
           <tbody>
             {rows.map(({ company, analysis, score }) => (
               <tr key={company.id} className="border-t border-white/50">
@@ -1259,12 +1259,12 @@ export default function ReformaTributaria() {
 
           <GlassCard>
             <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div><h2 className="text-lg font-black">{selectedCompany.companyName}</h2><p className="text-sm text-foreground/85">{selectedCompany.cnpj} · {regimeLabels[selectedCompany.currentTaxRegime]} · {activityLabels[selectedCompany.mainActivity]} · ano-base {selectedAnalysis.analysisYear}</p></div>
+              <div><h2 className="text-lg font-black">{selectedCompany.companyName}</h2><p className="text-sm text-foreground">{selectedCompany.cnpj} · {regimeLabels[selectedCompany.currentTaxRegime]} · {activityLabels[selectedCompany.mainActivity]} · ano-base {selectedAnalysis.analysisYear}</p></div>
               <Badge>{statusLabels[selectedAnalysis.status]}</Badge>
             </div>
             <Progress value={((currentIndex + 1) / wizardSteps.length) * 100} />
             <div className="mt-4 grid gap-2 md:grid-cols-5">
-              {wizardSteps.map((item, index) => <button key={item.id} onClick={() => { setStep(item.id); setStatusForCurrent(item.id); }} className={cn('rounded-2xl border p-3 text-left text-xs font-bold transition', step === item.id ? 'border-primary bg-primary text-white shadow-lg' : index < currentIndex ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-white/60 bg-white/45 text-foreground/90')}><item.icon className="mb-2 h-4 w-4" />{item.label}</button>)}
+              {wizardSteps.map((item, index) => <button key={item.id} onClick={() => { setStep(item.id); setStatusForCurrent(item.id); }} className={cn('rounded-2xl border p-3 text-left text-xs font-bold transition', step === item.id ? 'border-primary bg-primary text-white shadow-lg' : index < currentIndex ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-white/60 bg-white/45 text-foreground')}><item.icon className="mb-2 h-4 w-4" />{item.label}</button>)}
             </div>
           </GlassCard>
 
@@ -1313,8 +1313,8 @@ export default function ReformaTributaria() {
         <div className="space-y-4">
           <GlassCard className="space-y-3">
             <div className="flex items-center gap-2"><HistoryIcon className="h-4 w-4 text-primary" /><h3 className="font-bold">Persistência e auditoria</h3></div>
-            <p className="text-sm text-foreground/85">{syncMessage}</p>
-            <p className="text-xs text-foreground/80">Empresas, análises, respostas, documentos e alertas são modelados separadamente para preservar histórico por ano-base.</p>
+            <p className="text-sm text-foreground">{syncMessage}</p>
+            <p className="text-xs text-foreground">Empresas, análises, respostas, documentos e alertas são modelados separadamente para preservar histórico por ano-base.</p>
           </GlassCard>
           <HistoryPanel store={store} openAnalysis={openAnalysis} />
         </div>
