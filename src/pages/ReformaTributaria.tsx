@@ -402,12 +402,12 @@ const questionBlocks = [
 const questionLabelByKey = Object.fromEntries(questionBlocks.flatMap((block) => block.questions.map((question) => [question.key, question.label])));
 const questionOptionsByKey = Object.fromEntries(questionBlocks.flatMap((block) => block.questions.map((question) => [question.key, 'options' in question ? question.options : []])));
 
-function formatAnswerValue(key: string, value: AnswerValue) {
+function formatAnswerValue(key: string, value: AnswerValue): string {
   if (Array.isArray(value)) {
-    const options = new Map((questionOptionsByKey[key] ?? []).map(([optionValue, label]) => [optionValue, label]));
+    const options = new Map<string, string>((questionOptionsByKey[key] ?? []).map(([optionValue, label]: [string, string]) => [optionValue, label]));
     return value.map((item) => options.get(item) ?? item).join(', ');
   }
-  const options = new Map((questionOptionsByKey[key] ?? []).map(([optionValue, label]) => [optionValue, label]));
+  const options = new Map<string, string>((questionOptionsByKey[key] ?? []).map(([optionValue, label]: [string, string]) => [optionValue, label]));
   if (typeof value === 'string') return options.get(value) ?? value;
   if (typeof value === 'number') return `${value}%`;
   return '-';
