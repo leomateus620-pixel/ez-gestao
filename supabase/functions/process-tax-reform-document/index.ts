@@ -540,17 +540,19 @@ Deno.serve(async (req) => {
     if ((decoded as { warning?: string }).warning) {
       (result.values as ExtractedValues).warnings = [...((result.values as ExtractedValues).warnings ?? []), (decoded as { warning: string }).warning];
     }
-    const status = result.confidence > 0 ? 'lido' : 'erro_leitura';
+    const allWarnings = (result.values as ExtractedValues).warnings ?? [];
+    const hasCriticalWarnings = allWarnings.some((w) => /incoerentes|n[aã]o encontrada|ausentes/i.test(w));
+    const status = result.confidence >= 0.7 && !hasCriticalWarnings ? 'lido' : 'erro_leitura';
     const extractionError = status === 'lido'
       ? null
-      : ((result.values as ExtractedValues).warnings ?? []).join(' ') || 'Nenhum campo decisivo pôde ser extraído do arquivo.';
+      : allWarnings.join(' ') || 'Nenhum campo decisivo pôde ser extraído do arquivo.';
     const { data: updated, error } = await supabase.from('tax_reform_documents').update({
       reading_status: status,
       extraction_error: extractionError,
       extracted_summary: result.summary,
       extracted_values: result.values,
       extracted_findings: result.findings,
-      extraction_confidence: result.confidence,
+      extraction_confidence: status === 'lido' ? result.confidence : 0,
     }).eq('id', documentId).select('*').single();
     if (error) throw error;
     return new Response(JSON.stringify({ document: updated }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
