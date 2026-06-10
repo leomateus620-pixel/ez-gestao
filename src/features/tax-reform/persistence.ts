@@ -439,3 +439,19 @@ export async function processTaxReformDocument(documentId: string): Promise<TaxR
   if (!data?.document) return null;
   return mapDocument(data.document);
 }
+
+export async function deleteTaxReformDocument(document: { id: string; storagePath?: string; storageBucket?: string }): Promise<void> {
+  if (!isSupabaseConfigured) return;
+  const client = db();
+  if (document.storagePath) {
+    try {
+      await client.storage
+        .from(document.storageBucket || TAX_REFORM_DOCUMENT_BUCKET)
+        .remove([document.storagePath]);
+    } catch (error) {
+      console.warn('[reforma-tributaria] falha ao remover arquivo do storage', error);
+    }
+  }
+  const { error } = await client.from('tax_reform_documents').delete().eq('id', document.id);
+  if (error) throw error;
+}

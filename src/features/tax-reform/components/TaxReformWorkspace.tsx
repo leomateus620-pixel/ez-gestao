@@ -11,12 +11,12 @@ import {
   FileSpreadsheet,
   FileText,
   Gauge,
-  History as HistoryIcon,
   Loader2,
   Pencil,
   Plus,
   Save,
   Search,
+  Trash2,
   Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -43,6 +43,7 @@ import {
   uploadTaxReformDocumentFile,
   getTaxReformDocumentSignedUrl,
   processTaxReformDocument,
+  deleteTaxReformDocument,
 } from '@/features/tax-reform/persistence';
 import { computeConfidenceLevel, computeConfidenceReasons, confidenceLabels } from '@/features/tax-reform/confidence';
 import type {
@@ -578,12 +579,13 @@ function Questionnaire({ analysis, onAnswersChange }: { analysis: TaxReformAnaly
   );
 }
 
-function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyze }: {
+function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyze, onRemoveDocument }: {
   company: TaxReformCompany;
   analysis: TaxReformAnalysis;
   documents: TaxReformDocument[];
   onAddDocuments: (docs: TaxReformDocument[]) => void;
   onAnalyze: () => void;
+  onRemoveDocument: (doc: TaxReformDocument) => void;
 }) {
   const [documentType, setDocumentType] = useState('dre');
   const [uploading, setUploading] = useState(false);
@@ -651,7 +653,7 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
       if (validDocs.length) {
         onAddDocuments(validDocs);
         const success = validDocs.filter((doc) => doc.uploadStatus === 'enviado').length;
-        if (success) toast.success(`${success} documento(s) enviado(s) ao Storage.`);
+        if (success) toast.success(`${success} documento(s) anexado(s).`);
       }
     } finally {
       setUploading(false);
@@ -684,9 +686,23 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
               <p className="font-semibold">{doc.fileName}</p>
               <p className="text-xs text-foreground">{documentTypeLabels[doc.documentType]} · {Math.ceil(doc.fileSize / 1024)} KB · enviado em {formatDate(doc.uploadedAt)}</p>
               {doc.extractedSummary && <p className="mt-1 text-xs text-foreground">{doc.extractedSummary}</p>}
-              {doc.extractionError && <p className="mt-1 text-xs text-amber-800">Upload/leitura: {doc.extractionError}</p>}
+              {doc.extractionError && <p className="mt-1 text-xs text-amber-800">Leitura: {doc.extractionError}</p>}
             </div>
-            <Badge variant="outline">{readingStatusLabels[doc.readingStatus]}</Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">{readingStatusLabels[doc.readingStatus]}</Badge>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label={`Remover ${doc.fileName}`}
+                onClick={() => {
+                  if (window.confirm(`Remover o documento "${doc.fileName}"?`)) onRemoveDocument(doc);
+                }}
+                className="h-8 w-8 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         ))}
       </div>
@@ -728,7 +744,7 @@ function formatExtractedField(field: string, value: unknown) {
   return `${label}: ${String(value)}`;
 }
 
-function ScoreAndRecommendation({ company, analysis, documents, remotePersisted = true }: { company: TaxReformCompany; analysis: TaxReformAnalysis; documents: TaxReformDocument[]; remotePersisted?: boolean }) {
+function ScoreAndRecommendation({ company, analysis, documents }: { company: TaxReformCompany; analysis: TaxReformAnalysis; documents: TaxReformDocument[] }) {
   const score = calculateTaxReformScore(company.currentTaxRegime, analysis.answers, documents, {
     mainActivity: company.mainActivity,
     requireDocuments: true,
@@ -744,9 +760,7 @@ function ScoreAndRecommendation({ company, analysis, documents, remotePersisted 
   const pendingReading = documents.filter((doc) => doc.uploadStatus !== 'erro_upload' && (doc.readingStatus === 'aguardando_leitura' || doc.readingStatus === 'lendo'));
   const hasCriticalDivergence = score.alerts.some((alert) => alert.alertType === 'document_divergence' && alert.severity === 'critical');
   let analysisStatus: { label: string; tone: string; description: string };
-  if (!remotePersisted) {
-    analysisStatus = { label: 'Rascunho local', tone: 'border-amber-300 bg-amber-50 text-amber-900', description: 'Os dados não foram salvos na nuvem. Sincronize antes de tratar como decisão final.' };
-  } else if (essentialMissing.length > 0) {
+  if (essentialMissing.length > 0) {
     analysisStatus = { label: 'Bloqueada', tone: 'border-rose-200 bg-rose-50 text-rose-900', description: 'Responda as perguntas decisivas para liberar a recomendação confiável.' };
   } else if (score.recommendation === 'analise_manual_necessaria' || hasCriticalDivergence) {
     analysisStatus = { label: 'Revisão manual', tone: 'border-amber-200 bg-amber-50 text-amber-900', description: 'O cenário exige parecer manual do contador antes da decisão final.' };
@@ -994,8 +1008,6 @@ export default function ReformaTributaria() {
   const [step, setStep] = useState<WizardStep>('empresa');
   const [persistenceReady, setPersistenceReady] = useState(false);
   const [remotePersistenceEnabled, setRemotePersistenceEnabled] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'loading' | 'local' | 'supabase' | 'saving' | 'error'>('loading');
-  const [syncMessage, setSyncMessage] = useState('Carregando dados da Reforma Tributária...');
 
   useEffect(() => {
     let cancelled = false;
@@ -1004,15 +1016,11 @@ export default function ReformaTributaria() {
         if (cancelled) return;
         setStore(withDerivedScores(remoteStore));
         setRemotePersistenceEnabled(true);
-        setSyncStatus('supabase');
-        setSyncMessage('Dados sincronizados com Supabase.');
       })
       .catch((error) => {
         if (cancelled) return;
-        console.warn('[reforma-tributaria] usando cache local', error);
+        console.warn('[reforma-tributaria] backend indisponível', error);
         setRemotePersistenceEnabled(false);
-        setSyncStatus('local');
-        setSyncMessage('Modo local: alterações não estão salvas na nuvem. O cache local é apenas um rascunho temporário.');
       })
       .finally(() => {
         if (!cancelled) setPersistenceReady(true);
@@ -1032,50 +1040,16 @@ export default function ReformaTributaria() {
     if (!persistenceReady || !isSupabaseConfigured || !remotePersistenceEnabled) return undefined;
 
     const handle = window.setTimeout(() => {
-      setSyncStatus('saving');
       saveTaxReformStore(withDerivedScores(store))
-        .then(() => {
-          setSyncStatus('supabase');
-          setSyncMessage('Alterações salvas no Supabase.');
-        })
         .catch((error) => {
-          console.error('[reforma-tributaria] falha ao persistir no Supabase', error);
+          console.error('[reforma-tributaria] falha ao persistir alterações', error);
           setRemotePersistenceEnabled(false);
-          setSyncStatus('error');
-          setSyncMessage('Modo local: alterações não estão salvas na nuvem. O cache local foi preservado apenas como rascunho temporário.');
-          toast.warning('Modo rascunho local', {
-            description: 'As alterações não foram salvas na nuvem. Use "Tentar sincronizar" antes de tratar a análise como definitiva.',
-          });
+          toast.error('Não foi possível salvar agora. Tente novamente em instantes.');
         });
     }, 700);
 
     return () => window.clearTimeout(handle);
   }, [persistenceReady, remotePersistenceEnabled, store]);
-
-
-  const retryCloudSync = async () => {
-    if (!isSupabaseConfigured) {
-      setSyncStatus('local');
-      setSyncMessage('Modo local: alterações não estão salvas na nuvem. Configure o Supabase para sincronizar.');
-      toast.error('Supabase não configurado', { description: 'O rascunho local não será tratado como salvamento em nuvem.' });
-      return;
-    }
-
-    try {
-      setSyncStatus('saving');
-      await saveTaxReformStore(withDerivedScores(store));
-      setRemotePersistenceEnabled(true);
-      setSyncStatus('supabase');
-      setSyncMessage('Alterações salvas no Supabase.');
-      toast.success('Rascunho sincronizado com Supabase.');
-    } catch (error) {
-      console.error('[reforma-tributaria] falha ao sincronizar rascunho local', error);
-      setRemotePersistenceEnabled(false);
-      setSyncStatus('error');
-      setSyncMessage('Modo local: alterações não estão salvas na nuvem. Revise a conexão e tente sincronizar novamente.');
-      toast.error('Não foi possível sincronizar com Supabase.');
-    }
-  };
 
   const selectedAnalysis = selectedAnalysisId ? store.analyses.find((analysis) => analysis.id === selectedAnalysisId) ?? null : null;
   const selectedCompany = selectedAnalysis ? store.companies.find((company) => company.id === selectedAnalysis.companyId) ?? null : null;
@@ -1137,7 +1111,6 @@ export default function ReformaTributaria() {
 
   const setStatusForCurrent = (targetStep: WizardStep, analysis = selectedAnalysis) => {
     if (!analysis || !selectedCompany) return;
-    const cannotFinalizeInLocalMode = !remotePersistenceEnabled && (targetStep === 'resultado' || targetStep === 'parecer');
     const score = calculateTaxReformScore(selectedCompany.currentTaxRegime, analysis.answers, selectedDocuments, {
       mainActivity: selectedCompany.mainActivity,
       requireDocuments: true,
@@ -1147,12 +1120,9 @@ export default function ReformaTributaria() {
       empresa: 'cadastro_iniciado',
       questionario: 'questionario_pendente',
       documentos: selectedDocuments.length ? 'documentos_anexados' : 'aguardando_documentos',
-      resultado: cannotFinalizeInLocalMode || score.insufficientData ? 'necessita_revisao_manual' : 'analise_concluida',
-      parecer: cannotFinalizeInLocalMode || analysis.finalDecision || analysis.manualOpinion ? (cannotFinalizeInLocalMode ? 'necessita_revisao_manual' : 'analise_concluida') : 'necessita_revisao_manual',
+      resultado: score.insufficientData ? 'necessita_revisao_manual' : 'analise_concluida',
+      parecer: analysis.finalDecision || analysis.manualOpinion ? 'analise_concluida' : 'necessita_revisao_manual',
     };
-    if (cannotFinalizeInLocalMode) {
-      toast.warning('Modo local: alterações não estão salvas na nuvem', { description: 'A conclusão final fica bloqueada até a sincronização com Supabase.' });
-    }
     updateAnalysis(analysis.id, { status: statusByStep[targetStep] });
   };
 
@@ -1220,6 +1190,23 @@ export default function ReformaTributaria() {
     if (failures) toast.error(`${failures} documento(s) não puderam ser lidos.`);
   };
 
+  const removeDocument = async (doc: TaxReformDocument) => {
+    setStore((prev) => ({
+      ...prev,
+      documents: prev.documents.filter((item) => item.id !== doc.id),
+    }));
+    if (doc.uploadStatus === 'enviado') {
+      try {
+        await deleteTaxReformDocument({ id: doc.id, storagePath: doc.storagePath, storageBucket: doc.storageBucket });
+      } catch (error) {
+        console.error('[reforma-tributaria] falha ao remover documento', error);
+        toast.error('Não foi possível remover o documento agora.');
+        return;
+      }
+    }
+    toast.success('Documento removido.');
+  };
+
   const generateReport = () => {
     if (!selectedCompany || !selectedAnalysis) return;
     window.setTimeout(() => window.print(), 150);
@@ -1238,24 +1225,9 @@ export default function ReformaTributaria() {
         <AnalysisReport company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} />
         <div className="space-y-5 print:hidden">
           <PageHeader title="Reforma Tributária" eyebrow="Assistente de análise" subtitle="Jornada guiada para triagem entre Simples Nacional e Lucro Presumido." icon={BarChart3}>
-            <Badge variant={syncStatus === 'error' ? 'destructive' : 'outline'}>{syncStatus === 'saving' ? 'Salvando...' : syncStatus === 'supabase' ? 'Supabase' : 'Local'}</Badge>
             <Button variant="outline" onClick={() => setSelectedAnalysisId(null)} className="gap-2"><ArrowLeft className="h-4 w-4" />Voltar ao dashboard</Button>
             <Button onClick={generateReport} className="gap-2"><Download className="h-4 w-4" />Gerar relatório da análise</Button>
           </PageHeader>
-
-          {syncStatus !== 'supabase' && (
-            <GlassCard className="border-amber-200 bg-amber-50/80 text-amber-950">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="font-bold">Modo local: alterações não estão salvas na nuvem</p>
-                  <p className="text-sm">Este cache é apenas um rascunho temporário. Não conclua a análise como confiável até sincronizar com Supabase.</p>
-                </div>
-                <Button variant="outline" onClick={retryCloudSync} disabled={syncStatus === 'saving'} className="gap-2">
-                  {syncStatus === 'saving' && <Loader2 className="h-4 w-4 animate-spin" />}Tentar sincronizar
-                </Button>
-              </div>
-            </GlassCard>
-          )}
 
           <GlassCard>
             <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -1270,9 +1242,9 @@ export default function ReformaTributaria() {
 
           {step === 'empresa' && <CompanyForm initial={selectedCompany} analysisYear={selectedAnalysis.analysisYear} compact onSave={upsertCompany} />}
           {step === 'questionario' && <Questionnaire analysis={selectedAnalysis} onAnswersChange={(answers) => updateAnalysis(selectedAnalysis.id, { answers, status: 'questionario_pendente' })} />}
-          {step === 'documentos' && <DocumentUpload company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} onAddDocuments={(docs) => { setStore((prev) => ({ ...prev, documents: [...docs, ...prev.documents], analyses: prev.analyses.map((analysis) => analysis.id === selectedAnalysis.id ? { ...analysis, status: 'documentos_anexados', updatedAt: nowIso() } : analysis) })); }} onAnalyze={analyzeDocuments} />}
-          {step === 'resultado' && <ScoreAndRecommendation company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} remotePersisted={syncStatus === 'supabase'} />}
-          {step === 'parecer' && <><ScoreAndRecommendation company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} remotePersisted={syncStatus === 'supabase'} /><ManualOpinion analysis={selectedAnalysis} onChange={(patch) => updateAnalysis(selectedAnalysis.id, patch)} /></>}
+          {step === 'documentos' && <DocumentUpload company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} onAddDocuments={(docs) => { setStore((prev) => ({ ...prev, documents: [...docs, ...prev.documents], analyses: prev.analyses.map((analysis) => analysis.id === selectedAnalysis.id ? { ...analysis, status: 'documentos_anexados', updatedAt: nowIso() } : analysis) })); }} onAnalyze={analyzeDocuments} onRemoveDocument={removeDocument} />}
+          {step === 'resultado' && <ScoreAndRecommendation company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} />}
+          {step === 'parecer' && <><ScoreAndRecommendation company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} /><ManualOpinion analysis={selectedAnalysis} onChange={(patch) => updateAnalysis(selectedAnalysis.id, patch)} /></>}
 
           <div className="flex justify-between">
             <Button variant="outline" disabled={currentIndex === 0} onClick={() => navigateStep(-1)} className="gap-2"><ArrowLeft className="h-4 w-4" />Voltar</Button>
@@ -1286,17 +1258,8 @@ export default function ReformaTributaria() {
   return (
     <div className="tax-reform-readable space-y-5">
       <PageHeader title="Reforma Tributária" eyebrow="Módulo operacional" subtitle="Cadastre empresas, responda perguntas estratégicas, anexe documentos e registre decisão final auditável." icon={BarChart3}>
-        <Badge variant={syncStatus === 'error' ? 'destructive' : 'outline'}>{syncMessage}</Badge>
         <Button onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })} className="gap-2"><Plus className="h-4 w-4" />Nova empresa</Button>
       </PageHeader>
-      {syncStatus !== 'supabase' && (
-        <GlassCard className="border-amber-200 bg-amber-50/80 text-amber-950">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div><p className="font-bold">Modo local: alterações não estão salvas na nuvem</p><p className="text-sm">O localStorage é apenas rascunho temporário. Use o botão abaixo para tentar sincronizar novamente.</p></div>
-            <Button variant="outline" onClick={retryCloudSync} disabled={syncStatus === 'saving'} className="gap-2">{syncStatus === 'saving' && <Loader2 className="h-4 w-4 animate-spin" />}Tentar sincronizar</Button>
-          </div>
-        </GlassCard>
-      )}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-8">
         <MetricTile label="Total" value={stats.total} caption="Empresas cadastradas" icon={Building2} tone="blue" />
         <MetricTile label="Simples" value={stats.simples} caption="No Simples Nacional" icon={CheckCircle2} tone="green" />
@@ -1311,11 +1274,6 @@ export default function ReformaTributaria() {
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <CompanyForm onSave={upsertCompany} />
         <div className="space-y-4">
-          <GlassCard className="space-y-3">
-            <div className="flex items-center gap-2"><HistoryIcon className="h-4 w-4 text-primary" /><h3 className="font-bold">Persistência e auditoria</h3></div>
-            <p className="text-sm text-foreground">{syncMessage}</p>
-            <p className="text-xs text-foreground">Empresas, análises, respostas, documentos e alertas são modelados separadamente para preservar histórico por ano-base.</p>
-          </GlassCard>
           <HistoryPanel store={store} openAnalysis={openAnalysis} />
         </div>
       </div>
