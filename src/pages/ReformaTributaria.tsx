@@ -41,7 +41,9 @@ import {
   fetchTaxReformStore,
   saveTaxReformStore,
   uploadTaxReformDocumentFile,
+  getTaxReformDocumentSignedUrl,
 } from '@/features/tax-reform/persistence';
+import { computeConfidenceLevel, computeConfidenceReasons, confidenceLabels } from '@/features/tax-reform/confidence';
 import type {
   AnalysisStatus,
   AnswerMap,
@@ -598,6 +600,27 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
 
         const uploadResult = await uploadTaxReformDocumentFile(company.id, analysis.id, file);
         const timestamp = nowIso();
+        if (!uploadResult.ok) {
+          toast.error('Falha ao enviar arquivo', { description: `${file.name}: ${uploadResult.error}` });
+          validDocs.push({
+            id: newId(),
+            companyId: company.id,
+            analysisId: analysis.id,
+            documentType,
+            fileName: file.name,
+            fileUrl: '',
+            fileSize: file.size,
+            mimeType: file.type || extension,
+            readingStatus: 'erro_leitura',
+            extractedSummary: '',
+            extractionError: uploadResult.error,
+            uploadStatus: 'erro_upload',
+            uploadError: uploadResult.error,
+            uploadedAt: timestamp,
+            updatedAt: timestamp,
+          });
+          continue;
+        }
         validDocs.push({
           id: newId(),
           companyId: company.id,
@@ -609,16 +632,20 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
           mimeType: file.type || extension,
           readingStatus: 'aguardando_leitura',
           extractedSummary: 'Arquivo registrado. A leitura automática ainda não está conectada ao pipeline definitivo.',
-          extractionError: uploadResult.uploadError ?? undefined,
+          storageBucket: uploadResult.storageBucket,
+          storagePath: uploadResult.storagePath,
+          uploadStatus: 'enviado',
+          uploadedBy: uploadResult.uploadedBy,
           uploadedAt: timestamp,
           updatedAt: timestamp,
         });
-        console.info('[reforma-tributaria] documento registrado', { companyId: company.id, analysisId: analysis.id, documentType, fileName: file.name, storage: uploadResult.fileUrl });
+        console.info('[reforma-tributaria] documento enviado', { companyId: company.id, analysisId: analysis.id, documentType, fileName: file.name, storagePath: uploadResult.storagePath });
       }
 
       if (validDocs.length) {
         onAddDocuments(validDocs);
-        toast.success('Documento vinculado à empresa e análise corretas.');
+        const success = validDocs.filter((doc) => doc.uploadStatus === 'enviado').length;
+        if (success) toast.success(`${success} documento(s) enviado(s) ao Storage.`);
       }
     } finally {
       setUploading(false);
