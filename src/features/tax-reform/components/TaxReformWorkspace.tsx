@@ -1234,7 +1234,7 @@ export default function ReformaTributaria() {
   if (selectedCompany && selectedAnalysis) {
     const currentIndex = wizardSteps.findIndex((item) => item.id === step);
     return (
-      <div className="space-y-5 print:space-y-0">
+      <div className="tax-reform-readable space-y-5 print:space-y-0">
         <AnalysisReport company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} />
         <div className="space-y-5 print:hidden">
           <PageHeader title="Reforma Tributária" eyebrow="Assistente de análise" subtitle="Jornada guiada para triagem entre Simples Nacional e Lucro Presumido." icon={BarChart3}>
@@ -1284,7 +1284,7 @@ export default function ReformaTributaria() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="tax-reform-readable space-y-5">
       <PageHeader title="Reforma Tributária" eyebrow="Módulo operacional" subtitle="Cadastre empresas, responda perguntas estratégicas, anexe documentos e registre decisão final auditável." icon={BarChart3}>
         <Badge variant={syncStatus === 'error' ? 'destructive' : 'outline'}>{syncMessage}</Badge>
         <Button onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })} className="gap-2"><Plus className="h-4 w-4" />Nova empresa</Button>
