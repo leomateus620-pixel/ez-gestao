@@ -555,10 +555,14 @@ function findPayrollTotalBlocks(text: string, warnings: string[]): number[][] {
   if (hasMarkers) {
     const tail = lines.slice(Math.max(0, lines.length - 80));
     for (let i = 0; i < tail.length; i += 1) {
-      let buf = tail[i] ?? '';
+      const start = tail[i] ?? '';
+      // Layer C visa um bloco AGREGADO no rodapé — nunca uma linha de empregado.
+      if (/^\s*\d{6}\s+/.test(start)) continue;
+      let buf = start;
       let nums = buf.match(PAYROLL_MONEY_RE) ?? [];
       for (let j = i + 1; j < tail.length && nums.length < 11; j += 1) {
         if (barrierRe.test(tail[j])) break;
+        if (/^\s*\d{6}\s+/.test(tail[j])) break;
         buf += ' ' + tail[j];
         nums = buf.match(PAYROLL_MONEY_RE) ?? [];
       }
