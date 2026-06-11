@@ -326,7 +326,7 @@ function SelectField({ label, value, onChange, options, required = false }: {
 }) {
   return (
     <div className="space-y-2">
-      <Label>{label}{required && <span className="text-destructive"> *</span>}</Label>
+      <Label className="text-[hsl(var(--text-primary))]">{label}{required && <span className="text-destructive"> *</span>}</Label>
       <NativeSelect value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </NativeSelect>
