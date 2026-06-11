@@ -262,8 +262,6 @@ describe('parseBalanceAndDreDocument — robustez', () => {
   });
 
   it('Balanço+DRE Zimmermann: localiza DRE mesmo sem heading perfeito da seção', () => {
-    const { readFileSync } = require('node:fs') as typeof import('node:fs');
-    const { join } = require('node:path') as typeof import('node:path');
     const original = readFileSync(join(__dirname, 'fixtures', 'balanco-dre-zimmermann.txt'), 'utf-8');
     const text = original
       .replace(/DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO NO PERÍODO DE 01\/01\/2025 A 31\/12\/2025/g, 'RELATÓRIO CONTÁBIL')

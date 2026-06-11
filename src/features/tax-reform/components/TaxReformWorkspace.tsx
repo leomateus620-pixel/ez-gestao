@@ -349,7 +349,7 @@ function MetricTile({ label, value, caption, icon: Icon, tone = 'blue' }: {
     violet: 'from-violet-500/15 text-violet-700 border-violet-200/70',
   };
   return (
-    <div className="liquid-stat-card">
+    <div className="liquid-stat-card tax-reform-dashboard-card">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-foreground">{label}</p>
@@ -508,8 +508,8 @@ function CompanyForm({ onSave, initial, analysisYear = currentYear, compact = fa
   };
 
   return (
-    <GlassCard className="space-y-4">
-      {!compact && <div><h2 className="text-lg font-bold">Cadastrar empresa</h2><p className="text-sm text-foreground">Informe os dados base para abrir uma análise por ano-base.</p></div>}
+    <GlassCard className="tax-reform-glass-panel space-y-4">
+      {!compact && <div><h2 className="font-display text-lg font-black">Cadastrar empresa</h2><p className="text-sm text-foreground">Informe os dados base para abrir uma análise por ano-base.</p></div>}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="space-y-2"><Label className="text-[hsl(var(--text-primary))]">Nome da empresa <span className="text-destructive">*</span></Label><Input className="placeholder:text-[hsl(var(--text-secondary))]" value={form.companyName} onChange={(e) => update('companyName', e.target.value)} placeholder="Ex.: Empresa ABC Ltda" /></div>
         <div className="space-y-2"><Label className="text-[hsl(var(--text-primary))]">CNPJ <span className="text-destructive">*</span></Label><Input className="placeholder:text-[hsl(var(--text-secondary))]" value={form.cnpj} onChange={(e) => update('cnpj', e.target.value)} placeholder="00.000.000/0000-00" /></div>
@@ -544,7 +544,7 @@ function QuestionRenderer({ question, value, onChange }: {
   }
   const selected = Array.isArray(value) ? value : [];
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="tax-reform-badge-row flex flex-wrap gap-2">
       {question.options.map(([optionValue, label]) => {
         const active = selected.includes(optionValue);
         return (
@@ -567,11 +567,11 @@ function Questionnaire({ analysis, onAnswersChange }: { analysis: TaxReformAnaly
   return (
     <div className="space-y-4">
       {questionBlocks.map((block) => (
-        <GlassCard key={block.title} className="space-y-4">
+        <GlassCard key={block.title} className="tax-reform-glass-panel space-y-4">
           <div><h3 className="font-bold">{block.title}</h3><p className="text-xs text-foreground">Respostas são salvas e recalculam score, alertas e recomendação.</p></div>
           <div className="grid gap-4 lg:grid-cols-2">
             {block.questions.map((question) => (
-              <div key={question.key} className="rounded-2xl border border-white/60 bg-white/45 p-3 shadow-sm backdrop-blur-xl">
+              <div key={question.key} className="tax-reform-answer-chip rounded-2xl p-3 shadow-sm">
                 <Label className="mb-2 block text-sm font-semibold">{question.label}</Label>
                 <QuestionRenderer question={question} value={analysis.answers[question.key]} onChange={(value) => setAnswer(question.key, value)} />
               </div>
@@ -681,16 +681,16 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
   };
 
   return (
-    <GlassCard className="space-y-4">
+    <GlassCard className="tax-reform-glass-panel space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div><h3 className="font-bold">Documentos e planilhas</h3><p className="text-sm text-foreground">Arquivos vinculados a {company.companyName} · ano-base {analysis.analysisYear}.</p></div>
+        <div><h3 className="font-display font-black">Documentos e planilhas</h3><p className="text-sm text-foreground">Arquivos vinculados a {company.companyName} · ano-base {analysis.analysisYear}.</p></div>
         <Button onClick={onAnalyze} variant="outline" className="gap-2" disabled={!documents.length}><FileSpreadsheet className="h-4 w-4" />Analisar documentos</Button>
       </div>
       <div className="grid gap-3 md:grid-cols-[minmax(0,260px)_1fr]">
         <SelectField label="Tipo do documento" value={documentType} onChange={setDocumentType} options={Object.entries(documentTypeLabels).map(([value, label]) => ({ value, label }))} />
         <div className="space-y-2">
           <Label>Anexar PDF/planilha</Label>
-          <label className={cn('flex min-h-10 cursor-pointer items-center justify-center rounded-2xl border border-dashed border-primary/35 bg-primary/5 px-4 py-3 text-sm font-semibold text-primary hover:bg-primary/10', uploading && 'pointer-events-none opacity-60')}>
+          <label className={cn('tax-reform-action-button flex min-h-10 cursor-pointer items-center justify-center rounded-2xl border border-dashed border-primary/35 bg-primary/10 px-4 py-3 text-sm font-black text-primary hover:bg-primary/15', uploading && 'pointer-events-none opacity-60')}>
             {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
             {uploading ? 'Anexando...' : 'Selecionar arquivos'}
             <input type="file" multiple accept={acceptedMimeTypes} onChange={upload} className="hidden" disabled={uploading} />
@@ -1035,8 +1035,8 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
   };
 
   return (
-    <section className="space-y-5">
-      <GlassCard className="overflow-hidden border-orange-200/70 bg-gradient-to-br from-orange-50 via-amber-50 to-stone-50 p-0 text-slate-950 shadow-lg shadow-orange-900/5">
+    <section className="tax-reform-stage space-y-5">
+      <GlassCard className="tax-reform-hero-card overflow-hidden p-0 text-[hsl(var(--text-primary))]">
         <div className="space-y-5 p-5 md:p-6">
           <div className="grid gap-2 md:grid-cols-4">
             {[
@@ -1045,21 +1045,21 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
               ['Regime', regimeLabels[company.currentTaxRegime]],
               ['Ano-base', analysis.analysisYear],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-2xl border border-orange-200/70 bg-white/70 px-3 py-2 shadow-sm">
-                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-800">{label}</p>
-                <p className="mt-1 truncate text-sm font-bold text-slate-950">{value}</p>
+              <div key={label} className="tax-reform-metric-tile rounded-2xl px-3 py-2">
+                <p className="tax-reform-label">{label}</p>
+                <p className="mt-1 truncate text-sm font-black text-[hsl(var(--text-primary))]">{value}</p>
               </div>
             ))}
           </div>
 
           <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
-            <div className="rounded-3xl border border-orange-200 bg-white/75 p-5 text-center shadow-inner">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-800">Score total</p>
-              <div className="mt-2 flex items-end justify-center gap-1 text-primary">
+            <div className="tax-reform-score-orb rounded-3xl border border-primary/20 p-5 text-center">
+              <p className="tax-reform-label">Score total</p>
+              <div className="tax-reform-number mt-2 flex items-end justify-center gap-1 text-primary">
                 <span className="text-6xl font-black leading-none tracking-tight md:text-7xl">{score.total}</span>
                 <span className="pb-2 text-2xl font-black">/100</span>
               </div>
-              <div className="mt-4 space-y-2 text-sm text-slate-800">
+              <div className="mt-4 space-y-2 text-sm font-medium text-[hsl(var(--text-secondary))]">
                 <div className="flex justify-between gap-3"><span>Perfil dos clientes</span><b>{score.clients}/60</b></div>
                 <Progress value={(score.clients / 60) * 100} />
                 <div className="flex justify-between gap-3"><span>Custos e créditos</span><b>{score.costs}/25</b></div>
@@ -1070,16 +1070,16 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
             </div>
 
             <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
+              <div className="tax-reform-badge-row flex flex-wrap gap-2">
                 <span className={cn('rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em]', badgeTone('risk', score.riskLevel))}>Risco: {riskLabels[score.riskLevel]}</span>
                 <span className={cn('rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em]', badgeTone('confidence', confidenceLevel))}>Confiança: {confidenceLabels[confidenceLevel]}</span>
                 <span className={cn('rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em]', badgeTone('status', analysisStatus.label))}>Status: {analysisStatus.label}</span>
               </div>
 
-              <div className="rounded-3xl border border-primary/25 bg-primary/10 p-4">
+              <div className="tax-reform-glass-panel rounded-3xl border border-primary/25 bg-primary/10 p-4">
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Recomendação automática</p>
-                <h3 className="mt-2 text-2xl font-black leading-tight text-slate-950">{recommendationLabels[score.recommendation]}</h3>
-                <p className="mt-2 text-sm font-medium leading-relaxed text-slate-800">{score.summary}</p>
+                <h3 className="font-display mt-2 text-2xl font-black leading-tight text-[hsl(var(--text-primary))]">{recommendationLabels[score.recommendation]}</h3>
+                <p className="mt-2 text-sm font-semibold leading-relaxed text-[hsl(var(--text-secondary))]">{score.summary}</p>
               </div>
 
               <div className={cn('rounded-2xl border p-3 text-sm font-medium', analysisStatus.tone)}>
@@ -1091,30 +1091,30 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
         </div>
       </GlassCard>
 
-      <GlassCard className="space-y-4 border-orange-100/80 bg-stone-50/90 text-slate-950">
+      <GlassCard className="tax-reform-glass-panel space-y-4 text-[hsl(var(--text-primary))]">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-800">Base da análise</p>
-            <h3 className="text-2xl font-black text-slate-950">Evidências e informações complementares</h3>
+            <p className="tax-reform-label">Base da análise</p>
+            <h3 className="font-display text-2xl font-black text-[hsl(var(--text-primary))]">Evidências e informações complementares</h3>
           </div>
-          <p className="text-sm font-semibold text-slate-700">{score.answeredRequired} perguntas obrigatórias · {uploaded.length} documentos enviados · {scoreDocuments.length} alimentando score</p>
+          <p className="text-sm font-bold text-[hsl(var(--text-secondary))]">{score.answeredRequired} perguntas obrigatórias · {uploaded.length} documentos enviados · {scoreDocuments.length} alimentando score</p>
         </div>
 
         <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-          <div className="rounded-3xl border border-orange-200/70 bg-white/75 p-4 shadow-sm">
+          <div className="tax-reform-glass-panel rounded-3xl p-4">
             <div className="mb-4 flex items-center justify-between gap-2">
-              <h4 className="text-lg font-black text-slate-950">Questionário</h4>
+              <h4 className="font-display text-lg font-black text-[hsl(var(--text-primary))]">Questionário</h4>
               <Badge variant="outline" className="border-orange-300 bg-orange-50 text-orange-800">Resumo respondido</Badge>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               {resultQuestionnaireGroups.map((group) => (
-                <div key={group.title} className="rounded-2xl border border-stone-200 bg-stone-50/90 p-3">
-                  <h5 className="text-sm font-black text-slate-950">{group.title}</h5>
+                <div key={group.title} className="tax-reform-glass-panel rounded-2xl p-3">
+                  <h5 className="text-sm font-black text-[hsl(var(--text-primary))]">{group.title}</h5>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {group.items.map((item) => (
-                      <div key={item.key} className="rounded-xl border border-orange-100 bg-white/85 px-3 py-2">
-                        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-600">{item.label}</p>
-                        <p className="mt-1 text-sm font-bold text-slate-950">{getAnswerSummary(analysis.answers, item.key, item.fallback)}</p>
+                      <div key={item.key} className="tax-reform-answer-chip rounded-xl px-3 py-2">
+                        <p className="tax-reform-label">{item.label}</p>
+                        <p className="mt-1 text-sm font-black text-[hsl(var(--text-primary))]">{getAnswerSummary(analysis.answers, item.key, item.fallback)}</p>
                       </div>
                     ))}
                   </div>
@@ -1124,13 +1124,13 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-3xl border border-orange-200/70 bg-white/75 p-4 shadow-sm">
+            <div className="tax-reform-glass-panel rounded-3xl p-4">
               <div className="mb-4 flex items-center justify-between gap-2">
-                <h4 className="text-lg font-black text-slate-950">Documentos</h4>
+                <h4 className="font-display text-lg font-black text-[hsl(var(--text-primary))]">Documentos</h4>
                 <Badge variant="outline" className="border-orange-300 bg-orange-50 text-orange-800">{documents.length || 'Nenhum'} anexado(s)</Badge>
               </div>
               {documents.length === 0 ? (
-                <p className="rounded-2xl border border-dashed border-orange-300 bg-orange-50/70 p-4 text-sm font-semibold text-orange-900">Nenhum documento anexado. O resultado está baseado apenas nas respostas do questionário.</p>
+                <p className="rounded-2xl border border-dashed border-primary/30 bg-primary/10 p-4 text-sm font-bold text-[hsl(var(--text-primary))]">Nenhum documento anexado. O resultado está baseado apenas nas respostas do questionário.</p>
               ) : (
                 <div className="grid gap-3">
                   {documents.map((doc) => {
@@ -1139,11 +1139,11 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
                     const metrics = getDocumentMetrics(doc);
                     const errorReason = doc.extractionError || doc.extractedSummary || 'Leitura falhou. Nenhum dado deste documento foi usado no score.';
                     return (
-                      <article key={doc.id} className="rounded-2xl border border-stone-200 bg-stone-50/95 p-4 shadow-sm">
+                      <article key={doc.id} className="tax-reform-document-card rounded-2xl p-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <h5 className="font-black text-slate-950">{documentTypeLabels[doc.documentType] ?? doc.documentType}</h5>
-                            <p className="mt-0.5 max-w-sm truncate text-xs font-medium text-slate-600">{doc.fileName}</p>
+                            <h5 className="font-black text-[hsl(var(--text-primary))]">{documentTypeLabels[doc.documentType] ?? doc.documentType}</h5>
+                            <p className="mt-0.5 max-w-sm truncate text-xs font-bold text-[hsl(var(--text-secondary))]">{doc.fileName}</p>
                           </div>
                           <div className="flex flex-wrap gap-1.5">
                             <Badge variant="outline" className={cn(hasReadingError ? 'border-rose-300 bg-rose-50 text-rose-800' : doc.readingStatus === 'lido' ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-sky-300 bg-sky-50 text-sky-800')}>{readingStatusLabels[doc.readingStatus]}</Badge>
@@ -1159,9 +1159,9 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
                         ) : metrics.length > 0 ? (
                           <div className="mt-3 grid gap-2 sm:grid-cols-2">
                             {metrics.map((metric) => (
-                              <div key={`${doc.id}-${metric.label}`} className="rounded-xl border border-orange-100 bg-white px-3 py-2">
-                                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-600">{metric.label}</p>
-                                <p className="mt-1 text-sm font-black text-slate-950">{metric.value}</p>
+                              <div key={`${doc.id}-${metric.label}`} className="tax-reform-metric-tile rounded-xl px-3 py-2">
+                                <p className="tax-reform-label">{metric.label}</p>
+                                <p className="tax-reform-number mt-1 text-sm font-black text-[hsl(var(--text-primary))]">{metric.value}</p>
                               </div>
                             ))}
                           </div>
@@ -1181,12 +1181,12 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
               )}
             </div>
 
-            <div className="rounded-3xl border border-orange-200/70 bg-white/75 p-4 shadow-sm">
-              <h4 className="text-lg font-black text-slate-950">Alertas e pendências</h4>
+            <div className="tax-reform-glass-panel rounded-3xl p-4">
+              <h4 className="font-display text-lg font-black text-[hsl(var(--text-primary))]">Alertas e pendências</h4>
               <div className="mt-3 space-y-3">
                 {alertGroups.map((group) => (
-                  <div key={group.title} className="rounded-2xl border border-stone-200 bg-stone-50/90 p-3">
-                    <h5 className="text-sm font-black text-slate-950">{group.title}</h5>
+                  <div key={group.title} className="tax-reform-glass-panel rounded-2xl p-3">
+                    <h5 className="text-sm font-black text-[hsl(var(--text-primary))]">{group.title}</h5>
                     {group.items.length === 0 ? (
                       <p className="mt-2 text-sm font-semibold text-slate-600">Nenhum item neste grupo.</p>
                     ) : (
@@ -1207,31 +1207,31 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
         </div>
       </GlassCard>
 
-      <GlassCard className="space-y-4 border-orange-100/80 bg-gradient-to-br from-stone-50 to-orange-50/80 text-slate-950">
+      <GlassCard className="tax-reform-final-card space-y-4 text-[hsl(var(--text-primary))]">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-800">Fechamento da análise</p>
-          <h3 className="text-2xl font-black text-slate-950">Resultado final, parecer e próximos passos</h3>
+          <p className="tax-reform-label">Fechamento da análise</p>
+          <h3 className="font-display text-2xl font-black text-[hsl(var(--text-primary))]">Resultado final, parecer e próximos passos</h3>
         </div>
         <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-3xl border border-primary/25 bg-white/80 p-4">
+          <div className="tax-reform-glass-panel rounded-3xl border border-primary/25 p-4">
             <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Resultado final</p>
-            <h4 className="mt-2 text-xl font-black text-slate-950">{recommendationLabels[score.recommendation]}</h4>
-            <p className="mt-3 text-sm font-black text-slate-900">Justificativa:</p>
-            <p className="mt-1 text-sm font-medium leading-relaxed text-slate-800">{score.summary}</p>
+            <h4 className="font-display mt-2 text-xl font-black text-[hsl(var(--text-primary))]">{recommendationLabels[score.recommendation]}</h4>
+            <p className="mt-3 text-sm font-black text-[hsl(var(--text-primary))]">Justificativa:</p>
+            <p className="mt-1 text-sm font-semibold leading-relaxed text-[hsl(var(--text-secondary))]">{score.summary}</p>
           </div>
-          <div className="rounded-3xl border border-stone-200 bg-white/80 p-4">
-            <div className="space-y-3 text-sm text-slate-800">
+          <div className="tax-reform-glass-panel rounded-3xl p-4">
+            <div className="space-y-3 text-sm text-[hsl(var(--text-secondary))]">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">Parecer manual</p>
-                <p className="mt-1 font-bold text-slate-950">{analysis.manualOpinion?.trim() ? analysis.manualOpinion : 'Pendente'}</p>
+                <p className="mt-1 font-black text-[hsl(var(--text-primary))]">{analysis.manualOpinion?.trim() ? analysis.manualOpinion : 'Pendente'}</p>
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">Decisão final</p>
-                <p className="mt-1 font-bold text-slate-950">{finalDecisionLabels[analysis.finalDecision]}</p>
+                <p className="mt-1 font-black text-[hsl(var(--text-primary))]">{finalDecisionLabels[analysis.finalDecision]}</p>
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">Próximos passos</p>
-                <p className="mt-1 font-bold text-slate-950">{analysis.finalDecision ? 'Executar a decisão registrada e arquivar evidências da análise.' : 'Registrar parecer manual e confirmar a decisão final com o responsável técnico.'}</p>
+                <p className="mt-1 font-black text-[hsl(var(--text-primary))]">{analysis.finalDecision ? 'Executar a decisão registrada e arquivar evidências da análise.' : 'Registrar parecer manual e confirmar a decisão final com o responsável técnico.'}</p>
               </div>
             </div>
           </div>
@@ -1285,10 +1285,10 @@ function AnalysisReport({ company, analysis, documents }: { company: TaxReformCo
 function HistoryPanel({ store, openAnalysis }: { store: TaxReformStore; openAnalysis: (analysisId: string, targetStep?: WizardStep) => void }) {
   const rows = store.companies.flatMap((company) => getCompanyAnalysisHistory(company.id, store.analyses).map((analysis) => ({ company, analysis })));
   return (
-    <GlassCard className="space-y-3">
+    <GlassCard className="tax-reform-glass-panel space-y-3">
       <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Histórico de análises</h3><Badge variant="outline">{rows.length} análises</Badge></div>
       {rows.length === 0 ? <p className="text-sm text-foreground">Nenhum histórico registrado ainda.</p> : rows.slice(0, 8).map(({ analysis, company }) => (
-        <button key={analysis.id} type="button" onClick={() => openAnalysis(analysis.id, 'resultado')} className="w-full rounded-2xl border border-white/60 bg-white/45 p-3 text-left text-sm transition hover:bg-white/70">
+        <button key={analysis.id} type="button" onClick={() => openAnalysis(analysis.id, 'resultado')} className="tax-reform-dashboard-card w-full rounded-2xl p-3 text-left text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <b>{company.companyName}</b>
             <Badge variant="outline">Ano-base {analysis.analysisYear}</Badge>
@@ -1333,9 +1333,9 @@ function DashboardList({ store, openAnalysis, startNewAnalysis }: {
   }), [recommendationFilter, regimeFilter, search, statusFilter, store]);
 
   return (
-    <GlassCard className="space-y-4">
+    <GlassCard className="tax-reform-glass-panel space-y-4">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div><h2 className="font-bold">Empresas cadastradas</h2><p className="text-sm text-foreground">Abra, edite ou continue a última análise da empresa.</p></div>
+        <div><h2 className="font-display font-black">Empresas cadastradas</h2><p className="text-sm text-foreground">Abra, edite ou continue a última análise da empresa.</p></div>
         <Badge variant="outline">{rows.length} registros</Badge>
       </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1.2fr_0.8fr_0.8fr_0.9fr]">
@@ -1344,12 +1344,12 @@ function DashboardList({ store, openAnalysis, startNewAnalysis }: {
         <SelectField label="Regime" value={regimeFilter} onChange={setRegimeFilter} options={[{ value: 'todos', label: 'Todos' }, { value: 'simples_nacional', label: 'Simples Nacional' }, { value: 'lucro_presumido', label: 'Lucro Presumido' }]} />
         <SelectField label="Recomendação" value={recommendationFilter} onChange={setRecommendationFilter} options={[{ value: 'todos', label: 'Todas' }, { value: 'permanecer', label: 'Permanecer' }, { value: 'trocar', label: 'Avaliar troca' }, { value: 'manual', label: 'Manual necessária' }]} />
       </div>
-      <div className="overflow-x-auto">
+      <div className="tax-reform-table-shell overflow-x-auto">
         <table className="w-full min-w-[980px] text-left text-sm">
           <thead className="text-xs uppercase tracking-[0.12em] text-foreground"><tr><th className="p-3">Empresa</th><th className="p-3">CNPJ</th><th className="p-3">Regime</th><th className="p-3">Ano-base</th><th className="p-3">Status</th><th className="p-3">Score</th><th className="p-3">Recomendação</th><th className="p-3">Última análise</th><th className="p-3" /></tr></thead>
           <tbody>
             {rows.map(({ company, analysis, score }) => (
-              <tr key={company.id} className="border-t border-white/50">
+              <tr key={company.id} className="border-t border-primary/10 transition hover:bg-primary/5">
                 <td className="p-3 font-semibold">{company.companyName}</td>
                 <td className="p-3">{company.cnpj}</td>
                 <td className="p-3">{regimeLabels[company.currentTaxRegime]}</td>
@@ -1686,7 +1686,7 @@ export default function ReformaTributaria() {
   if (selectedCompany && selectedAnalysis) {
     const currentIndex = wizardSteps.findIndex((item) => item.id === step);
     return (
-      <div className="tax-reform-readable space-y-5 print:space-y-0">
+      <div className="tax-reform-readable tax-reform-stage space-y-5 print:space-y-0">
         <AnalysisReport company={selectedCompany} analysis={selectedAnalysis} documents={selectedDocuments} />
         <div className="space-y-5 print:hidden">
           <PageHeader title="Reforma Tributária" eyebrow="Assistente de análise" subtitle="Jornada guiada para triagem entre Simples Nacional e Lucro Presumido." icon={BarChart3}>
@@ -1694,14 +1694,14 @@ export default function ReformaTributaria() {
             <Button onClick={generateReport} className="gap-2"><Download className="h-4 w-4" />Gerar relatório da análise</Button>
           </PageHeader>
 
-          <GlassCard>
+          <GlassCard className="tax-reform-glass-panel">
             <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div><h2 className="text-lg font-black">{selectedCompany.companyName}</h2><p className="text-sm text-foreground">{selectedCompany.cnpj} · {regimeLabels[selectedCompany.currentTaxRegime]} · {activityLabels[selectedCompany.mainActivity]} · ano-base {selectedAnalysis.analysisYear}</p></div>
               <Badge>{statusLabels[selectedAnalysis.status]}</Badge>
             </div>
             <Progress value={((currentIndex + 1) / wizardSteps.length) * 100} />
             <div className="mt-4 grid gap-2 md:grid-cols-5">
-              {wizardSteps.map((item, index) => <button key={item.id} onClick={() => { setStep(item.id); setStatusForCurrent(item.id); }} className={cn('rounded-2xl border p-3 text-left text-xs font-bold transition', step === item.id ? 'border-primary bg-primary text-white shadow-lg' : index < currentIndex ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-white/60 bg-white/45 text-foreground')}><item.icon className="mb-2 h-4 w-4" />{item.label}</button>)}
+              {wizardSteps.map((item, index) => <button key={item.id} onClick={() => { setStep(item.id); setStatusForCurrent(item.id); }} className={cn('tax-reform-action-button rounded-2xl border p-3 text-left text-xs font-black transition', step === item.id ? 'border-primary bg-primary text-white shadow-lg shadow-primary/20' : index < currentIndex ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-primary/15 bg-white/60 text-foreground hover:border-primary/30 hover:bg-primary/10')}><item.icon className="mb-2 h-4 w-4" />{item.label}</button>)}
             </div>
           </GlassCard>
 
@@ -1721,7 +1721,7 @@ export default function ReformaTributaria() {
   }
 
   return (
-    <div className="tax-reform-readable space-y-5">
+    <div className="tax-reform-readable tax-reform-stage space-y-5">
       <PageHeader title="Reforma Tributária" eyebrow="Módulo operacional" subtitle="Cadastre empresas, responda perguntas estratégicas, anexe documentos e registre decisão final auditável." icon={BarChart3}>
         <Button onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })} className="gap-2"><Plus className="h-4 w-4" />Nova empresa</Button>
       </PageHeader>
