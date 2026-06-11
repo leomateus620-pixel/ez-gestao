@@ -576,6 +576,7 @@ function isPayrollBlockCoherent(m: NonNullable<ReturnType<typeof mapPayrollColum
 
 function findPayrollTotalBlocks(text: string, warnings: string[]): number[][] {
   const blocks: number[][] = [];
+  text = ungluePayrollMoney(text);
   const fullRe = /\bTotal\s*:\s*((?:-?\d{1,3}(?:\.\d{3})*,\d{2}\s+){10}-?\d{1,3}(?:\.\d{3})*,\d{2})/gi;
   let mm: RegExpExecArray | null;
   while ((mm = fullRe.exec(text)) !== null) {
