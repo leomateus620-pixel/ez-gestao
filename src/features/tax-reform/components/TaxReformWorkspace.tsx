@@ -1009,7 +1009,6 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
     {
       title: 'Pendências',
       items: [
-        ...missingDocs.map((key) => ({ title: 'Documento faltante', description: formatMissingData(key), severity: 'warning' as const })),
         ...readingErrors.map((doc) => ({ title: 'Documento com erro de leitura', description: `${documentTypeLabels[doc.documentType] ?? doc.documentType}: ${doc.extractionError || doc.extractedSummary || 'Nenhum dado deste documento foi usado no score.'}`, severity: 'warning' as const })),
         ...failed.map((doc) => ({ title: 'Erro no upload', description: `${documentTypeLabels[doc.documentType] ?? doc.documentType}: ${doc.uploadError || 'Reenvie o arquivo para análise.'}`, severity: 'critical' as const })),
       ],
@@ -1026,7 +1025,7 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
         ...essentialMissing.map((key) => ({ title: 'Pergunta decisiva pendente', description: formatMissingData(key), severity: 'critical' as const })),
         ...(scoreDocuments.length === 0 ? [{ title: 'Nenhum documento principal lido com sucesso', description: 'A conclusão permanece preliminar até que documentos válidos alimentem o score.', severity: 'warning' as const }] : []),
         ...score.alerts
-          .filter((alert) => ['missing_documents', 'manual_review', 'document_reading'].includes(alert.alertType))
+          .filter((alert) => ['manual_review', 'document_reading'].includes(alert.alertType))
           .map((alert) => ({ title: alert.title, description: alert.message, severity: alert.severity })),
       ],
     },
