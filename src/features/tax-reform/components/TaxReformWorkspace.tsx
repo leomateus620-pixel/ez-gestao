@@ -438,7 +438,6 @@ function CompanyForm({ onSave, initial, analysisYear = currentYear, compact = fa
     responsibleUser: initial?.responsibleUser ?? '',
     analysisYear: String(analysisYear),
     rbt12: initial?.rbt12 ? String(initial.rbt12) : '',
-    projectedRevenue: initial?.projectedRevenue ? String(initial.projectedRevenue) : '',
     effectiveTaxRate: initial?.effectiveTaxRate ? String(initial.effectiveTaxRate) : '',
     notes: initial?.notes ?? '',
   });
@@ -452,7 +451,6 @@ function CompanyForm({ onSave, initial, analysisYear = currentYear, compact = fa
       responsibleUser: initial?.responsibleUser ?? '',
       analysisYear: String(analysisYear),
       rbt12: initial?.rbt12 ? String(initial.rbt12) : '',
-      projectedRevenue: initial?.projectedRevenue ? String(initial.projectedRevenue) : '',
       effectiveTaxRate: initial?.effectiveTaxRate ? String(initial.effectiveTaxRate) : '',
       notes: initial?.notes ?? '',
     });
@@ -465,7 +463,6 @@ function CompanyForm({ onSave, initial, analysisYear = currentYear, compact = fa
     initial?.mainActivity,
     initial?.responsibleUser,
     initial?.rbt12,
-    initial?.projectedRevenue,
     initial?.effectiveTaxRate,
     initial?.notes,
   ]);
@@ -502,7 +499,7 @@ function CompanyForm({ onSave, initial, analysisYear = currentYear, compact = fa
       mainActivity: form.mainActivity as MainActivity,
       responsibleUser: form.responsibleUser.trim(),
       rbt12: normalizeNumber(form.rbt12),
-      projectedRevenue: normalizeNumber(form.projectedRevenue),
+      projectedRevenue: initial?.projectedRevenue,
       effectiveTaxRate: effectiveRate,
       notes: form.notes,
       createdAt: initial?.createdAt ?? timestamp,
@@ -520,9 +517,8 @@ function CompanyForm({ onSave, initial, analysisYear = currentYear, compact = fa
         <SelectField label="Atividade principal" required value={form.mainActivity} onChange={(value) => update('mainActivity', value)} options={[{ value: 'comercio', label: 'Comércio' }, { value: 'industria', label: 'Indústria' }, { value: 'servicos', label: 'Serviços' }, { value: 'misto', label: 'Misto' }]} />
         <div className="space-y-2"><Label>Responsável interno <span className="text-destructive">*</span></Label><Input value={form.responsibleUser} onChange={(e) => update('responsibleUser', e.target.value)} /></div>
         <div className="space-y-2"><Label>Ano-base da análise <span className="text-destructive">*</span></Label><Input type="number" min="2026" max="2100" value={form.analysisYear} onChange={(e) => update('analysisYear', e.target.value)} /></div>
-        <div className="space-y-2"><Label>Faturamento últimos 12 meses</Label><Input value={form.rbt12} onChange={(e) => update('rbt12', e.target.value)} placeholder="R$" /></div>
-        <div className="space-y-2"><Label>Faturamento projetado 12 meses</Label><Input value={form.projectedRevenue} onChange={(e) => update('projectedRevenue', e.target.value)} placeholder="R$" /></div>
-        <div className="space-y-2"><Label>Alíquota efetiva atual (%)</Label><Input type="text" inputMode="decimal" pattern="[0-9.,]*" placeholder="0,00" value={form.effectiveTaxRate} onChange={(e) => update('effectiveTaxRate', e.target.value)} /></div>
+        <div className="space-y-2"><Label className="text-[hsl(var(--text-primary))]">Faturamento últimos 12 meses</Label><Input className="placeholder:text-[hsl(var(--text-secondary))]" value={form.rbt12} onChange={(e) => update('rbt12', e.target.value)} placeholder="R$" /></div>
+        <div className="space-y-2"><Label className="text-[hsl(var(--text-primary))]">Alíquota efetiva atual (%)</Label><Input type="text" inputMode="decimal" pattern="[0-9.,]*" placeholder="0,00" className="placeholder:text-[hsl(var(--text-secondary))]" value={form.effectiveTaxRate} onChange={(e) => update('effectiveTaxRate', e.target.value)} /></div>
       </div>
       <div className="space-y-2"><Label>Observações internas</Label><Textarea value={form.notes} onChange={(e) => update('notes', e.target.value)} placeholder="Contexto, sazonalidade, premissas e pontos de atenção." /></div>
       <div className="flex justify-end"><Button onClick={submit} className="gap-2"><Save className="h-4 w-4" />{initial ? 'Salvar e continuar análise' : 'Cadastrar e abrir análise'}</Button></div>
