@@ -80,7 +80,7 @@ function extractBalanceClients(text: string): {
 function classifyClientName(name: string): 'b2b' | 'b2c' | 'entity' {
   const u = name.toUpperCase();
   if (/(\bASSOC(?:IACAO|IAÇÃO|\.)|\bCOND(?:OM[IÍ]NIO|\.)|\bEDIF[IÍ]CIO|\bROTARY|\bCLUBE|\bLOJA\s+SIMB[OÓ]LICA|\bIGREJA|\bPAR[OÓ]QUIA)/.test(u)) return 'entity';
-  if (/(\bLTDA\b|\bEIRELI\b|\bS\/?A\b|\bSA\b|\bCIA\b|\bME\b|\bEPP\b|\bMEI\b|ADVOG\.?\s*ASSOC|CORRETORA|TRANSPORTES|TURISMO|TELECOM|CL[IÍ]NICA|PRODUTORA|REPRES|REPRESENTA|IND[\.\s]|COM[\.\s]|COMERCIO|COM[ÉE]RCIO|IND[ÚU]STRIA|SERV[\.IÇOS]|& CIA|EIR\b)/.test(u)) return 'b2b';
+  if (/(\bLTDA\b|\bEIRELI\b|\bS\/?A\b|\bSA\b|\bCIA\b|\bME\b|\bEPP\b|\bMEI\b|ADVOG\.?\s*ASSOC|CORRETORA|TRANSPORTES|TURISMO|TELECOM|CL[IÍ]NICA|PRODUTORA|REPRES|REPRESENTA|IND[.\s]|COM[.\s]|COMERCIO|COM[ÉE]RCIO|IND[ÚU]STRIA|SERV[.IÇOS]|& CIA|EIR\b)/.test(u)) return 'b2b';
   return 'b2c';
 }
 
