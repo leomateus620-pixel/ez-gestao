@@ -690,7 +690,6 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
         <div><h3 className="font-bold">Documentos e planilhas</h3><p className="text-sm text-foreground">Arquivos vinculados a {company.companyName} · ano-base {analysis.analysisYear}.</p></div>
         <Button onClick={onAnalyze} variant="outline" className="gap-2" disabled={!documents.length}><FileSpreadsheet className="h-4 w-4" />Analisar documentos</Button>
       </div>
-      {missing.length > 0 && <div className="rounded-2xl border border-amber-200/70 bg-amber-50/70 p-3 text-sm text-amber-900"><b>Faltam documentos-chave:</b> {missing.map((type) => documentTypeLabels[type]).join(', ')}.</div>}
       <div className="grid gap-3 md:grid-cols-[minmax(0,260px)_1fr]">
         <SelectField label="Tipo do documento" value={documentType} onChange={setDocumentType} options={Object.entries(documentTypeLabels).map(([value, label]) => ({ value, label }))} />
         <div className="space-y-2">
