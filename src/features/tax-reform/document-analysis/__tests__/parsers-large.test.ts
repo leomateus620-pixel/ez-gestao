@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseBalanceAndDreDocument, parsePayrollSummaryDocument, parsePgdasDocument } from '../extractors';
 
@@ -208,9 +211,8 @@ describe('parseBalanceAndDreDocument — robustez', () => {
   });
 
   it('Balanço+DRE Zimmermann real: NÃO confunde Resultado Líquido com Receita', () => {
-    const { readFileSync } = require('node:fs') as typeof import('node:fs');
-    const { join } = require('node:path') as typeof import('node:path');
-    const text = readFileSync(join(__dirname, 'fixtures', 'balanco-dre-zimmermann.txt'), 'utf-8');
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const text = readFileSync(join(testDir, 'fixtures', 'balanco-dre-zimmermann.txt'), 'utf-8');
     const r = parseBalanceAndDreDocument(text);
     // Campos críticos batem com o PDF real
     expect(r.values.grossRevenue).toBeCloseTo(902870.81, 1);

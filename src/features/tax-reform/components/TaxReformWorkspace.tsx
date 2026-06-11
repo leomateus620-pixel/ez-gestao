@@ -805,6 +805,177 @@ function formatExtractedField(field: string, value: unknown) {
   return `${label}: ${String(value)}`;
 }
 
+type ResultMetric = { label: string; value: string; highlight?: boolean };
+type QuestionnaireGroup = { title: string; items: { key: string; label: string; fallback?: string }[] };
+
+type AlertGroup = {
+  title: string;
+  items: { title: string; description: string; severity: 'info' | 'warning' | 'critical' }[];
+};
+
+const resultQuestionnaireGroups: QuestionnaireGroup[] = [
+  {
+    title: 'Perfil das vendas',
+    items: [
+      { key: 'sales_b2b_percent', label: 'B2B' },
+      { key: 'sales_b2c_percent', label: 'B2C' },
+      { key: 'sales_government_percent', label: 'Governo' },
+      { key: 'top_clients_over_50', label: 'Top 10 clientes' },
+    ],
+  },
+  {
+    title: 'Perfil dos clientes',
+    items: [
+      { key: 'b2b_simples_percent', label: 'Simples' },
+      { key: 'b2b_lucro_presumido_percent', label: 'Lucro Presumido' },
+      { key: 'b2b_lucro_real_percent', label: 'Lucro Real' },
+      { key: 'clients_use_tax_credits', label: 'Uso de créditos' },
+      { key: 'client_loss_risk', label: 'Risco de perda' },
+    ],
+  },
+  {
+    title: 'Custos e créditos',
+    items: [
+      { key: 'inputs_revenue_percent', label: 'Insumos' },
+      { key: 'supplier_regime', label: 'Fornecedores' },
+      { key: 'payroll_revenue_percent', label: 'Folha' },
+    ],
+  },
+  {
+    title: 'Situação tributária',
+    items: [
+      { key: 'effective_tax_rate', label: 'Alíquota efetiva' },
+      { key: 'near_simples_limit', label: 'Próxima do limite' },
+      { key: 'relevant_operations', label: 'Operações relevantes', fallback: 'Nenhuma' },
+    ],
+  },
+  {
+    title: 'Estratégia',
+    items: [
+      { key: 'business_complexity_acceptance', label: 'Aceita complexidade' },
+      { key: 'partners_main_goal', label: 'Objetivo' },
+    ],
+  },
+];
+
+const documentMetricFields: Record<string, ResultMetric[]> = {
+  dre: [
+    { label: 'Receita bruta', value: 'grossRevenue' },
+    { label: 'Receita bruta', value: 'revenue' },
+    { label: 'Custos/receita', value: 'inputCostPercent' },
+    { label: 'Lucro líquido', value: 'netProfit' },
+    { label: 'Folha/receita', value: 'payrollPercentFromDre' },
+    { label: 'Folha/receita', value: 'payrollPercent' },
+  ],
+  balancete: [
+    { label: 'Receita bruta', value: 'grossRevenue' },
+    { label: 'Ativos totais', value: 'assetsTotal' },
+    { label: 'Patrimônio líquido', value: 'equity' },
+    { label: 'Fornecedores', value: 'suppliersBalance' },
+  ],
+  pgdas: [
+    { label: 'RBT12', value: 'grossRevenue12m' },
+    { label: 'Receita PA', value: 'monthlyRevenue' },
+    { label: 'DAS', value: 'dasTotal' },
+    { label: 'Alíquota efetiva', value: 'effectiveTaxRate' },
+    { label: 'Fator R', value: 'factorRStatus' },
+  ],
+  folha_pagamento: [
+    { label: 'Empregados', value: 'employeesCount' },
+    { label: 'Proventos', value: 'grossPayroll' },
+    { label: 'INSS', value: 'inssValue' },
+    { label: 'FGTS', value: 'fgtsValue' },
+    { label: 'Líquido', value: 'netPayroll' },
+  ],
+  faturamento_cliente: [
+    { label: 'B2B', value: 'b2bPercent' },
+    { label: 'B2C', value: 'b2cPercent' },
+    { label: 'Governo', value: 'governmentPercent' },
+    { label: 'Top 10 clientes', value: 'top10ClientsConcentration' },
+  ],
+  fornecedores: [
+    { label: 'Regime detectado', value: 'supplierRegimeDetected' },
+    { label: 'Custos/receita', value: 'inputCostPercent' },
+  ],
+};
+
+const moneyExtractedFields = new Set(['revenue', 'projectedRevenue', 'grossRevenue12m', 'monthlyRevenue', 'dasTotal', 'assetsTotal', 'equity', 'suppliersBalance', 'grossRevenue', 'netProfit', 'grossPayroll', 'inssValue', 'fgtsValue', 'netPayroll']);
+const plainNumberExtractedFields = new Set(['employeesCount']);
+
+function hasResultAnswer(value: AnswerValue) {
+  return !(value === '' || value === undefined || value === null || (Array.isArray(value) && value.length === 0));
+}
+
+function getAnswerSummary(answers: AnswerMap, key: string, fallback = 'Não informado') {
+  const value = answers[key];
+  return hasResultAnswer(value) ? formatAnswerValue(key, value) : fallback;
+}
+
+function formatConfidencePercent(value?: number) {
+  if (value === undefined || value === null) return '0%';
+  return `${Math.round((value <= 1 ? value * 100 : value))}%`;
+}
+
+function feedsScore(doc: TaxReformDocument) {
+  if (doc.readingStatus !== 'lido') return false;
+  const confidence = doc.extractionConfidence ?? 0;
+  const minimumConfidence = doc.documentType === 'folha_pagamento' ? 0.7 : 0.45;
+  return confidence >= minimumConfidence;
+}
+
+function formatDocumentMetricValue(field: string, value: unknown) {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
+  if (typeof value === 'number') {
+    if (plainNumberExtractedFields.has(field)) return String(value);
+    if (moneyExtractedFields.has(field)) return formatMoney(value);
+    return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
+  }
+  if (field === 'factorRStatus') {
+    const labels: Record<string, string> = { aplica: 'Aplica', nao_se_aplica: 'Não se aplica', desconhecido: 'Desconhecido' };
+    return labels[String(value)] ?? String(value);
+  }
+  if (Array.isArray(value)) return value.join(', ');
+  return String(value);
+}
+
+function getDocumentMetrics(doc: TaxReformDocument): ResultMetric[] {
+  if (doc.readingStatus !== 'lido') return [];
+  const extracted = doc.extractedValues as Record<string, unknown> | undefined;
+  if (!extracted) return [];
+  const seen = new Set<string>();
+  return (documentMetricFields[doc.documentType] ?? [])
+    .map((metric) => {
+      if (seen.has(metric.label)) return undefined;
+      const formatted = formatDocumentMetricValue(metric.value, extracted[metric.value]);
+      if (!formatted) return undefined;
+      seen.add(metric.label);
+      return { label: metric.label, value: formatted };
+    })
+    .filter((metric): metric is ResultMetric => Boolean(metric));
+}
+
+function alertTone(severity: 'info' | 'warning' | 'critical') {
+  if (severity === 'critical') return 'border-rose-300 bg-rose-50 text-rose-950';
+  if (severity === 'warning') return 'border-amber-300 bg-amber-50 text-amber-950';
+  return 'border-sky-200 bg-sky-50 text-sky-950';
+}
+
+function badgeTone(kind: 'risk' | 'confidence' | 'status', value: string) {
+  if (kind === 'risk') {
+    if (value === 'alto_risco') return 'border-rose-300 bg-rose-50 text-rose-800';
+    if (value === 'risco_medio') return 'border-orange-300 bg-orange-50 text-orange-800';
+    if (value === 'baixo_risco') return 'border-emerald-300 bg-emerald-50 text-emerald-800';
+    return 'border-slate-300 bg-slate-50 text-slate-800';
+  }
+  if (kind === 'confidence') {
+    if (value === 'alta') return 'border-emerald-300 bg-emerald-50 text-emerald-800';
+    if (value === 'media') return 'border-orange-300 bg-orange-50 text-orange-800';
+    return 'border-rose-300 bg-rose-50 text-rose-800';
+  }
+  return 'border-primary/30 bg-primary/10 text-primary';
+}
+
 function ScoreAndRecommendation({ company, analysis, documents }: { company: TaxReformCompany; analysis: TaxReformAnalysis; documents: TaxReformDocument[] }) {
   const score = calculateTaxReformScore(company.currentTaxRegime, analysis.answers, documents, {
     mainActivity: company.mainActivity,
@@ -819,6 +990,8 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
   const failed = documents.filter((doc) => doc.uploadStatus === 'erro_upload');
   const readDocuments = documents.filter((doc) => doc.readingStatus === 'lido');
   const pendingReading = documents.filter((doc) => doc.uploadStatus !== 'erro_upload' && (doc.readingStatus === 'aguardando_leitura' || doc.readingStatus === 'lendo'));
+  const readingErrors = documents.filter((doc) => doc.readingStatus === 'erro_leitura' || doc.readingStatus === 'nao_processavel');
+  const scoreDocuments = documents.filter(feedsScore);
   const hasCriticalDivergence = score.alerts.some((alert) => alert.alertType === 'document_divergence' && alert.severity === 'critical');
   let analysisStatus: { label: string; tone: string; description: string };
   if (essentialMissing.length > 0) {
@@ -832,109 +1005,250 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
   } else {
     analysisStatus = { label: 'Parcial', tone: 'border-sky-200 bg-sky-50 text-sky-900', description: pendingReading.length > 0 ? `${pendingReading.length} documento(s) aguardando leitura. Clique em "Analisar documentos" para processar.` : 'Recomendação inicial. Envie mais documentos para subir a confiança.' };
   }
+
+  const alertGroups: AlertGroup[] = [
+    {
+      title: 'Pendências',
+      items: [
+        ...missingDocs.map((key) => ({ title: 'Documento faltante', description: formatMissingData(key), severity: 'warning' as const })),
+        ...readingErrors.map((doc) => ({ title: 'Documento com erro de leitura', description: `${documentTypeLabels[doc.documentType] ?? doc.documentType}: ${doc.extractionError || doc.extractedSummary || 'Nenhum dado deste documento foi usado no score.'}`, severity: 'warning' as const })),
+        ...failed.map((doc) => ({ title: 'Erro no upload', description: `${documentTypeLabels[doc.documentType] ?? doc.documentType}: ${doc.uploadError || 'Reenvie o arquivo para análise.'}`, severity: 'critical' as const })),
+      ],
+    },
+    {
+      title: 'Riscos',
+      items: score.alerts
+        .filter((alert) => ['commercial_risk', 'document_divergence', 'likely_simples'].includes(alert.alertType))
+        .map((alert) => ({ title: alert.title, description: alert.message, severity: alert.severity })),
+    },
+    {
+      title: 'Validações',
+      items: [
+        ...essentialMissing.map((key) => ({ title: 'Pergunta decisiva pendente', description: formatMissingData(key), severity: 'critical' as const })),
+        ...(scoreDocuments.length === 0 ? [{ title: 'Nenhum documento principal lido com sucesso', description: 'A conclusão permanece preliminar até que documentos válidos alimentem o score.', severity: 'warning' as const }] : []),
+        ...score.alerts
+          .filter((alert) => ['missing_documents', 'manual_review', 'document_reading'].includes(alert.alertType))
+          .map((alert) => ({ title: alert.title, description: alert.message, severity: alert.severity })),
+      ],
+    },
+  ];
+
   const openSignedUrl = async (doc: TaxReformDocument) => {
     if (!doc.storagePath) { toast.error('Documento sem storage path. Reenvie o arquivo.'); return; }
     const url = await getTaxReformDocumentSignedUrl(doc.storagePath, 3600, doc.storageBucket);
     if (!url) { toast.error('Não foi possível gerar link temporário.'); return; }
     window.open(url, '_blank', 'noopener,noreferrer');
   };
+
   return (
-    <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
-      <GlassCard className="space-y-4">
-        <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Score da análise</h3><div className="flex flex-wrap gap-1.5"><Badge>{riskLabels[score.riskLevel]}</Badge><Badge variant="outline">{confidenceLabels[confidenceLevel]}</Badge></div></div>
-        <div className="text-center"><div className="text-6xl font-black tracking-tight text-primary">{score.total}</div><p className="text-sm text-foreground">de 100 pontos</p></div>
-        <div className="space-y-3 text-sm">
-          <div><div className="mb-1 flex justify-between"><span>Perfil dos clientes</span><b>{score.clients}/60</b></div><Progress value={(score.clients / 60) * 100} /></div>
-          <div><div className="mb-1 flex justify-between"><span>Custos e créditos</span><b>{score.costs}/25</b></div><Progress value={(score.costs / 25) * 100} /></div>
-          <div><div className="mb-1 flex justify-between"><span>Situação atual</span><b>{score.currentTax}/15</b></div><Progress value={(score.currentTax / 15) * 100} /></div>
-        </div>
-        <div className={cn('rounded-2xl border p-3 text-xs', analysisStatus.tone)}>
-          <div className="font-bold uppercase tracking-[0.14em]">Status · {analysisStatus.label}</div>
-          <p className="mt-1 text-[11px] opacity-95">{analysisStatus.description}</p>
-          {confidenceReasons.length > 0 && (
-            <ul className="mt-2 list-disc space-y-0.5 pl-4 text-[11px] opacity-95">
-              {confidenceReasons.map((reason) => <li key={reason}>{reason}</li>)}
-            </ul>
-          )}
-        </div>
-      </GlassCard>
-      <GlassCard className="space-y-4">
-        <div><h3 className="font-bold">Resultado e recomendação</h3><p className="text-sm text-foreground">Triagem inicial. Não substitui parecer técnico ou simulação tributária.</p></div>
-        <div className="rounded-3xl border border-primary/20 bg-primary/5 p-4"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Recomendação automática</p><p className="mt-2 text-2xl font-black">{recommendationLabels[score.recommendation]}</p><p className="mt-2 text-sm text-foreground">{score.summary}</p></div>
-        {essentialMissing.length > 0 && <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-950"><b>Perguntas decisivas faltantes:</b> {essentialMissing.map(formatMissingData).join(', ')}.</div>}
-        {missingDocs.length > 0 && <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><b>Documentos faltantes:</b> {missingDocs.map(formatMissingData).join(', ')}.</div>}
-        <div className="grid gap-2 md:grid-cols-4"><Badge variant="outline">{company.companyName}</Badge><Badge variant="outline">{company.cnpj}</Badge><Badge variant="outline">{regimeLabels[company.currentTaxRegime]}</Badge><Badge variant="outline">Ano-base {analysis.analysisYear}</Badge></div>
-        <div className="space-y-2">
-          <h4 className="font-semibold">Alertas automáticos</h4>
-          {score.alerts.length === 0 ? <p className="text-sm text-foreground">Nenhum alerta automático com os dados atuais.</p> : score.alerts.map((alert) => <div key={alert.alertType} className={cn('rounded-2xl border p-3 text-sm', alert.severity === 'critical' ? 'border-rose-200 bg-rose-50 text-rose-950' : alert.severity === 'warning' ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-emerald-200 bg-emerald-50 text-emerald-950')}><b>{alert.title}:</b> {alert.message}</div>)}
-        </div>
-        <div className="text-sm text-foreground">Perguntas obrigatórias respondidas: <b>{score.answeredRequired}</b>. Documentos enviados: <b>{uploaded.length}</b>{failed.length > 0 && <span className="text-rose-700"> · {failed.length} com erro</span>}.</div>
-        <div className="grid gap-3 lg:grid-cols-2">
-          <div className="rounded-2xl border border-white/60 bg-white/45 p-3">
-            <h4 className="mb-2 text-sm font-semibold">Documentos usados</h4>
-            {documents.length === 0 ? (
-              <p className="text-xs text-foreground">Nenhum documento anexado.</p>
-            ) : (
-              <ul className="space-y-1.5">
-                {documents.map((doc) => (
-                  <li key={doc.id} className="flex items-center justify-between gap-2 text-xs text-foreground">
-                    <span className="truncate"><b>{documentTypeLabels[doc.documentType]}</b> · {doc.fileName}</span>
-                    {doc.uploadStatus === 'enviado' && doc.storagePath ? (
-                      <button type="button" onClick={() => openSignedUrl(doc)} className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/20">Abrir</button>
-                    ) : (
-                      <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700">Erro upload</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
+    <section className="space-y-5">
+      <GlassCard className="overflow-hidden border-orange-200/70 bg-gradient-to-br from-orange-50 via-amber-50 to-stone-50 p-0 text-slate-950 shadow-lg shadow-orange-900/5">
+        <div className="space-y-5 p-5 md:p-6">
+          <div className="grid gap-2 md:grid-cols-4">
+            {[
+              ['Empresa', company.companyName],
+              ['CNPJ', company.cnpj],
+              ['Regime', regimeLabels[company.currentTaxRegime]],
+              ['Ano-base', analysis.analysisYear],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-2xl border border-orange-200/70 bg-white/70 px-3 py-2 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-800">{label}</p>
+                <p className="mt-1 truncate text-sm font-bold text-slate-950">{value}</p>
+              </div>
+            ))}
           </div>
-          <div className="rounded-2xl border border-white/60 bg-white/45 p-3">
-            <h4 className="mb-2 text-sm font-semibold">Perguntas respondidas</h4>
-            {Object.entries(analysis.answers).filter(([, value]) => value !== '' && value !== undefined && value !== null).slice(0, 8).map(([key, value]) => <p key={key} className="text-xs text-foreground"><b>{questionLabelByKey[key] ?? key}:</b> {formatAnswerValue(key, value)}</p>)}
-          </div>
-        </div>
-        <div className="rounded-2xl border border-white/60 bg-white/45 p-3">
-          <h4 className="mb-2 text-sm font-semibold">Dados extraídos dos documentos</h4>
-          {documents.length === 0 ? (
-            <p className="text-xs text-foreground">Resultado preliminar baseado apenas no questionário. A leitura documental será exibida aqui após o processamento real.</p>
-          ) : (
-            <div className="grid gap-2 md:grid-cols-2">
-              {documents.map((doc) => {
-                const isRead = doc.readingStatus === 'lido';
-                const extractedEntries = isRead
-                  ? Object.entries(doc.extractedValues ?? {}).filter(([field, value]) => !['warnings', 'confidence'].includes(field) && value !== undefined && value !== null && value !== '')
-                  : [];
-                const errorReason = doc.extractionError || doc.extractedSummary || 'Motivo não informado.';
-                return (
-                  <div key={doc.id} className="rounded-2xl border border-white/70 bg-white/55 p-3 text-xs">
-                    <div className="flex items-start justify-between gap-2"><b>{documentTypeLabels[doc.documentType] ?? doc.documentType}</b><Badge variant="outline">{readingStatusLabels[doc.readingStatus]}</Badge></div>
-                    {doc.readingStatus === 'erro_leitura' || doc.readingStatus === 'nao_processavel' ? (
-                      <p className="mt-1 text-rose-700">
-                        <b>Erro na leitura.</b> Nenhum dado deste documento alimentou o score.<br />
-                        <span className="text-foreground">Motivo: {errorReason}</span>
-                      </p>
-                    ) : (
-                      <>
-                        <p className="mt-1 text-foreground">{doc.extractedSummary || (doc.readingStatus === 'aguardando_leitura' ? 'Documento aguardando leitura real.' : 'Sem resumo extraído.')}</p>
-                        {isRead && doc.extractionConfidence !== undefined && <p className="mt-1 text-foreground"><b>Confiança:</b> {Math.round(doc.extractionConfidence * 100)}%</p>}
-                        {extractedEntries.length > 0 && <ul className="mt-2 list-disc space-y-0.5 pl-4 text-foreground">{extractedEntries.map(([field, value]) => <li key={field}>{formatExtractedField(field, value)}</li>)}</ul>}
-                      </>
-                    )}
-                    {doc.storagePath && <button type="button" onClick={() => openSignedUrl(doc)} className="mt-2 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/20">Abrir documento</button>}
-                  </div>
-                );
-              })}
+
+          <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
+            <div className="rounded-3xl border border-orange-200 bg-white/75 p-5 text-center shadow-inner">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-800">Score total</p>
+              <div className="mt-2 flex items-end justify-center gap-1 text-primary">
+                <span className="text-6xl font-black leading-none tracking-tight md:text-7xl">{score.total}</span>
+                <span className="pb-2 text-2xl font-black">/100</span>
+              </div>
+              <div className="mt-4 space-y-2 text-sm text-slate-800">
+                <div className="flex justify-between gap-3"><span>Perfil dos clientes</span><b>{score.clients}/60</b></div>
+                <Progress value={(score.clients / 60) * 100} />
+                <div className="flex justify-between gap-3"><span>Custos e créditos</span><b>{score.costs}/25</b></div>
+                <Progress value={(score.costs / 25) * 100} />
+                <div className="flex justify-between gap-3"><span>Situação atual</span><b>{score.currentTax}/15</b></div>
+                <Progress value={(score.currentTax / 15) * 100} />
+              </div>
             </div>
-          )}
-        </div>
-        <div className="rounded-2xl border border-white/60 bg-white/45 p-3 text-sm">
-          <h4 className="mb-1 font-semibold">Decisão consolidada</h4>
-          <p className="text-xs text-foreground"><b>Parecer manual:</b> {analysis.manualOpinion?.trim() ? analysis.manualOpinion : 'Pendente — registre na etapa "Parecer manual".'}</p>
-          <p className="text-xs text-foreground"><b>Decisão final:</b> {finalDecisionLabels[analysis.finalDecision]}</p>
+
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <span className={cn('rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em]', badgeTone('risk', score.riskLevel))}>Risco: {riskLabels[score.riskLevel]}</span>
+                <span className={cn('rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em]', badgeTone('confidence', confidenceLevel))}>Confiança: {confidenceLabels[confidenceLevel]}</span>
+                <span className={cn('rounded-full border px-3 py-1 text-xs font-black uppercase tracking-[0.12em]', badgeTone('status', analysisStatus.label))}>Status: {analysisStatus.label}</span>
+              </div>
+
+              <div className="rounded-3xl border border-primary/25 bg-primary/10 p-4">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-primary">Recomendação automática</p>
+                <h3 className="mt-2 text-2xl font-black leading-tight text-slate-950">{recommendationLabels[score.recommendation]}</h3>
+                <p className="mt-2 text-sm font-medium leading-relaxed text-slate-800">{score.summary}</p>
+              </div>
+
+              <div className={cn('rounded-2xl border p-3 text-sm font-medium', analysisStatus.tone)}>
+                <b>Status da análise:</b> {analysisStatus.description}
+                {confidenceReasons.length > 0 && <p className="mt-1 text-xs">{confidenceReasons.join(' ')}</p>}
+              </div>
+            </div>
+          </div>
         </div>
       </GlassCard>
-    </div>
+
+      <GlassCard className="space-y-4 border-orange-100/80 bg-stone-50/90 text-slate-950">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-800">Base da análise</p>
+            <h3 className="text-2xl font-black text-slate-950">Evidências e informações complementares</h3>
+          </div>
+          <p className="text-sm font-semibold text-slate-700">{score.answeredRequired} perguntas obrigatórias · {uploaded.length} documentos enviados · {scoreDocuments.length} alimentando score</p>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="rounded-3xl border border-orange-200/70 bg-white/75 p-4 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <h4 className="text-lg font-black text-slate-950">Questionário</h4>
+              <Badge variant="outline" className="border-orange-300 bg-orange-50 text-orange-800">Resumo respondido</Badge>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {resultQuestionnaireGroups.map((group) => (
+                <div key={group.title} className="rounded-2xl border border-stone-200 bg-stone-50/90 p-3">
+                  <h5 className="text-sm font-black text-slate-950">{group.title}</h5>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {group.items.map((item) => (
+                      <div key={item.key} className="rounded-xl border border-orange-100 bg-white/85 px-3 py-2">
+                        <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-600">{item.label}</p>
+                        <p className="mt-1 text-sm font-bold text-slate-950">{getAnswerSummary(analysis.answers, item.key, item.fallback)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-3xl border border-orange-200/70 bg-white/75 p-4 shadow-sm">
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <h4 className="text-lg font-black text-slate-950">Documentos</h4>
+                <Badge variant="outline" className="border-orange-300 bg-orange-50 text-orange-800">{documents.length || 'Nenhum'} anexado(s)</Badge>
+              </div>
+              {documents.length === 0 ? (
+                <p className="rounded-2xl border border-dashed border-orange-300 bg-orange-50/70 p-4 text-sm font-semibold text-orange-900">Nenhum documento anexado. O resultado está baseado apenas nas respostas do questionário.</p>
+              ) : (
+                <div className="grid gap-3">
+                  {documents.map((doc) => {
+                    const canFeedScore = feedsScore(doc);
+                    const hasReadingError = doc.readingStatus === 'erro_leitura' || doc.readingStatus === 'nao_processavel';
+                    const metrics = getDocumentMetrics(doc);
+                    const errorReason = doc.extractionError || doc.extractedSummary || 'Leitura falhou. Nenhum dado deste documento foi usado no score.';
+                    return (
+                      <article key={doc.id} className="rounded-2xl border border-stone-200 bg-stone-50/95 p-4 shadow-sm">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <h5 className="font-black text-slate-950">{documentTypeLabels[doc.documentType] ?? doc.documentType}</h5>
+                            <p className="mt-0.5 max-w-sm truncate text-xs font-medium text-slate-600">{doc.fileName}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Badge variant="outline" className={cn(hasReadingError ? 'border-rose-300 bg-rose-50 text-rose-800' : doc.readingStatus === 'lido' ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-sky-300 bg-sky-50 text-sky-800')}>{readingStatusLabels[doc.readingStatus]}</Badge>
+                            <Badge variant="outline" className="border-slate-300 bg-white text-slate-800">Confiança {formatConfidencePercent(doc.extractionConfidence)}</Badge>
+                            <Badge variant="outline" className={canFeedScore ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-amber-300 bg-amber-50 text-amber-800'}>Alimenta score: {canFeedScore ? 'Sim' : 'Não'}</Badge>
+                          </div>
+                        </div>
+
+                        {hasReadingError ? (
+                          <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-950">
+                            <b>Motivo:</b> {errorReason}
+                          </div>
+                        ) : metrics.length > 0 ? (
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            {metrics.map((metric) => (
+                              <div key={`${doc.id}-${metric.label}`} className="rounded-xl border border-orange-100 bg-white px-3 py-2">
+                                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-600">{metric.label}</p>
+                                <p className="mt-1 text-sm font-black text-slate-950">{metric.value}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm font-semibold text-sky-950">{doc.extractedSummary || (doc.readingStatus === 'lido' ? 'Documento lido, mas sem métricas principais para exibir.' : 'Documento aguardando processamento de leitura.')}</p>
+                        )}
+
+                        <div className="mt-3 flex justify-end">
+                          <Button type="button" size="sm" variant="outline" onClick={() => openSignedUrl(doc)} disabled={!doc.storagePath} className="gap-2 border-primary/30 bg-primary/10 text-primary hover:bg-primary/20">
+                            <FileText className="h-4 w-4" />Abrir documento
+                          </Button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-3xl border border-orange-200/70 bg-white/75 p-4 shadow-sm">
+              <h4 className="text-lg font-black text-slate-950">Alertas e pendências</h4>
+              <div className="mt-3 space-y-3">
+                {alertGroups.map((group) => (
+                  <div key={group.title} className="rounded-2xl border border-stone-200 bg-stone-50/90 p-3">
+                    <h5 className="text-sm font-black text-slate-950">{group.title}</h5>
+                    {group.items.length === 0 ? (
+                      <p className="mt-2 text-sm font-semibold text-slate-600">Nenhum item neste grupo.</p>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        {group.items.map((item, index) => (
+                          <div key={`${group.title}-${item.title}-${index}`} className={cn('flex gap-2 rounded-xl border p-3 text-sm', alertTone(item.severity))}>
+                            {item.severity === 'critical' ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> : item.severity === 'warning' ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
+                            <div><b>{item.title}</b><p className="mt-0.5 leading-relaxed">{item.description}</p></div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </GlassCard>
+
+      <GlassCard className="space-y-4 border-orange-100/80 bg-gradient-to-br from-stone-50 to-orange-50/80 text-slate-950">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-800">Fechamento da análise</p>
+          <h3 className="text-2xl font-black text-slate-950">Resultado final, parecer e próximos passos</h3>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-3xl border border-primary/25 bg-white/80 p-4">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Resultado final</p>
+            <h4 className="mt-2 text-xl font-black text-slate-950">{recommendationLabels[score.recommendation]}</h4>
+            <p className="mt-3 text-sm font-black text-slate-900">Justificativa:</p>
+            <p className="mt-1 text-sm font-medium leading-relaxed text-slate-800">{score.summary}</p>
+          </div>
+          <div className="rounded-3xl border border-stone-200 bg-white/80 p-4">
+            <div className="space-y-3 text-sm text-slate-800">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">Parecer manual</p>
+                <p className="mt-1 font-bold text-slate-950">{analysis.manualOpinion?.trim() ? analysis.manualOpinion : 'Pendente'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">Decisão final</p>
+                <p className="mt-1 font-bold text-slate-950">{finalDecisionLabels[analysis.finalDecision]}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-600">Próximos passos</p>
+                <p className="mt-1 font-bold text-slate-950">{analysis.finalDecision ? 'Executar a decisão registrada e arquivar evidências da análise.' : 'Registrar parecer manual e confirmar a decisão final com o responsável técnico.'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        {analysisStatus.label === 'Preliminar' && (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-950">
+            Esta análise é preliminar e não substitui parecer técnico.
+          </div>
+        )}
+      </GlassCard>
+    </section>
   );
 }
 
