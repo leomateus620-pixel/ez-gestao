@@ -901,13 +901,26 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
           ) : (
             <div className="grid gap-2 md:grid-cols-2">
               {documents.map((doc) => {
-                const extractedEntries = Object.entries(doc.extractedValues ?? {}).filter(([field, value]) => !['warnings', 'confidence'].includes(field) && value !== undefined && value !== null && value !== '');
+                const isRead = doc.readingStatus === 'lido';
+                const extractedEntries = isRead
+                  ? Object.entries(doc.extractedValues ?? {}).filter(([field, value]) => !['warnings', 'confidence'].includes(field) && value !== undefined && value !== null && value !== '')
+                  : [];
+                const errorReason = doc.extractionError || doc.extractedSummary || 'Motivo não informado.';
                 return (
                   <div key={doc.id} className="rounded-2xl border border-white/70 bg-white/55 p-3 text-xs">
                     <div className="flex items-start justify-between gap-2"><b>{documentTypeLabels[doc.documentType] ?? doc.documentType}</b><Badge variant="outline">{readingStatusLabels[doc.readingStatus]}</Badge></div>
-                    <p className="mt-1 text-foreground">{doc.extractedSummary || (doc.readingStatus === 'aguardando_leitura' ? 'Documento aguardando leitura real.' : 'Sem resumo extraído.')}</p>
-                    {doc.extractionConfidence !== undefined && <p className="mt-1 text-foreground"><b>Confiança:</b> {Math.round(doc.extractionConfidence * 100)}%</p>}
-                    {extractedEntries.length > 0 && <ul className="mt-2 list-disc space-y-0.5 pl-4 text-foreground">{extractedEntries.map(([field, value]) => <li key={field}>{formatExtractedField(field, value)}</li>)}</ul>}
+                    {doc.readingStatus === 'erro_leitura' || doc.readingStatus === 'nao_processavel' ? (
+                      <p className="mt-1 text-rose-700">
+                        <b>Erro na leitura.</b> Nenhum dado deste documento alimentou o score.<br />
+                        <span className="text-foreground">Motivo: {errorReason}</span>
+                      </p>
+                    ) : (
+                      <>
+                        <p className="mt-1 text-foreground">{doc.extractedSummary || (doc.readingStatus === 'aguardando_leitura' ? 'Documento aguardando leitura real.' : 'Sem resumo extraído.')}</p>
+                        {isRead && doc.extractionConfidence !== undefined && <p className="mt-1 text-foreground"><b>Confiança:</b> {Math.round(doc.extractionConfidence * 100)}%</p>}
+                        {extractedEntries.length > 0 && <ul className="mt-2 list-disc space-y-0.5 pl-4 text-foreground">{extractedEntries.map(([field, value]) => <li key={field}>{formatExtractedField(field, value)}</li>)}</ul>}
+                      </>
+                    )}
                     {doc.storagePath && <button type="button" onClick={() => openSignedUrl(doc)} className="mt-2 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/20">Abrir documento</button>}
                   </div>
                 );
