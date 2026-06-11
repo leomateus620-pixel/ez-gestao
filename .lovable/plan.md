@@ -1,45 +1,39 @@
 ## Diagnóstico
 
-- O erro da folha vem do parser do PDF no backend: a extração atual (`unpdf extractText` com páginas mescladas) perde a estrutura visual da tabela da folha.
-- No arquivo mostrado, alguns valores monetários chegam colados na mesma string, por exemplo `1.835,52321,79` e `22.944,2419.673,40`.
-- Como o parser exige 11 valores na linha/bloco `Total`, esses valores colados fazem a leitura encontrar menos colunas do que deveria. Resultado: `Linha "Total" não encontrada` e a folha é marcada como `erro_leitura`.
-- A folha é essencial para o cálculo porque alimenta `grossPayroll`, encargos (`inssValue`, `fgtsValue`) e o percentual de folha sobre receita/RBT12 usado em `payroll_revenue_percent`.
-- O aviso `Faltam documentos-chave: Balancete, Faturamento por cliente, Relação de fornecedores.` aparece em dois pontos:
-  - no bloco de upload/documentos;
-  - no painel de resultado, via pendências/alertas de documentos faltantes.
+**1. Faturamento projetado 12 meses**
+- Campo aparece em `CompanyForm` (linha 524 de `TaxReformWorkspace.tsx`) e é capturado no estado `form.projectedRevenue`, persistido em `tax_reform_companies.projected_revenue`.
+- Usuário não quer mais esse campo no cadastro.
 
-## Correção proposta
+**2. Contraste do formulário**
+- `Label` usa `text-[hsl(var(--text-secondary))]` e `Input` usa `bg-[hsla(var(--surface-panel-strong))]` com placeholder em `text-[hsl(var(--text-tertiary))]`.
+- No fundo creme da tela (GlassCard) os rótulos e placeholders ficam quase invisíveis, conforme o print enviado.
+- Precisamos reforçar o contraste do rótulo (usar `--text-primary` ou peso/opacidade maior) e do placeholder dos inputs neste formulário, sem mexer no design system global.
 
-1. **Corrigir a extração de texto da folha no backend**
-   - Substituir a leitura genérica do PDF por reconstrução linha-a-linha baseada em coordenadas quando o arquivo for PDF.
-   - Agrupar itens pela posição vertical, ordenar pela posição horizontal e preservar espaços/colunas.
-   - Isso evita que valores da tabela sejam colados e permite detectar corretamente a linha `Total`.
+**3. Persistência no Cloud**
+- `upsertCompany` (linha 1519) atualiza apenas o estado local.
+- O `useEffect` da linha 1439 detecta a mudança no `store` e chama `saveTaxReformStore(derived)` (debounce 700ms), que executa `upsertTaxReformCompany` no Supabase.
+- Fluxo está correto, mas vamos confirmar editando um campo da empresa Zimmermann (rbt12, alíquota e responsável) e checando o registro em `tax_reform_companies` após o debounce. Se houver falha, ajustamos o tratamento de erro.
 
-2. **Fortalecer o parser da folha**
-   - Melhorar a leitura dos blocos `Total:` para aceitar valores colados por falha do PDF quando ainda for possível separar com segurança.
-   - Manter a validação contábil obrigatória: `Líquido = Proventos/Vantagens - Descontos`.
-   - Persistir dados da folha somente quando os campos decisivos estiverem válidos: período, total de salários, proventos/vantagens e líquido a pagar.
+## Alterações
 
-3. **Sincronizar parser local e Edge Function**
-   - Aplicar a mesma lógica no parser frontend/testável e no backend para evitar divergência entre testes e produção.
+1. **Remover campo "Faturamento projetado 12 meses"**
+   - Tirar o input da grade do `CompanyForm`.
+   - Remover `projectedRevenue` do estado `form`, do `useEffect` de sincronização e do payload de `onSave`.
+   - Manter o campo `projectedRevenue` no tipo `TaxReformCompany` e na persistência (coluna existe no banco) — apenas não enviamos mais valor pelo formulário. Isso evita migração e mantém compatibilidade com dados antigos.
 
-4. **Adicionar testes regressivos para a folha Zimmermann**
-   - Cobrir exatamente o caso do arquivo exibido, inclusive valores colados como `1.835,52321,79` e `22.944,2419.673,40`.
-   - Validar os valores esperados:
-     - empregados: `7`;
-     - salário total: `22.680,85`;
-     - proventos/vantagens: `24.565,24`;
-     - descontos: `4.072,87`;
-     - líquido: `20.492,37`;
-     - INSS: `2.343,08`;
-     - FGTS: `1.835,52`.
+2. **Corrigir contraste do formulário de empresa**
+   - Trocar os `Label` deste formulário (e do `SelectField` usado nele) para tom mais escuro: `text-[hsl(var(--text-primary))]` com `font-semibold`.
+   - Reforçar placeholders dos `Input` deste formulário com classe local `placeholder:text-[hsl(var(--text-secondary))]` para ficarem legíveis sobre o fundo claro.
+   - Sem mexer nos componentes globais `ui/input.tsx` e `ui/label.tsx` (evita afetar o resto do app).
 
-5. **Remover o aviso solicitado da interface**
-   - Remover o banner `Faltam documentos-chave...` no menu/documentos.
-   - Remover documentos faltantes e o alerta equivalente do painel Resultado.
-   - Manter erros reais de leitura visíveis, especialmente erro de folha, porque isso afeta o cálculo.
+3. **Validar gravação no Cloud**
+   - Após as alterações, abrir a empresa Zimmermann no preview, editar `rbt12`, `effectiveTaxRate` e `responsibleUser`, salvar e validar via `supabase--read_query` que a linha foi atualizada (`updated_at` mudou e valores batem).
+   - Se a gravação falhar, investigar via logs do navegador e ajustar `upsertTaxReformCompany`/tratamento de erros.
 
-6. **Validar e reimplantar**
-   - Rodar os testes do parser.
-   - Reimplantar a Edge Function `process-tax-reform-document`.
-   - Reprocessar a folha já anexada e confirmar que fica `lido`, com confiança suficiente e alimentando o score.
+4. **Não mexer** em outros painéis, parsers, Edge Function ou no aviso já removido em ajustes anteriores.
+
+## Validação
+
+- Form do passo "Empresa" não mostra mais "Faturamento projetado".
+- Labels e placeholders nítidos no fundo claro.
+- Edição da empresa persiste no Cloud (confirmado por consulta na tabela).
