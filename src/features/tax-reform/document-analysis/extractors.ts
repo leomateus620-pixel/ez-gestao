@@ -471,6 +471,12 @@ const PAYROLL_MONEY_RE = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g;
 function toMoneyNum(s: string): number {
   return Number(s.replace(/\./g, '').replace(',', '.'));
 }
+/** Espaça valores monetários grudados pelo extrator de PDF
+ * (ex.: "1.835,52321,79" → "1.835,52 321,79"). Após dois decimais,
+ * o próximo dígito sempre pertence a outro token monetário. */
+function ungluePayrollMoney(input: string): string {
+  return input.replace(/(\d,\d{2})(?=-?\d)/g, '$1 ');
+}
 
 function extractEmployeesCount(text: string): number | undefined {
   const lines = text.replace(/\r/g, '\n').split('\n');
@@ -526,6 +532,7 @@ function isPayrollBlockCoherent(m: NonNullable<ReturnType<typeof mapPayrollColum
 
 function findPayrollTotalBlocks(text: string, warnings: string[]): number[][] {
   const blocks: number[][] = [];
+  text = ungluePayrollMoney(text);
   // ---- Camada A: regex direto no texto completo ----
   const fullRe = /\bTotal\s*:\s*((?:-?\d{1,3}(?:\.\d{3})*,\d{2}\s+){10}-?\d{1,3}(?:\.\d{3})*,\d{2})/gi;
   let mm: RegExpExecArray | null;
