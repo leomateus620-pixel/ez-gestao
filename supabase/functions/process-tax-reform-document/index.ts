@@ -743,7 +743,7 @@ async function extractTextByLines(pdf: unknown, maxPages: number): Promise<strin
         // atual NÃO começa com whitespace (evita "1.835,52" + "321,79" → "1.835,52321,79").
         const prevEndsBoundary = /\s$/.test(prev.str);
         const currStartsBoundary = /^\s/.test(curr.str);
-        if (gap >= 1.5 || (!prevEndsBoundary && !currStartsBoundary)) line += ' ';
+        if (gap >= 1.5 && !prevEndsBoundary && !currStartsBoundary) line += ' ';
         line += curr.str;
       }
       pageLines.push(line);
