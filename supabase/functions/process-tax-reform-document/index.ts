@@ -514,6 +514,16 @@ function parsePayrollTotals(text: string, warnings: string[]): ExtractedValues {
 // ===== Folha helpers (4 camadas + auto-detecção de colunas) =====
 const PAYROLL_MONEY_RE = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g;
 function toMoneyNum(s: string): number { return Number(s.replace(/\./g, '').replace(',', '.')); }
+/**
+ * Insere espaço entre valores monetários grudados pelo extrator de PDF.
+ * Ex.: "1.835,52321,79" → "1.835,52 321,79". Seguro porque, após dois
+ * decimais de centavos, não há sequência de dígitos válida no mesmo token.
+ */
+function ungluePayrollMoney(input: string): string {
+  return input
+    .replace(/(\d,\d{2})(?=\d)/g, '$1 ')
+    .replace(/(\d,\d{2})(?=-?\d)/g, '$1 ');
+}
 
 function extractEmployeesCount(text: string): number | undefined {
   const lines = text.replace(/\r/g, '\n').split('\n');
