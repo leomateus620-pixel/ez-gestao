@@ -690,7 +690,6 @@ function DocumentUpload({ company, analysis, documents, onAddDocuments, onAnalyz
         <div><h3 className="font-bold">Documentos e planilhas</h3><p className="text-sm text-foreground">Arquivos vinculados a {company.companyName} · ano-base {analysis.analysisYear}.</p></div>
         <Button onClick={onAnalyze} variant="outline" className="gap-2" disabled={!documents.length}><FileSpreadsheet className="h-4 w-4" />Analisar documentos</Button>
       </div>
-      {missing.length > 0 && <div className="rounded-2xl border border-amber-200/70 bg-amber-50/70 p-3 text-sm text-amber-900"><b>Faltam documentos-chave:</b> {missing.map((type) => documentTypeLabels[type]).join(', ')}.</div>}
       <div className="grid gap-3 md:grid-cols-[minmax(0,260px)_1fr]">
         <SelectField label="Tipo do documento" value={documentType} onChange={setDocumentType} options={Object.entries(documentTypeLabels).map(([value, label]) => ({ value, label }))} />
         <div className="space-y-2">
@@ -1010,7 +1009,6 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
     {
       title: 'Pendências',
       items: [
-        ...missingDocs.map((key) => ({ title: 'Documento faltante', description: formatMissingData(key), severity: 'warning' as const })),
         ...readingErrors.map((doc) => ({ title: 'Documento com erro de leitura', description: `${documentTypeLabels[doc.documentType] ?? doc.documentType}: ${doc.extractionError || doc.extractedSummary || 'Nenhum dado deste documento foi usado no score.'}`, severity: 'warning' as const })),
         ...failed.map((doc) => ({ title: 'Erro no upload', description: `${documentTypeLabels[doc.documentType] ?? doc.documentType}: ${doc.uploadError || 'Reenvie o arquivo para análise.'}`, severity: 'critical' as const })),
       ],
@@ -1027,7 +1025,7 @@ function ScoreAndRecommendation({ company, analysis, documents }: { company: Tax
         ...essentialMissing.map((key) => ({ title: 'Pergunta decisiva pendente', description: formatMissingData(key), severity: 'critical' as const })),
         ...(scoreDocuments.length === 0 ? [{ title: 'Nenhum documento principal lido com sucesso', description: 'A conclusão permanece preliminar até que documentos válidos alimentem o score.', severity: 'warning' as const }] : []),
         ...score.alerts
-          .filter((alert) => ['missing_documents', 'manual_review', 'document_reading'].includes(alert.alertType))
+          .filter((alert) => ['manual_review', 'document_reading'].includes(alert.alertType))
           .map((alert) => ({ title: alert.title, description: alert.message, severity: alert.severity })),
       ],
     },

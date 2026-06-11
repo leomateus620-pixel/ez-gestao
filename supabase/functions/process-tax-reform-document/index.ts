@@ -514,6 +514,16 @@ function parsePayrollTotals(text: string, warnings: string[]): ExtractedValues {
 // ===== Folha helpers (4 camadas + auto-detecção de colunas) =====
 const PAYROLL_MONEY_RE = /-?\d{1,3}(?:\.\d{3})*,\d{2}|-?\d+,\d{2}/g;
 function toMoneyNum(s: string): number { return Number(s.replace(/\./g, '').replace(',', '.')); }
+/**
+ * Insere espaço entre valores monetários grudados pelo extrator de PDF.
+ * Ex.: "1.835,52321,79" → "1.835,52 321,79". Seguro porque, após dois
+ * decimais de centavos, não há sequência de dígitos válida no mesmo token.
+ */
+function ungluePayrollMoney(input: string): string {
+  return input
+    .replace(/(\d,\d{2})(?=\d)/g, '$1 ')
+    .replace(/(\d,\d{2})(?=-?\d)/g, '$1 ');
+}
 
 function extractEmployeesCount(text: string): number | undefined {
   const lines = text.replace(/\r/g, '\n').split('\n');
@@ -566,6 +576,7 @@ function isPayrollBlockCoherent(m: NonNullable<ReturnType<typeof mapPayrollColum
 
 function findPayrollTotalBlocks(text: string, warnings: string[]): number[][] {
   const blocks: number[][] = [];
+  text = ungluePayrollMoney(text);
   const fullRe = /\bTotal\s*:\s*((?:-?\d{1,3}(?:\.\d{3})*,\d{2}\s+){10}-?\d{1,3}(?:\.\d{3})*,\d{2})/gi;
   let mm: RegExpExecArray | null;
   while ((mm = fullRe.exec(text)) !== null) {
@@ -678,8 +689,19 @@ async function parsePdf(bytes: ArrayBuffer) {
     const numPages = (pdf as unknown as { numPages?: number }).numPages ?? 0;
     const MAX_PAGES = 200;
     const truncated = numPages > MAX_PAGES;
-    const { text } = await extractText(pdf, { mergePages: true });
-    let clean = (typeof text === 'string' ? text : Array.isArray(text) ? text.join('\n') : '').trim();
+    // Reconstrução por coordenadas: agrupa itens por Y (linha) e ordena por X (coluna).
+    // Evita que o `extractText` do unpdf colapse a tabela em uma única string
+    // (que produzia valores grudados como "1.835,52321,79" e impedia a leitura da folha).
+    let clean = '';
+    try {
+      clean = await extractTextByLines(pdf, Math.min(numPages, MAX_PAGES));
+    } catch (geomError) {
+      console.warn('[process-tax-reform-document] reconstrução por coordenadas falhou; fallback extractText', String(geomError));
+    }
+    if (clean.trim().length < 40) {
+      const { text } = await extractText(pdf, { mergePages: true });
+      clean = (typeof text === 'string' ? text : Array.isArray(text) ? text.join('\n') : '').trim();
+    }
     const MAX_CHARS = 5_000_000;
     if (clean.length > MAX_CHARS) clean = clean.slice(0, MAX_CHARS);
     if (clean.length < 40) {
@@ -690,6 +712,56 @@ async function parsePdf(bytes: ArrayBuffer) {
     const message = error instanceof Error ? error.message : String(error);
     return { text: '', nonProcessable: true, reason: `Falha ao ler PDF: ${message}` };
   }
+}
+
+/**
+ * Extrai o texto de um PDF preservando linhas e colunas com base nas coordenadas
+ * dos itens retornados pelo pdfjs. Itens com Y próximo (tolerância 3pt) formam
+ * a mesma linha; itens são ordenados por X dentro da linha; quando há um vão
+ * horizontal grande entre dois itens, inserimos um espaço extra para separar
+ * colunas (evita números grudados como "1.835,52321,79").
+ */
+async function extractTextByLines(pdf: unknown, maxPages: number): Promise<string> {
+  const doc = pdf as { numPages: number; getPage: (n: number) => Promise<unknown> };
+  const Y_TOLERANCE = 3;
+  const pages: string[] = [];
+  for (let p = 1; p <= maxPages; p += 1) {
+    const page = (await doc.getPage(p)) as { getTextContent: () => Promise<{ items: Array<{ str: string; transform: number[]; width?: number }> }> };
+    const content = await page.getTextContent();
+    const lineMap = new Map<number, Array<{ str: string; x: number; width: number }>>();
+    for (const item of content.items) {
+      const raw = (item.str ?? '').replace(/\s+$/g, '');
+      if (!raw) continue;
+      const yKey = Math.round((item.transform?.[5] ?? 0) / Y_TOLERANCE) * Y_TOLERANCE;
+      const x = item.transform?.[4] ?? 0;
+      const width = item.width ?? raw.length * 5;
+      const arr = lineMap.get(yKey) ?? [];
+      arr.push({ str: raw, x, width });
+      lineMap.set(yKey, arr);
+    }
+    const ordered = [...lineMap.entries()].sort((a, b) => b[0] - a[0]);
+    const pageLines: string[] = [];
+    for (const [, items] of ordered) {
+      items.sort((a, b) => a.x - b.x);
+      let line = '';
+      for (let i = 0; i < items.length; i += 1) {
+        const curr = items[i];
+        if (i === 0) { line += curr.str; continue; }
+        const prev = items[i - 1];
+        const gap = curr.x - (prev.x + prev.width);
+        // Espaço grande (≥ 1.5pt) ou estouro entre tokens contábeis → separador
+        // explícito; também separamos quando o item anterior NÃO termina e o
+        // atual NÃO começa com whitespace (evita "1.835,52" + "321,79" → "1.835,52321,79").
+        const prevEndsBoundary = /\s$/.test(prev.str);
+        const currStartsBoundary = /^\s/.test(curr.str);
+        if (gap >= 1.5 && !prevEndsBoundary && !currStartsBoundary) line += ' ';
+        line += curr.str;
+      }
+      pageLines.push(line);
+    }
+    pages.push(pageLines.join('\n'));
+  }
+  return pages.join('\n').trim();
 }
 
 Deno.serve(async (req) => {

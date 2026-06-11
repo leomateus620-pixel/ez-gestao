@@ -164,6 +164,35 @@ describe('parsePayrollSummaryDocument — Folha PDF Zimmermann (ordem docling/vi
     const t2 = `${head}\nTotal: 1.000,00 0,00 1.000,00 95,00 800,00 0,00 1.000,00 80,00 1.000,00 100,00 900,00\nTotal de empregados:\n5\n`;
     expect(parsePayrollSummaryDocument(t2).values.employeesCount).toBe(5);
   });
+
+  it('valores monetários grudados pelo extrator do PDF são separados antes da leitura', () => {
+    // Reproduz o texto produzido por extratores de PDF que perdem o espaço
+    // entre células contábeis (ex.: 1.835,52321,79 e 22.944,2419.673,40).
+    const text = [
+      'Empresa: ESCRITORIO CONTABIL ZIMMERMANN LTDA',
+      'Inscr. Fed.: 88.736.335/0001-13',
+      'Período: 01/05/2026 à 31/05/2026',
+      'RESUMO DE CÁLCULO',
+      'Empregado Salário S. Fam. Base INSS INSS Base IRRF IRRF Base FGTS FGTS Prov./Vant. Descontos Líquido',
+      'Total:',
+      'Total de empregados:',
+      '22.680,85 0,00 24.565,24 2.343,08 1.835,52321,79 22.944,2419.673,40 24.565,24 4.072,87 20.492,37',
+      '7',
+    ].join('\n');
+    const r = parsePayrollSummaryDocument(text);
+    expect(r.values.employeesCount).toBe(7);
+    expect(r.values.salaryTotal).toBe(22680.85);
+    expect(r.values.inssBase).toBe(24565.24);
+    expect(r.values.inssValue).toBe(2343.08);
+    expect(r.values.fgtsValue).toBe(1835.52);
+    expect(r.values.irrfValue).toBe(321.79);
+    expect(r.values.fgtsBase).toBe(22944.24);
+    expect(r.values.irrfBase).toBe(19673.40);
+    expect(r.values.grossPayroll).toBe(24565.24);
+    expect(r.values.discounts).toBe(4072.87);
+    expect(r.values.netPayroll).toBe(20492.37);
+    expect(r.confidence).toBeGreaterThanOrEqual(0.7);
+  });
 });
 
 describe('parsePgdasDocument — robustez', () => {
