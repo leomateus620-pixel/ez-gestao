@@ -678,8 +678,19 @@ async function parsePdf(bytes: ArrayBuffer) {
     const numPages = (pdf as unknown as { numPages?: number }).numPages ?? 0;
     const MAX_PAGES = 200;
     const truncated = numPages > MAX_PAGES;
-    const { text } = await extractText(pdf, { mergePages: true });
-    let clean = (typeof text === 'string' ? text : Array.isArray(text) ? text.join('\n') : '').trim();
+    // Reconstrução por coordenadas: agrupa itens por Y (linha) e ordena por X (coluna).
+    // Evita que o `extractText` do unpdf colapse a tabela em uma única string
+    // (que produzia valores grudados como "1.835,52321,79" e impedia a leitura da folha).
+    let clean = '';
+    try {
+      clean = await extractTextByLines(pdf, Math.min(numPages, MAX_PAGES));
+    } catch (geomError) {
+      console.warn('[process-tax-reform-document] reconstrução por coordenadas falhou; fallback extractText', String(geomError));
+    }
+    if (clean.trim().length < 40) {
+      const { text } = await extractText(pdf, { mergePages: true });
+      clean = (typeof text === 'string' ? text : Array.isArray(text) ? text.join('\n') : '').trim();
+    }
     const MAX_CHARS = 5_000_000;
     if (clean.length > MAX_CHARS) clean = clean.slice(0, MAX_CHARS);
     if (clean.length < 40) {
@@ -690,6 +701,56 @@ async function parsePdf(bytes: ArrayBuffer) {
     const message = error instanceof Error ? error.message : String(error);
     return { text: '', nonProcessable: true, reason: `Falha ao ler PDF: ${message}` };
   }
+}
+
+/**
+ * Extrai o texto de um PDF preservando linhas e colunas com base nas coordenadas
+ * dos itens retornados pelo pdfjs. Itens com Y próximo (tolerância 3pt) formam
+ * a mesma linha; itens são ordenados por X dentro da linha; quando há um vão
+ * horizontal grande entre dois itens, inserimos um espaço extra para separar
+ * colunas (evita números grudados como "1.835,52321,79").
+ */
+async function extractTextByLines(pdf: unknown, maxPages: number): Promise<string> {
+  const doc = pdf as { numPages: number; getPage: (n: number) => Promise<unknown> };
+  const Y_TOLERANCE = 3;
+  const pages: string[] = [];
+  for (let p = 1; p <= maxPages; p += 1) {
+    const page = (await doc.getPage(p)) as { getTextContent: () => Promise<{ items: Array<{ str: string; transform: number[]; width?: number }> }> };
+    const content = await page.getTextContent();
+    const lineMap = new Map<number, Array<{ str: string; x: number; width: number }>>();
+    for (const item of content.items) {
+      const raw = (item.str ?? '').replace(/\s+$/g, '');
+      if (!raw) continue;
+      const yKey = Math.round((item.transform?.[5] ?? 0) / Y_TOLERANCE) * Y_TOLERANCE;
+      const x = item.transform?.[4] ?? 0;
+      const width = item.width ?? raw.length * 5;
+      const arr = lineMap.get(yKey) ?? [];
+      arr.push({ str: raw, x, width });
+      lineMap.set(yKey, arr);
+    }
+    const ordered = [...lineMap.entries()].sort((a, b) => b[0] - a[0]);
+    const pageLines: string[] = [];
+    for (const [, items] of ordered) {
+      items.sort((a, b) => a.x - b.x);
+      let line = '';
+      for (let i = 0; i < items.length; i += 1) {
+        const curr = items[i];
+        if (i === 0) { line += curr.str; continue; }
+        const prev = items[i - 1];
+        const gap = curr.x - (prev.x + prev.width);
+        // Espaço grande (≥ 1.5pt) ou estouro entre tokens contábeis → separador
+        // explícito; também separamos quando o item anterior NÃO termina e o
+        // atual NÃO começa com whitespace (evita "1.835,52" + "321,79" → "1.835,52321,79").
+        const prevEndsBoundary = /\s$/.test(prev.str);
+        const currStartsBoundary = /^\s/.test(curr.str);
+        if (gap >= 1.5 || (!prevEndsBoundary && !currStartsBoundary)) line += ' ';
+        line += curr.str;
+      }
+      pageLines.push(line);
+    }
+    pages.push(pageLines.join('\n'));
+  }
+  return pages.join('\n').trim();
 }
 
 Deno.serve(async (req) => {
