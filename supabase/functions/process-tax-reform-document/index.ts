@@ -189,7 +189,19 @@ function parseBalanceAndDre(text: string, documentType: string): { values: Extra
   const map = buildLabelValueMap(text);
   const activoLine = findSectionLine(text, ['A T I V O', 'BALANÇO PATRIMONIAL']);
   const passivoLine = findSectionLine(text, ['P A S S I V O']);
-  const dreLine = findSectionLine(text, ['DEMONSTRAÇÃO DO RESULTADO', 'DEMONSTRACAO DO RESULTADO']);
+  const dreMarkers = [
+    'RECEITA BRUTA OPERACIONAL',
+    'PRESTAÇÃO DE SERVIÇOS',
+    'PRESTACAO DE SERVICOS',
+    'CUSTO DOS SERVIÇOS PRESTADOS',
+    'CUSTO DOS SERVICOS PRESTADOS',
+    'LUCRO BRUTO',
+    'RESULTADO LÍQUIDO DO EXERCÍCIO',
+    'RESULTADO LIQUIDO DO EXERCICIO',
+  ];
+  const headingDreLine = findSectionLine(text, ['DEMONSTRAÇÃO DO RESULTADO', 'DEMONSTRACAO DO RESULTADO']);
+  const firstDreAccountLine = findFirstLineByLabels(map, dreMarkers);
+  const dreLine = headingDreLine >= 0 ? headingDreLine : firstDreAccountLine;
 
   const ativoEnd = passivoLine > 0 ? passivoLine : (dreLine > 0 ? dreLine : undefined);
   const passivoEnd = dreLine > 0 ? dreLine : undefined;
@@ -206,7 +218,7 @@ function parseBalanceAndDre(text: string, documentType: string): { values: Extra
   }
 
   // DRE
-  if (dreLine > 0) {
+  if (dreLine >= 0) {
     values.grossRevenue = findValueByLabels(map, ['RECEITA BRUTA OPERACIONAL'], { fromLine: dreLine });
     values.serviceRevenue = findValueByLabels(map, ['PRESTAÇÃO DE SERVIÇOS', 'PRESTACAO DE SERVICOS'], { fromLine: dreLine });
     let simples = findValueByLabels(map, ['SIMPLES NACIONAL'], { fromLine: dreLine });
