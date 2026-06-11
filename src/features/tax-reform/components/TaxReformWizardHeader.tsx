@@ -27,15 +27,15 @@ export function TaxReformWizardHeader({
 }) {
   const currentIndex = steps.findIndex((item) => item.id === currentStep);
   return (
-    <div>
+    <div className="tax-reform-glass-panel rounded-3xl p-4">
       <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div><h2 className="text-lg font-black">{title}</h2><p className="text-sm text-foreground">{subtitle}</p></div>
+        <div><h2 className="font-display text-lg font-black">{title}</h2><p className="text-sm text-foreground">{subtitle}</p></div>
         <Badge>{statusLabel}</Badge>
       </div>
       <Progress value={progress} />
       <div className="mt-4 grid gap-2 md:grid-cols-5">
         {steps.map((item, index) => (
-          <button key={item.id} type="button" onClick={() => onStepChange(item.id)} className={cn('rounded-2xl border p-3 text-left text-xs font-bold transition', currentStep === item.id ? 'border-primary bg-primary text-white shadow-lg' : index < currentIndex ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-white/60 bg-white/45 text-foreground')}>
+          <button key={item.id} type="button" onClick={() => onStepChange(item.id)} className={cn('tax-reform-action-button rounded-2xl border p-3 text-left text-xs font-black transition', currentStep === item.id ? 'border-primary bg-primary text-white shadow-lg shadow-primary/20' : index < currentIndex ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-primary/15 bg-white/60 text-foreground hover:border-primary/30 hover:bg-primary/10')}>
             <item.icon className="mb-2 h-4 w-4" />{item.label}
           </button>
         ))}
