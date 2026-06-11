@@ -225,6 +225,12 @@ function parseBalanceAndDre(text: string, documentType: string): { values: Extra
     if (simples !== undefined) simples = Math.abs(simples);
     values.simplesNacionalExpense = simples;
     values.netRevenue = findValueByLabels(map, ['RECEITA OPERACIONAL LÍQUIDA', 'RECEITA OPERACIONAL LIQUIDA'], { fromLine: dreLine });
+    if (typeof values.grossRevenue === 'number' && typeof values.netRevenue === 'number') {
+      const revenueDeduction = Number((values.grossRevenue - values.netRevenue).toFixed(2));
+      if (revenueDeduction > 0 && (typeof values.simplesNacionalExpense !== 'number' || Math.abs(values.simplesNacionalExpense - revenueDeduction) > 1)) {
+        values.simplesNacionalExpense = revenueDeduction;
+      }
+    }
     let costs = findValueByLabels(map, ['CUSTO DOS SERVIÇOS PRESTADOS', 'CUSTO DOS SERVICOS PRESTADOS'], { fromLine: dreLine });
     if (costs !== undefined) costs = Math.abs(costs);
     values.serviceCosts = costs;
@@ -276,8 +282,6 @@ function parseBalanceAndDre(text: string, documentType: string): { values: Extra
         values.payrollPercentFromDre = pct(payroll, values.grossRevenue);
         values.payrollPercent = values.payrollPercentFromDre;
       }
-    } else if (payrollHits > 0) {
-      warnings.push('Contas de folha da DRE insuficientes para calcular percentual de folha com segurança.');
     }
 
     if (typeof values.grossRevenue === 'number' && values.simplesNacionalExpense !== undefined) {
