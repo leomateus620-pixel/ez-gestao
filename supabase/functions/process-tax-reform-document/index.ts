@@ -387,7 +387,9 @@ function decisiveFieldsMissing(documentType: string, values: ExtractedValues): s
   }
   if (documentType === 'dre' || documentType === 'balancete') {
     const m: string[] = [];
-    if (!has('revenue')) m.push('Receita bruta');
+    if (!has('grossRevenue')) m.push('Receita bruta');
+    const hasSecondary = has('serviceCosts') || has('grossProfit') || has('netProfit') || has('simplesNacionalExpense');
+    if (has('grossRevenue') && !hasSecondary) m.push('Custo dos serviços / Lucro bruto / Lucro líquido / Simples Nacional');
     return m;
   }
   if (documentType === 'folha_pagamento') {
