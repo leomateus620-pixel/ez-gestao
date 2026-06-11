@@ -1,36 +1,45 @@
-## Plano de correção
+## Diagnóstico
 
-1. **Tornar a detecção da DRE tolerante ao PDF real**
-   - Ajustar o parser do Balanço+DRE para não depender apenas do título `DEMONSTRAÇÃO DO RESULTADO` em linha perfeita.
-   - Usar marcadores decisivos da própria DRE como fallback: `RECEITA BRUTA OPERACIONAL`, `PRESTAÇÃO DE SERVIÇOS`, `CUSTO DOS SERVIÇOS PRESTADOS`, `LUCRO BRUTO`, `RESULTADO LÍQUIDO DO EXERCÍCIO`.
-   - Normalizar variações comuns da camada de texto do PDF: acentos quebrados, caracteres especiais, espaços excessivos e quebras entre palavras.
+- O erro da folha vem do parser do PDF no backend: a extração atual (`unpdf extractText` com páginas mescladas) perde a estrutura visual da tabela da folha.
+- No arquivo mostrado, alguns valores monetários chegam colados na mesma string, por exemplo `1.835,52321,79` e `22.944,2419.673,40`.
+- Como o parser exige 11 valores na linha/bloco `Total`, esses valores colados fazem a leitura encontrar menos colunas do que deveria. Resultado: `Linha "Total" não encontrada` e a folha é marcada como `erro_leitura`.
+- A folha é essencial para o cálculo porque alimenta `grossPayroll`, encargos (`inssValue`, `fgtsValue`) e o percentual de folha sobre receita/RBT12 usado em `payroll_revenue_percent`.
+- O aviso `Faltam documentos-chave: Balancete, Faturamento por cliente, Relação de fornecedores.` aparece em dois pontos:
+  - no bloco de upload/documentos;
+  - no painel de resultado, via pendências/alertas de documentos faltantes.
 
-2. **Corrigir o parser da Edge Function**
-   - Aplicar a mesma lógica robusta no `process-tax-reform-document`, que é o fluxo usado no upload real.
-   - Se o cabeçalho da DRE não for encontrado, localizar a seção pelo primeiro rótulo contábil decisivo, sem cair para erro falso.
-   - Continuar bloqueando dados quando a leitura realmente falhar: `erro_leitura` não grava receita, custos, lucro ou percentuais.
+## Correção proposta
 
-3. **Sincronizar parser local e parser do backend**
-   - Atualizar também o parser local usado nos testes para evitar divergência futura entre preview/testes e processamento real.
-   - Manter PGDAS e folha intocados, exceto por imports/fixtures compartilhados se necessário.
+1. **Corrigir a extração de texto da folha no backend**
+   - Substituir a leitura genérica do PDF por reconstrução linha-a-linha baseada em coordenadas quando o arquivo for PDF.
+   - Agrupar itens pela posição vertical, ordenar pela posição horizontal e preservar espaços/colunas.
+   - Isso evita que valores da tabela sejam colados e permite detectar corretamente a linha `Total`.
 
-4. **Adicionar testes contra a falha atual**
-   - Criar casos simulando o texto do PDF sem o heading perfeito de DRE, mas contendo os rótulos reais.
-   - Validar que o documento passa como lido e extrai:
-     - Receita bruta: `902.870,81`
-     - Simples Nacional: `74.867,75`
-     - Receita líquida: `828.003,06`
-     - Custos dos serviços: `386.206,28`
-     - Lucro bruto: `441.796,78`
-     - Lucro líquido: `375.304,85`
-     - Custos/receita: aproximadamente `42,78%`
-   - Validar negativamente que lucro líquido não vira receita e custos não viram `100%`.
+2. **Fortalecer o parser da folha**
+   - Melhorar a leitura dos blocos `Total:` para aceitar valores colados por falha do PDF quando ainda for possível separar com segurança.
+   - Manter a validação contábil obrigatória: `Líquido = Proventos/Vantagens - Descontos`.
+   - Persistir dados da folha somente quando os campos decisivos estiverem válidos: período, total de salários, proventos/vantagens e líquido a pagar.
 
-5. **Reprocessar e validar o documento já anexado**
-   - Depois da correção, reimplantar a Edge Function.
-   - Reprocessar o documento `balanco e dre 2025 ez.pdf` já salvo no Cloud.
-   - Conferir no banco que ele fica com `reading_status = lido`, `extraction_confidence >= 0.7` e valores corretos.
+3. **Sincronizar parser local e Edge Function**
+   - Aplicar a mesma lógica no parser frontend/testável e no backend para evitar divergência entre testes e produção.
 
-6. **Confirmar o painel Resultado**
-   - Verificar que o painel passa a exibir os dados válidos da DRE/Balanço.
-   - Confirmar que, se algum documento futuro falhar leitura, o Resultado continua sem usar dados inválidos no score.
+4. **Adicionar testes regressivos para a folha Zimmermann**
+   - Cobrir exatamente o caso do arquivo exibido, inclusive valores colados como `1.835,52321,79` e `22.944,2419.673,40`.
+   - Validar os valores esperados:
+     - empregados: `7`;
+     - salário total: `22.680,85`;
+     - proventos/vantagens: `24.565,24`;
+     - descontos: `4.072,87`;
+     - líquido: `20.492,37`;
+     - INSS: `2.343,08`;
+     - FGTS: `1.835,52`.
+
+5. **Remover o aviso solicitado da interface**
+   - Remover o banner `Faltam documentos-chave...` no menu/documentos.
+   - Remover documentos faltantes e o alerta equivalente do painel Resultado.
+   - Manter erros reais de leitura visíveis, especialmente erro de folha, porque isso afeta o cálculo.
+
+6. **Validar e reimplantar**
+   - Rodar os testes do parser.
+   - Reimplantar a Edge Function `process-tax-reform-document`.
+   - Reprocessar a folha já anexada e confirmar que fica `lido`, com confiança suficiente e alimentando o score.
