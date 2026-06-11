@@ -720,12 +720,20 @@ Deno.serve(async (req) => {
     const extractionError = status === 'lido'
       ? null
       : allWarnings.join(' ') || 'Nenhum campo decisivo pôde ser extraído do arquivo.';
+    // Quando a leitura falha, não publicar números — só warnings + confidence 0.
+    const valuesToPersist: ExtractedValues = status === 'lido'
+      ? result.values
+      : { warnings: allWarnings, confidence: 0 };
+    const findingsToPersist = status === 'lido' ? result.findings : [];
+    const summaryToPersist = status === 'lido'
+      ? result.summary
+      : `Leitura falhou. Nenhum dado foi usado no score. Motivo: ${extractionError}`;
     const { data: updated, error } = await supabase.from('tax_reform_documents').update({
       reading_status: status,
       extraction_error: extractionError,
-      extracted_summary: result.summary,
-      extracted_values: result.values,
-      extracted_findings: result.findings,
+      extracted_summary: summaryToPersist,
+      extracted_values: valuesToPersist,
+      extracted_findings: findingsToPersist,
       extraction_confidence: status === 'lido' ? result.confidence : 0,
     }).eq('id', documentId).select('*').single();
     if (error) throw error;
