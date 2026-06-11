@@ -294,6 +294,12 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
     values.simplesNacionalExpense = findValueByLabels(map, ['SIMPLES NACIONAL'], { fromLine: dreLine });
     if (values.simplesNacionalExpense !== undefined) values.simplesNacionalExpense = Math.abs(values.simplesNacionalExpense);
     values.netRevenue = findValueByLabels(map, ['RECEITA OPERACIONAL LÍQUIDA', 'RECEITA OPERACIONAL LIQUIDA'], { fromLine: dreLine });
+    if (values.grossRevenue !== undefined && values.netRevenue !== undefined) {
+      const revenueDeduction = Number((values.grossRevenue - values.netRevenue).toFixed(2));
+      if (revenueDeduction > 0 && (values.simplesNacionalExpense === undefined || Math.abs(values.simplesNacionalExpense - revenueDeduction) > 1)) {
+        values.simplesNacionalExpense = revenueDeduction;
+      }
+    }
     values.serviceCosts = findValueByLabels(map, ['CUSTO DOS SERVIÇOS PRESTADOS', 'CUSTO DOS SERVICOS PRESTADOS'], { fromLine: dreLine });
     if (values.serviceCosts !== undefined) values.serviceCosts = Math.abs(values.serviceCosts);
     values.grossProfit = findValueByLabels(map, ['LUCRO BRUTO'], { fromLine: dreLine });
@@ -345,8 +351,6 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
       values.annualPayrollFromDre = Number(payrollSum.toFixed(2));
       if (values.grossRevenue) values.payrollPercentFromDre = pct(payrollSum, values.grossRevenue);
       values.payrollPercent = values.payrollPercentFromDre;
-    } else if (payrollHits > 0) {
-      warnings.push('Contas de folha da DRE insuficientes para calcular percentual de folha com segurança.');
     }
 
     if (values.grossRevenue && values.simplesNacionalExpense !== undefined) {
