@@ -206,4 +206,27 @@ describe('parseBalanceAndDreDocument — robustez', () => {
     expect(r.values.netRevenue).toBe(917100);
     expect(r.values.netProfit).toBe(300000);
   });
+
+  it('Balanço+DRE Zimmermann real: NÃO confunde Resultado Líquido com Receita', () => {
+    const { readFileSync } = require('node:fs') as typeof import('node:fs');
+    const { join } = require('node:path') as typeof import('node:path');
+    const text = readFileSync(join(__dirname, 'fixtures', 'balanco-dre-zimmermann.txt'), 'utf-8');
+    const r = parseBalanceAndDreDocument(text);
+    // Campos críticos batem com o PDF real
+    expect(r.values.grossRevenue).toBeCloseTo(902870.81, 1);
+    expect(r.values.simplesNacionalExpense).toBeCloseTo(74867.75, 1);
+    expect(r.values.netRevenue).toBeCloseTo(828003.06, 1);
+    expect(r.values.serviceCosts).toBeCloseTo(386206.28, 1);
+    expect(r.values.grossProfit).toBeCloseTo(441796.78, 1);
+    expect(r.values.operatingExpenses).toBeCloseTo(84851.92, 1);
+    expect(r.values.netProfit).toBeCloseTo(375304.85, 1);
+    expect(r.values.inputCostPercent).toBeCloseTo(42.78, 1);
+    expect(r.values.grossMargin).toBeCloseTo(48.93, 1);
+    expect(r.values.netMargin).toBeCloseTo(41.57, 1);
+    expect(r.values.payrollPercentFromDre).toBeCloseTo(42.79, 1);
+    // Guardas negativos: erro anterior reportado pelo usuário não pode voltar
+    expect(r.values.revenue).not.toBe(375304.85);
+    expect(r.values.inputCostPercent).not.toBe(100);
+    expect(r.values.operatingExpenses).not.toBe(375304.85);
+  });
 });

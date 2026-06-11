@@ -1,70 +1,58 @@
+# Corrigir leitura Balanço + DRE na Reforma Tributária
+
 ## Diagnóstico
 
-As respostas do questionário **estão sendo salvas no Cloud** (confirmei 19 respostas da análise da Zimmermann com `updated_at` atual). O problema está no ciclo de carga/salvamento no frontend, em `src/features/tax-reform/components/TaxReformWorkspace.tsx`:
+O parser correto já existe em `src/features/tax-reform/document-analysis/extractors.ts` (`parseBalanceAndDreDocument`) e é coberto pelos testes em `parsers.test.ts` com os valores exatos do Zimmermann (grossRevenue 902.870,81 / netProfit 375.304,85 / inputCostPercent 42,78 etc.).
 
-1. **Seed antigo do `localStorage` sobrescreve o Cloud**
-   - `useState(loadLocalStore)` inicializa com a `seedStore` (empresa demo + respostas fictícias) ou com o snapshot antigo do `localStorage`.
-   - O `useEffect` de persistência grava no `localStorage` em **toda** mudança de `store`, inclusive antes do fetch remoto chegar.
-   - Se o usuário começa a interagir antes do `fetchTaxReformStore()` resolver, edits ficam em cima do seed e depois o `setStore(remoteStore)` apaga o que ele digitou. O inverso também: a montagem grava o seed no `localStorage`, "envenenando" recargas futuras.
+O problema está na **Edge Function** `supabase/functions/process-tax-reform-document/index.ts`, que tem uma cópia genérica e ultrapassada da lógica de DRE/Balancete:
 
-2. **Debounce de 700ms perdido em reload/navegação**
-   - O save remoto é feito com `setTimeout(..., 700)`. Se o usuário fecha a aba, recarrega ou troca de etapa antes desse intervalo, o `clearTimeout` cancela o save — as últimas respostas digitadas só ficam no `localStorage` (que depois é sobrescrito pelo remoto na próxima abertura).
+- usa `numberAfter(text, ['receita', 'faturamento'])` e `['resultado']` — pega o `RESULTADO LÍQUIDO DO EXERCÍCIO` (375.304,85) como `revenue`;
+- não separa seções Ativo / Passivo / DRE;
+- grava `extracted_values` (revenue, inputCostPercent=100, operatingExpenses) mesmo quando o `reading_status` final é `erro_leitura`;
+- gate decisivo aceita só `revenue` (campo errado) em vez de `grossRevenue` + um secundário.
 
-3. **`saveTaxReformStore` nunca apaga respostas removidas**
-   - Faz upsert por chave, mas se o usuário limpa um campo, a linha antiga continua no banco e "volta" no próximo load.
+A UI do painel Resultado em `TaxReformWorkspace.tsx` lê `extracted_values` direto, então qualquer dado escrito é exibido. Precisamos garantir no backend que documentos com erro não tragam números, e no frontend filtrar a exibição.
 
-4. **`withDerivedScores` reaplica seed implicitamente**
-   - `loadLocalStore` envolve qualquer payload em `withDerivedScores`, e o efeito derivado pode re-disparar `setStore`, criando saves redundantes que pisam no remoto recém-carregado.
+## Mudanças
 
-## Correções
+### 1. `supabase/functions/process-tax-reform-document/index.ts`
 
-### `src/features/tax-reform/components/TaxReformWorkspace.tsx`
+- Adicionar `splitBalanceAndDreSections(text)` que separa Ativo / Passivo / DRE pelos cabeçalhos `BALANÇO PATRIMONIAL` + `A T I V O`, `P A S S I V O`, `DEMONSTRAÇÃO DO RESULTADO`.
+- Substituir o bloco `if (documentType === 'dre' || documentType === 'balancete')` por chamada a uma nova `parseBalanceAndDre(text)` que:
+  - extrai apenas da seção DRE: `RECEITA BRUTA OPERACIONAL` → `grossRevenue`; `PRESTAÇÃO DE SERVIÇOS` → `serviceRevenue`; `DEDUÇÕES DA RECEITA BRUTA` e `SIMPLES NACIONAL` (dentro de deduções) → `simplesNacionalExpense`; `RECEITA OPERACIONAL LÍQUIDA` → `netRevenue`; `CUSTO DOS SERVIÇOS PRESTADOS` → `serviceCosts`; `LUCRO BRUTO` → `grossProfit`; `TOTAL DESPESAS OPERACIONAIS` → `operatingExpenses`; `DESPESAS ADMINISTRATIVAS` → `adminExpenses`; `Pro-Labore` → `proLabore`; `Serviços Prestados PJ` → `pjServices`; `DESPESAS TRIBUTARIAS` → `taxExpenses`; `RESULTADO FINANCEIRO LIQUIDO` → `financialResult`; `OUTRAS DESPESAS OPERACIONAIS` → `otherOperatingExpenses`; `RESULTADO LÍQUIDO DO EXERCÍCIO` → `netProfit`;
+  - extrai da seção Balanço: `assetsTotal`, `equity`, `afac`, `accountsReceivable`;
+  - calcula `inputCostPercent = serviceCosts/grossRevenue*100`, `grossMargin = grossProfit/grossRevenue*100`, `netMargin = netProfit/grossRevenue*100`, `annualEffectiveTaxRate = simplesNacionalExpense/grossRevenue*100`;
+  - folha DRE: itera contas trabalhistas estritas (Décimo Terceiro Salário, F.G.T.S., Férias, Ordenados e Gratificações, Aviso Previo, Despesas C/ Estagiários, Ajuda de Custo, Pro-Labore) **somente dentro da seção DRE**, soma → `annualPayrollFromDre`, calcula `payrollPercentFromDre`;
+  - NÃO grava `revenue`, `operatingExpenses` ou `netProfit` se a leitura não validar (ver gate).
+- Atualizar `decisiveFieldsMissing`: para `dre`/`balancete`, exigir `grossRevenue` + pelo menos um de `serviceCosts | grossProfit | netProfit | simplesNacionalExpense`. Se faltar, marcar `Campos decisivos ausentes na DRE/Balanço.`.
+- Atualizar fluxo final (linha 549+): quando `status === 'erro_leitura'`, gravar `extracted_values = { warnings, confidence: 0, readMetadata }`, `extracted_findings = []`, `extracted_summary = 'Leitura falhou. Nenhum dado foi usado no score.'`.
 
-- **Iniciar com store vazio quando o backend está habilitado.**
-  - Trocar o `useState(loadLocalStore)` por um estado inicial `emptyStore` (sem seed) e marcar `persistenceReady=false` até o fetch terminar.
-  - Só cair no `localStorage`/`seedStore` se `isSupabaseConfigured === false` (modo offline).
-  - Mostrar um loading discreto enquanto `persistenceReady` é falso para evitar edição em cima de dados que serão sobrescritos.
+### 2. `src/features/tax-reform/components/TaxReformWorkspace.tsx`
 
-- **Bloquear o efeito de persistência até o fetch terminar.**
-  - Manter a guarda `if (!persistenceReady) return;` também para o `localStorage.setItem` — hoje ele grava antes do remoto chegar.
-  - Adicionar um ref `lastSavedStoreRef` e comparar via hash leve para evitar saves redundantes disparados por `withDerivedScores`.
+- No painel Resultado, ao renderizar `extracted_values`, ignorar campos numéricos quando `doc.readingStatus !== 'lido'`. Mostrar apenas: `"<Tipo> — Erro na leitura. Nenhum dado deste documento alimentou o score. Motivo: <extraction_error>"`.
+- Para DRE/Balancete lido, adicionar bloco formatado com a ordem solicitada (Receita bruta, Simples Nacional, Alíquota anual, Receita líquida, Custo dos serviços, Custos/receita, Lucro bruto, Margem bruta, Lucro líquido, Margem líquida, Folha/receita).
 
-- **Persistência granular e imediata no `setAnswer`.**
-  - Em vez de depender só do debounce global, criar `persistAnswer(analysisId, key, value)` que:
-    1. atualiza o store local;
-    2. chama `upsertTaxReformAnswer` imediatamente (com `await` em background + toast em erro);
-    3. cancela/encurta o debounce global para o restante do store.
-  - Garante que cada alteração de campo já fica no Cloud antes do reload.
+### 3. Testes
 
-- **Flush em eventos críticos.**
-  - Adicionar `useEffect` com listeners `beforeunload` e `visibilitychange === 'hidden'` que dispara `saveTaxReformStore` síncrono pendente (cancela debounce e executa).
-  - Disparar flush também ao trocar de `step` no wizard e ao chamar `setSelectedAnalysisId(null)`.
+- Em `src/features/tax-reform/document-analysis/__tests__/parsers-large.test.ts`, adicionar suíte com a fixture `balanco-dre-zimmermann.txt` validando os valores exatos listados pelo usuário (grossRevenue 902870.81, simplesNacionalExpense 74867.75, netRevenue 828003.06, serviceCosts 386206.28, grossProfit 441796.78, operatingExpenses 84851.92, netProfit 375304.85, inputCostPercent 42.78, grossMargin 48.93, netMargin 41.57, payrollPercentFromDre 42.79) e dois negativos: `values.revenue !== 375304.85` e `values.inputCostPercent !== 100`.
+- Adicionar teste Deno em `supabase/functions/process-tax-reform-document/index.test.ts` (ou estender existente) reaproveitando a mesma fixture para garantir paridade com o extractor do cliente.
+- Teste de UI/lógica garantindo que, com `readingStatus = 'erro_leitura'`, o Resultado não exibe valores numéricos.
 
-- **Apagar respostas removidas.**
-  - Em `saveTaxReformStore`/fluxo de save, comparar as chaves atuais com as do snapshot remoto e chamar `upsertTaxReformAnswer(..., '')` para as que sumiram, garantindo `DELETE` no banco.
+### 4. Deploy + validação end-to-end
 
-### `src/features/tax-reform/persistence.ts`
+- Reimplantar `process-tax-reform-document` via `supabase--deploy_edge_functions`.
+- Resetar via SQL o documento `balanco e dre 2025 ez%` (`reading_status = aguardando_leitura`, limpar campos).
+- Reprocessar e conferir via `supabase--read_query` que `grossRevenue = 902870.81`, `netProfit = 375304.85`, `inputCostPercent ≈ 42.78`, `reading_status = 'lido'`, `extraction_confidence ≥ 0.7`.
 
-- Em `fetchTaxReformWorkspace`, retornar também um `loadedAt` no resultado para o componente saber a versão (evita aplicar saves antigos depois de um fetch novo).
-- Em `saveTaxReformStore`, aceitar opcional `{ previous: TaxReformStore }` e calcular o diff de respostas para emitir `DELETE` nas chaves removidas.
+## Fora do escopo
 
-### Telemetria de depuração
+- PGDAS, folha de pagamento, faturamento por cliente.
+- Layout geral / outros painéis (Dashboard, Documentos, Parecer).
+- Persistência do questionário (já corrigido em loop anterior).
 
-- `console.info('[reforma-tributaria] fetch carregado', { analyses, answersTotal })` após o fetch.
-- `console.info('[reforma-tributaria] save concluído', { analysisId, keys })` após cada upsert de resposta.
-- Toast amigável quando o save falhar (já existe parcialmente, padronizar).
+## Critério de aceite
 
-## Critérios de aceite
-
-- Recarregar a página em `/reforma-tributaria` mantém **todas** as respostas digitadas no questionário (incluindo a última alteração feita imediatamente antes do reload).
-- Limpar um campo no questionário e recarregar mantém o campo vazio (não "volta" a resposta antiga).
-- Nenhuma resposta é sobrescrita pelo `seedStore` quando o backend está conectado.
-- Saves não dependem mais do debounce de 700ms para alterações críticas; cada blur/change persiste no Cloud em < 1s.
-- Nenhuma alteração de layout, do Dashboard, Documentos, Resultado ou Parecer manual.
-
-## Arquivos a alterar
-
-- `src/features/tax-reform/components/TaxReformWorkspace.tsx`
-- `src/features/tax-reform/persistence.ts`
-
-Sem migrations, sem alterar Edge Function, sem mexer no parser de documentos.
+- Documento Zimmermann fica `lido` com `grossRevenue` correto e sem custos 100%.
+- Erros de leitura não geram mais campos numéricos no Resultado.
+- Score só consome documentos `lido`.
+- Testes verdes; Edge Function redeployada.
