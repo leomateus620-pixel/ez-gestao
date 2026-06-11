@@ -4,8 +4,10 @@ import {
   extractAllNumbers,
   extractCnpj,
   extractNumberAfterLabel,
+  findFirstLineByLabels,
   findSectionLine,
   findValueByLabels,
+  normalizeLabel,
   normalizeNumber,
   pushFinding,
   summarizeExtractedValues,
@@ -226,7 +228,19 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
   const map = buildLineLabelValueMap(text);
   const activoLine = findSectionLine(text, ['A T I V O', 'BALANÇO PATRIMONIAL']);
   const passivoLine = findSectionLine(text, ['P A S S I V O']);
-  const dreLine = findSectionLine(text, ['DEMONSTRAÇÃO DO RESULTADO', 'DEMONSTRACAO DO RESULTADO']);
+  const dreMarkers = [
+    'RECEITA BRUTA OPERACIONAL',
+    'PRESTAÇÃO DE SERVIÇOS',
+    'PRESTACAO DE SERVICOS',
+    'CUSTO DOS SERVIÇOS PRESTADOS',
+    'CUSTO DOS SERVICOS PRESTADOS',
+    'LUCRO BRUTO',
+    'RESULTADO LÍQUIDO DO EXERCÍCIO',
+    'RESULTADO LIQUIDO DO EXERCICIO',
+  ];
+  const headingDreLine = findSectionLine(text, ['DEMONSTRAÇÃO DO RESULTADO', 'DEMONSTRACAO DO RESULTADO']);
+  const firstDreAccountLine = findFirstLineByLabels(map, dreMarkers);
+  const dreLine = firstDreAccountLine >= 0 ? firstDreAccountLine : headingDreLine;
 
   const ativoEnd = passivoLine > 0 ? passivoLine : (dreLine > 0 ? dreLine : undefined);
   const passivoEnd = dreLine > 0 ? dreLine : undefined;
@@ -274,12 +288,18 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
   }
 
   // ---- DRE ----
-  if (dreLine > 0) {
+  if (dreLine >= 0) {
     values.grossRevenue = findValueByLabels(map, ['RECEITA BRUTA OPERACIONAL'], { fromLine: dreLine });
     values.serviceRevenue = findValueByLabels(map, ['PRESTAÇÃO DE SERVIÇOS', 'PRESTACAO DE SERVICOS'], { fromLine: dreLine });
     values.simplesNacionalExpense = findValueByLabels(map, ['SIMPLES NACIONAL'], { fromLine: dreLine });
     if (values.simplesNacionalExpense !== undefined) values.simplesNacionalExpense = Math.abs(values.simplesNacionalExpense);
     values.netRevenue = findValueByLabels(map, ['RECEITA OPERACIONAL LÍQUIDA', 'RECEITA OPERACIONAL LIQUIDA'], { fromLine: dreLine });
+    if (values.grossRevenue !== undefined && values.netRevenue !== undefined) {
+      const revenueDeduction = Number((values.grossRevenue - values.netRevenue).toFixed(2));
+      if (revenueDeduction > 0 && (values.simplesNacionalExpense === undefined || Math.abs(values.simplesNacionalExpense - revenueDeduction) > 1)) {
+        values.simplesNacionalExpense = revenueDeduction;
+      }
+    }
     values.serviceCosts = findValueByLabels(map, ['CUSTO DOS SERVIÇOS PRESTADOS', 'CUSTO DOS SERVICOS PRESTADOS'], { fromLine: dreLine });
     if (values.serviceCosts !== undefined) values.serviceCosts = Math.abs(values.serviceCosts);
     values.grossProfit = findValueByLabels(map, ['LUCRO BRUTO'], { fromLine: dreLine });
@@ -315,25 +335,19 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
       'ajuda de custo',
       'pro-labore',
     ]);
-    const normLabel = (s: string) => s
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9\s./()-]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
     const usedLines = new Set<number>();
     let payrollSum = 0;
     let payrollHits = 0;
     for (const entry of map) {
       if (entry.lineIndex < dreLine) continue;
       if (usedLines.has(entry.lineIndex)) continue;
-      if (!payrollTargets.has(normLabel(entry.label))) continue;
+      const payrollLabel = normalizeLabel(entry.label);
+      if (![...payrollTargets].some((target) => payrollLabel === target || payrollLabel.includes(target))) continue;
       payrollSum += Math.abs(entry.value);
       payrollHits += 1;
       usedLines.add(entry.lineIndex);
     }
-    if (payrollHits > 0) {
+    if (payrollHits >= 3) {
       values.annualPayrollFromDre = Number(payrollSum.toFixed(2));
       if (values.grossRevenue) values.payrollPercentFromDre = pct(payrollSum, values.grossRevenue);
       values.payrollPercent = values.payrollPercentFromDre;

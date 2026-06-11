@@ -38,6 +38,15 @@ export function extractNumberAfterLabel(text: string, labels: string[]): number 
 export function buildLineLabelValueMap(text: string): Array<{ label: string; value: number; lineIndex: number }> {
   const rawLines = text.replace(/\r/g, '\n').split('\n').map((line) => line.trim());
   const out: Array<{ label: string; value: number; lineIndex: number }> = [];
+  const seen = new Set<string>();
+  const add = (label: string, value: number | undefined, lineIndex: number) => {
+    const cleanLabel = label.replace(/\s+/g, ' ').trim();
+    if (value === undefined || !cleanLabel || /^\d/.test(cleanLabel)) return;
+    const key = `${lineIndex}:${normalizeLabel(cleanLabel)}:${value}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ label: cleanLabel, value, lineIndex });
+  };
   const isNumericLine = (line: string) => {
     if (!line) return false;
     const stripped = line.replace(/[()\s.,\-\d]/g, '');
@@ -54,7 +63,7 @@ export function buildLineLabelValueMap(text: string): Array<{ label: string; val
         if (!next) continue;
         if (isNumericLine(next)) {
           const value = normalizeNumber(next);
-          if (value !== undefined) out.push({ label: line, value, lineIndex: i });
+          add(line, value, i);
           break;
         }
         if (/\d/.test(next)) break; // next non-numeric textual line — give up
@@ -66,13 +75,24 @@ export function buildLineLabelValueMap(text: string): Array<{ label: string; val
     if (m) {
       const value = normalizeNumber(m[2]);
       const label = m[1].trim();
-      if (value !== undefined && label && !/^\d/.test(label)) out.push({ label, value, lineIndex: i });
+      add(label, value, i);
+    }
+    // Pattern C: value before label (some PDF text layers invert table columns)
+    const reverse = line.match(new RegExp(`^(${parenMoneyRegex.source})\\s+(.+?)$`));
+    if (reverse) {
+      add(reverse[2], normalizeNumber(reverse[1]), i);
+    }
+    // Pattern D: multiple label/value pairs on the same physical line.
+    const pairRe = new RegExp(`([A-Za-zÀ-ú][A-Za-zÀ-ú0-9\\s./()ºª-]{2,}?)\\s+(${parenMoneyRegex.source})(?=\\s+[A-Za-zÀ-ú]|\\s*$)`, 'g');
+    let pair: RegExpExecArray | null;
+    while ((pair = pairRe.exec(line)) !== null) {
+      add(pair[1], normalizeNumber(pair[2]), i);
     }
   }
   return out;
 }
 
-const normalizeLabel = (label: string) => label
+export const normalizeLabel = (label: string) => label
   .toLowerCase()
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -99,6 +119,19 @@ export function findValueByLabels(
     }
   }
   return undefined;
+}
+
+export function findFirstLineByLabels(
+  map: Array<{ label: string; value: number; lineIndex: number }>,
+  labels: string[],
+): number {
+  const targets = labels.map(normalizeLabel);
+  let best = Number.POSITIVE_INFINITY;
+  for (const entry of map) {
+    const norm = normalizeLabel(entry.label);
+    if (targets.some((target) => norm.includes(target))) best = Math.min(best, entry.lineIndex);
+  }
+  return Number.isFinite(best) ? best : -1;
 }
 
 /**

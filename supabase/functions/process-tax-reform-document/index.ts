@@ -13,8 +13,11 @@ type Finding = { documentType: string; field: string; value: string | number | b
 
 const normalizeNumber = (value?: string | null) => {
   if (!value) return undefined;
-  const parsed = Number(value.replace(/R\$|%/gi, '').replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'));
-  return Number.isFinite(parsed) ? parsed : undefined;
+  const trimmed = value.trim();
+  const negativeByParen = /^\(.+\)$/.test(trimmed);
+  const parsed = Number(trimmed.replace(/^\(|\)$/g, '').replace(/R\$|%/gi, '').replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'));
+  if (!Number.isFinite(parsed)) return undefined;
+  return negativeByParen ? -Math.abs(parsed) : parsed;
 };
 
 const money = /-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})?/;
@@ -81,6 +84,15 @@ const parenMoneyRe = /\(?-?\d{1,3}(?:\.\d{3})*(?:,\d{2})\)?|\(?-?\d+(?:[,.]\d{2}
 function buildLabelValueMap(text: string): Array<{ label: string; value: number; lineIndex: number }> {
   const raw = text.replace(/\r/g, '\n').split('\n').map((l) => l.trim());
   const out: Array<{ label: string; value: number; lineIndex: number }> = [];
+  const seen = new Set<string>();
+  const add = (label: string, value: number | undefined, lineIndex: number) => {
+    const cleanLabel = label.replace(/\s+/g, ' ').trim();
+    if (value === undefined || !cleanLabel || /^\d/.test(cleanLabel)) return;
+    const key = `${lineIndex}:${normalizeLabelKey(cleanLabel)}:${value}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ label: cleanLabel, value, lineIndex });
+  };
   const isNumericLine = (line: string) => {
     if (!line) return false;
     const stripped = line.replace(/[()\s.,\-\d]/g, '');
@@ -96,7 +108,7 @@ function buildLabelValueMap(text: string): Array<{ label: string; value: number;
         if (!next) continue;
         if (isNumericLine(next)) {
           const value = normalizeNumber(next);
-          if (value !== undefined) out.push({ label: line, value, lineIndex: i });
+          add(line, value, i);
           break;
         }
         if (/\d/.test(next)) break;
@@ -107,7 +119,16 @@ function buildLabelValueMap(text: string): Array<{ label: string; value: number;
     if (m) {
       const value = normalizeNumber(m[2]);
       const label = m[1].trim();
-      if (value !== undefined && label && !/^\d/.test(label)) out.push({ label, value, lineIndex: i });
+      add(label, value, i);
+    }
+    const reverse = line.match(new RegExp(`^(${parenMoneyRe.source})\\s+(.+?)$`));
+    if (reverse) {
+      add(reverse[2], normalizeNumber(reverse[1]), i);
+    }
+    const pairRe = new RegExp(`([A-Za-zÀ-ú][A-Za-zÀ-ú0-9\\s./()ºª-]{2,}?)\\s+(${parenMoneyRe.source})(?=\\s+[A-Za-zÀ-ú]|\\s*$)`, 'g');
+    let pair: RegExpExecArray | null;
+    while ((pair = pairRe.exec(line)) !== null) {
+      add(pair[1], normalizeNumber(pair[2]), i);
     }
   }
   return out;
@@ -140,6 +161,16 @@ function findSectionLine(text: string, markers: string[]): number {
   return -1;
 }
 
+function findFirstLineByLabels(map: Array<{ label: string; value: number; lineIndex: number }>, labels: string[]): number {
+  const targets = labels.map(normalizeLabelKey);
+  let best = Number.POSITIVE_INFINITY;
+  for (const entry of map) {
+    const norm = normalizeLabelKey(entry.label);
+    if (targets.some((target) => norm.includes(target))) best = Math.min(best, entry.lineIndex);
+  }
+  return Number.isFinite(best) ? best : -1;
+}
+
 function pct(numerator: number | undefined, denominator: number | undefined): number | undefined {
   if (numerator === undefined || !denominator) return undefined;
   return Number(((Math.abs(numerator) / denominator) * 100).toFixed(2));
@@ -158,7 +189,19 @@ function parseBalanceAndDre(text: string, documentType: string): { values: Extra
   const map = buildLabelValueMap(text);
   const activoLine = findSectionLine(text, ['A T I V O', 'BALANÇO PATRIMONIAL']);
   const passivoLine = findSectionLine(text, ['P A S S I V O']);
-  const dreLine = findSectionLine(text, ['DEMONSTRAÇÃO DO RESULTADO', 'DEMONSTRACAO DO RESULTADO']);
+  const dreMarkers = [
+    'RECEITA BRUTA OPERACIONAL',
+    'PRESTAÇÃO DE SERVIÇOS',
+    'PRESTACAO DE SERVICOS',
+    'CUSTO DOS SERVIÇOS PRESTADOS',
+    'CUSTO DOS SERVICOS PRESTADOS',
+    'LUCRO BRUTO',
+    'RESULTADO LÍQUIDO DO EXERCÍCIO',
+    'RESULTADO LIQUIDO DO EXERCICIO',
+  ];
+  const headingDreLine = findSectionLine(text, ['DEMONSTRAÇÃO DO RESULTADO', 'DEMONSTRACAO DO RESULTADO']);
+  const firstDreAccountLine = findFirstLineByLabels(map, dreMarkers);
+  const dreLine = firstDreAccountLine >= 0 ? firstDreAccountLine : headingDreLine;
 
   const ativoEnd = passivoLine > 0 ? passivoLine : (dreLine > 0 ? dreLine : undefined);
   const passivoEnd = dreLine > 0 ? dreLine : undefined;
@@ -175,13 +218,19 @@ function parseBalanceAndDre(text: string, documentType: string): { values: Extra
   }
 
   // DRE
-  if (dreLine > 0) {
+  if (dreLine >= 0) {
     values.grossRevenue = findValueByLabels(map, ['RECEITA BRUTA OPERACIONAL'], { fromLine: dreLine });
     values.serviceRevenue = findValueByLabels(map, ['PRESTAÇÃO DE SERVIÇOS', 'PRESTACAO DE SERVICOS'], { fromLine: dreLine });
     let simples = findValueByLabels(map, ['SIMPLES NACIONAL'], { fromLine: dreLine });
     if (simples !== undefined) simples = Math.abs(simples);
     values.simplesNacionalExpense = simples;
     values.netRevenue = findValueByLabels(map, ['RECEITA OPERACIONAL LÍQUIDA', 'RECEITA OPERACIONAL LIQUIDA'], { fromLine: dreLine });
+    if (typeof values.grossRevenue === 'number' && typeof values.netRevenue === 'number') {
+      const revenueDeduction = Number((values.grossRevenue - values.netRevenue).toFixed(2));
+      if (revenueDeduction > 0 && (typeof values.simplesNacionalExpense !== 'number' || Math.abs(values.simplesNacionalExpense - revenueDeduction) > 1)) {
+        values.simplesNacionalExpense = revenueDeduction;
+      }
+    }
     let costs = findValueByLabels(map, ['CUSTO DOS SERVIÇOS PRESTADOS', 'CUSTO DOS SERVICOS PRESTADOS'], { fromLine: dreLine });
     if (costs !== undefined) costs = Math.abs(costs);
     values.serviceCosts = costs;
@@ -221,12 +270,13 @@ function parseBalanceAndDre(text: string, documentType: string): { values: Extra
     for (const entry of map) {
       if (entry.lineIndex < dreLine) continue;
       if (used.has(entry.lineIndex)) continue;
-      if (!payrollTargets.has(normalizeLabelKey(entry.label))) continue;
+      const payrollLabel = normalizeLabelKey(entry.label);
+      if (![...payrollTargets].some((target) => payrollLabel === target || payrollLabel.includes(target))) continue;
       payroll += Math.abs(entry.value);
       payrollHits += 1;
       used.add(entry.lineIndex);
     }
-    if (payrollHits > 0) {
+    if (payrollHits >= 3) {
       values.annualPayrollFromDre = Number(payroll.toFixed(2));
       if (typeof values.grossRevenue === 'number') {
         values.payrollPercentFromDre = pct(payroll, values.grossRevenue);
