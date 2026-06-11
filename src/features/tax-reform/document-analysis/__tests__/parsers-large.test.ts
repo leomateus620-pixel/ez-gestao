@@ -229,4 +229,43 @@ describe('parseBalanceAndDreDocument — robustez', () => {
     expect(r.values.inputCostPercent).not.toBe(100);
     expect(r.values.operatingExpenses).not.toBe(375304.85);
   });
+
+  it('Balanço+DRE Zimmermann: localiza DRE mesmo sem heading perfeito da seção', () => {
+    const { readFileSync } = require('node:fs') as typeof import('node:fs');
+    const { join } = require('node:path') as typeof import('node:path');
+    const original = readFileSync(join(__dirname, 'fixtures', 'balanco-dre-zimmermann.txt'), 'utf-8');
+    const text = original
+      .replace(/DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO NO PERÍODO DE 01\/01\/2025 A 31\/12\/2025/g, 'RELATÓRIO CONTÁBIL')
+      .replace(/DEMONSTRAÇÃO DO RESULTADO/g, 'CONTAS CONTÁBEIS');
+    const r = parseBalanceAndDreDocument(text);
+    expect(r.values.grossRevenue).toBeCloseTo(902870.81, 1);
+    expect(r.values.simplesNacionalExpense).toBeCloseTo(74867.75, 1);
+    expect(r.values.netRevenue).toBeCloseTo(828003.06, 1);
+    expect(r.values.serviceCosts).toBeCloseTo(386206.28, 1);
+    expect(r.values.grossProfit).toBeCloseTo(441796.78, 1);
+    expect(r.values.netProfit).toBeCloseTo(375304.85, 1);
+    expect(r.values.inputCostPercent).toBeCloseTo(42.78, 1);
+    expect(r.values.revenue).not.toBe(375304.85);
+    expect(r.values.inputCostPercent).not.toBe(100);
+  });
+
+  it('Balanço+DRE: aceita camada de PDF com valor antes do rótulo contábil', () => {
+    const text = [
+      'BALANÇO PATRIMONIAL LEVANTADO EM 31/12/2025',
+      '807.056,87 A T I V O',
+      '807.056,87 P A S S I V O',
+      '902.870,81 RECEITA BRUTA OPERACIONAL',
+      '(74.867,75) SIMPLES NACIONAL',
+      '828.003,06 RECEITA OPERACIONAL LÍQUIDA',
+      '(386.206,28) CUSTO DOS SERVIÇOS PRESTADOS',
+      '441.796,78 LUCRO BRUTO',
+      '375.304,85 RESULTADO LÍQUIDO DO EXERCÍCIO',
+    ].join('\n');
+    const r = parseBalanceAndDreDocument(text);
+    expect(r.values.grossRevenue).toBeCloseTo(902870.81, 1);
+    expect(r.values.serviceCosts).toBeCloseTo(386206.28, 1);
+    expect(r.values.netProfit).toBeCloseTo(375304.85, 1);
+    expect(r.values.inputCostPercent).toBeCloseTo(42.78, 1);
+    expect(r.values.revenue).not.toBe(375304.85);
+  });
 });
