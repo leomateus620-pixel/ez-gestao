@@ -240,7 +240,7 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
   ];
   const headingDreLine = findSectionLine(text, ['DEMONSTRAÇÃO DO RESULTADO', 'DEMONSTRACAO DO RESULTADO']);
   const firstDreAccountLine = findFirstLineByLabels(map, dreMarkers);
-  const dreLine = headingDreLine >= 0 ? headingDreLine : firstDreAccountLine;
+  const dreLine = firstDreAccountLine >= 0 ? firstDreAccountLine : headingDreLine;
 
   const ativoEnd = passivoLine > 0 ? passivoLine : (dreLine > 0 ? dreLine : undefined);
   const passivoEnd = dreLine > 0 ? dreLine : undefined;
@@ -335,15 +335,18 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
     for (const entry of map) {
       if (entry.lineIndex < dreLine) continue;
       if (usedLines.has(entry.lineIndex)) continue;
-      if (!payrollTargets.has(normalizeLabel(entry.label))) continue;
+      const payrollLabel = normalizeLabel(entry.label);
+      if (![...payrollTargets].some((target) => payrollLabel === target || payrollLabel.includes(target))) continue;
       payrollSum += Math.abs(entry.value);
       payrollHits += 1;
       usedLines.add(entry.lineIndex);
     }
-    if (payrollHits > 0) {
+    if (payrollHits >= 3) {
       values.annualPayrollFromDre = Number(payrollSum.toFixed(2));
       if (values.grossRevenue) values.payrollPercentFromDre = pct(payrollSum, values.grossRevenue);
       values.payrollPercent = values.payrollPercentFromDre;
+    } else if (payrollHits > 0) {
+      warnings.push('Contas de folha da DRE insuficientes para calcular percentual de folha com segurança.');
     }
 
     if (values.grossRevenue && values.simplesNacionalExpense !== undefined) {
