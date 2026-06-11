@@ -61,6 +61,217 @@ const push = (findings: Finding[], documentType: string, field: string, value: u
   if (value === undefined || value === null || value === '') return;
   findings.push({ documentType, field, value: value as string | number | boolean, confidence, sourceLabel });
 };
+
+// ============================================================
+// BALANÇO + DRE (parser dedicado, espelha o parser do cliente em
+// src/features/tax-reform/document-analysis/extractors.ts).
+// Não usa rótulos amplos como "receita" / "resultado" — sempre usa
+// rótulos específicos da DRE para evitar capturar valores do Balanço.
+// ============================================================
+const normalizeLabelKey = (label: string) => label
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9\s./()-]/g, '')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const parenMoneyRe = /\(?-?\d{1,3}(?:\.\d{3})*(?:,\d{2})\)?|\(?-?\d+(?:[,.]\d{2})?\)?/;
+
+function buildLabelValueMap(text: string): Array<{ label: string; value: number; lineIndex: number }> {
+  const raw = text.replace(/\r/g, '\n').split('\n').map((l) => l.trim());
+  const out: Array<{ label: string; value: number; lineIndex: number }> = [];
+  const isNumericLine = (line: string) => {
+    if (!line) return false;
+    const stripped = line.replace(/[()\s.,\-\d]/g, '');
+    return stripped.length === 0 && /\d/.test(line);
+  };
+  for (let i = 0; i < raw.length; i += 1) {
+    const line = raw[i];
+    if (!line) continue;
+    if (isNumericLine(line)) continue;
+    if (!/\d/.test(line)) {
+      for (let j = i + 1; j < Math.min(raw.length, i + 4); j += 1) {
+        const next = raw[j];
+        if (!next) continue;
+        if (isNumericLine(next)) {
+          const value = normalizeNumber(next);
+          if (value !== undefined) out.push({ label: line, value, lineIndex: i });
+          break;
+        }
+        if (/\d/.test(next)) break;
+      }
+      continue;
+    }
+    const m = line.match(new RegExp(`^(.+?)[\\s:]+(${parenMoneyRe.source})\\s*$`));
+    if (m) {
+      const value = normalizeNumber(m[2]);
+      const label = m[1].trim();
+      if (value !== undefined && label && !/^\d/.test(label)) out.push({ label, value, lineIndex: i });
+    }
+  }
+  return out;
+}
+
+function findValueByLabels(
+  map: Array<{ label: string; value: number; lineIndex: number }>,
+  labels: string[],
+  options: { exact?: boolean; fromLine?: number; toLine?: number } = {},
+): number | undefined {
+  const targets = labels.map(normalizeLabelKey);
+  for (const target of targets) {
+    for (const entry of map) {
+      if (options.fromLine !== undefined && entry.lineIndex < options.fromLine) continue;
+      if (options.toLine !== undefined && entry.lineIndex > options.toLine) continue;
+      const norm = normalizeLabelKey(entry.label);
+      const matches = options.exact ? norm === target : norm.includes(target);
+      if (matches) return entry.value;
+    }
+  }
+  return undefined;
+}
+
+function findSectionLine(text: string, markers: string[]): number {
+  const lines = text.replace(/\r/g, '\n').split('\n').map((l) => normalizeLabelKey(l));
+  const needles = markers.map(normalizeLabelKey);
+  for (let i = 0; i < lines.length; i += 1) {
+    if (needles.some((n) => lines[i].includes(n))) return i;
+  }
+  return -1;
+}
+
+function pct(numerator: number | undefined, denominator: number | undefined): number | undefined {
+  if (numerator === undefined || !denominator) return undefined;
+  return Number(((Math.abs(numerator) / denominator) * 100).toFixed(2));
+}
+
+function parseBalanceAndDre(text: string, documentType: string): { values: ExtractedValues; findings: Finding[]; warnings: string[] } {
+  const findings: Finding[] = [];
+  const warnings: string[] = [];
+  const values: ExtractedValues = {};
+
+  const cnpjMatch = text.match(/\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/);
+  if (cnpjMatch) values.cnpj = cnpjMatch[0];
+  const periodMatch = text.match(/Per[ií]odo:\s*(\d{2}\/\d{2}\/\d{4}\s*[aà]\s*\d{2}\/\d{2}\/\d{4})/i);
+  if (periodMatch) values.period = periodMatch[1];
+
+  const map = buildLabelValueMap(text);
+  const activoLine = findSectionLine(text, ['A T I V O', 'BALANÇO PATRIMONIAL']);
+  const passivoLine = findSectionLine(text, ['P A S S I V O']);
+  const dreLine = findSectionLine(text, ['DEMONSTRAÇÃO DO RESULTADO', 'DEMONSTRACAO DO RESULTADO']);
+
+  const ativoEnd = passivoLine > 0 ? passivoLine : (dreLine > 0 ? dreLine : undefined);
+  const passivoEnd = dreLine > 0 ? dreLine : undefined;
+
+  // Balanço — Ativo
+  if (activoLine >= 0) {
+    values.assetsTotal = findValueByLabels(map, ['ATIVO'], { fromLine: activoLine, toLine: ativoEnd });
+    values.accountsReceivable = findValueByLabels(map, ['CLIENTES'], { fromLine: activoLine, toLine: ativoEnd });
+  }
+  // Balanço — Passivo
+  if (passivoLine > 0) {
+    values.equity = findValueByLabels(map, ['PATRIMÔNIO LÍQUIDO', 'PATRIMONIO LIQUIDO'], { fromLine: passivoLine, toLine: passivoEnd });
+    values.afac = findValueByLabels(map, ['ADIANTAMENTO PARA FUTURO AUMENTO', 'Adto p/ Futuro Aumento'], { fromLine: passivoLine, toLine: passivoEnd });
+  }
+
+  // DRE
+  if (dreLine > 0) {
+    values.grossRevenue = findValueByLabels(map, ['RECEITA BRUTA OPERACIONAL'], { fromLine: dreLine });
+    values.serviceRevenue = findValueByLabels(map, ['PRESTAÇÃO DE SERVIÇOS', 'PRESTACAO DE SERVICOS'], { fromLine: dreLine });
+    let simples = findValueByLabels(map, ['SIMPLES NACIONAL'], { fromLine: dreLine });
+    if (simples !== undefined) simples = Math.abs(simples);
+    values.simplesNacionalExpense = simples;
+    values.netRevenue = findValueByLabels(map, ['RECEITA OPERACIONAL LÍQUIDA', 'RECEITA OPERACIONAL LIQUIDA'], { fromLine: dreLine });
+    let costs = findValueByLabels(map, ['CUSTO DOS SERVIÇOS PRESTADOS', 'CUSTO DOS SERVICOS PRESTADOS'], { fromLine: dreLine });
+    if (costs !== undefined) costs = Math.abs(costs);
+    values.serviceCosts = costs;
+    values.grossProfit = findValueByLabels(map, ['LUCRO BRUTO'], { fromLine: dreLine });
+    let opEx = findValueByLabels(map, ['TOTAL DESPESAS OPERACIONAIS'], { fromLine: dreLine });
+    if (opEx !== undefined) opEx = Math.abs(opEx);
+    values.operatingExpenses = opEx;
+    let admin = findValueByLabels(map, ['DESPESAS ADMINISTRATIVAS'], { fromLine: dreLine });
+    if (admin !== undefined) admin = Math.abs(admin);
+    values.adminExpenses = admin;
+    let prol = findValueByLabels(map, ['Pro-Labore', 'Pró-Labore'], { fromLine: dreLine });
+    if (prol !== undefined) prol = Math.abs(prol);
+    values.proLabore = prol;
+    let pj = findValueByLabels(map, ['Serviços Prestados PJ', 'Servicos Prestados PJ'], { fromLine: dreLine });
+    if (pj !== undefined) pj = Math.abs(pj);
+    values.pjServices = pj;
+    let tax = findValueByLabels(map, ['DESPESAS TRIBUTARIAS', 'DESPESAS TRIBUTÁRIAS'], { fromLine: dreLine });
+    if (tax !== undefined) tax = Math.abs(tax);
+    values.taxExpenses = tax;
+    values.financialResult = findValueByLabels(map, ['RESULTADO FINANCEIRO LIQUIDO', 'RESULTADO FINANCEIRO LÍQUIDO'], { fromLine: dreLine });
+    let other = findValueByLabels(map, ['OUTRAS DESPESAS OPERACIONAIS'], { fromLine: dreLine });
+    if (other !== undefined) other = Math.abs(other);
+    values.otherOperatingExpenses = other;
+    values.netProfit = findValueByLabels(map, ['RESULTADO LÍQUIDO DO EXERCÍCIO', 'RESULTADO LIQUIDO DO EXERCICIO'], { fromLine: dreLine })
+      ?? findValueByLabels(map, ['RESULTADO LÍQUIDO ANTES DAS PROVISÕES', 'RESULTADO LIQUIDO ANTES DAS PROVISOES'], { fromLine: dreLine });
+
+    // Folha anual a partir de contas trabalhistas explícitas (somente DRE).
+    const payrollTargets = new Set<string>([
+      'decimo terceiro salario', '13 salario',
+      'f.g.t.s.', 'fgts',
+      'ferias', 'ordenados e gratificacoes',
+      'aviso previo', 'despesas c/ estagiarios', 'estagiarios',
+      'ajuda de custo', 'pro-labore',
+    ]);
+    const used = new Set<number>();
+    let payroll = 0; let payrollHits = 0;
+    for (const entry of map) {
+      if (entry.lineIndex < dreLine) continue;
+      if (used.has(entry.lineIndex)) continue;
+      if (!payrollTargets.has(normalizeLabelKey(entry.label))) continue;
+      payroll += Math.abs(entry.value);
+      payrollHits += 1;
+      used.add(entry.lineIndex);
+    }
+    if (payrollHits > 0) {
+      values.annualPayrollFromDre = Number(payroll.toFixed(2));
+      if (typeof values.grossRevenue === 'number') {
+        values.payrollPercentFromDre = pct(payroll, values.grossRevenue);
+        values.payrollPercent = values.payrollPercentFromDre;
+      }
+    }
+
+    if (typeof values.grossRevenue === 'number' && values.simplesNacionalExpense !== undefined) {
+      values.annualEffectiveTaxRate = pct(values.simplesNacionalExpense, values.grossRevenue);
+    }
+    if (typeof values.grossRevenue === 'number' && values.serviceCosts !== undefined) {
+      values.inputCostPercent = pct(values.serviceCosts, values.grossRevenue);
+    }
+    if (typeof values.grossRevenue === 'number' && values.grossProfit !== undefined) {
+      values.grossMargin = pct(values.grossProfit, values.grossRevenue);
+    }
+    if (typeof values.grossRevenue === 'number' && values.netProfit !== undefined) {
+      values.netMargin = pct(values.netProfit, values.grossRevenue);
+    }
+    values.revenue = values.grossRevenue;
+  } else {
+    warnings.push('Seção DRE não encontrada no documento.');
+  }
+
+  push(findings, documentType, 'cnpj', values.cnpj, 0.9, 'Balanço/DRE');
+  push(findings, documentType, 'assetsTotal', values.assetsTotal, 0.85, 'Balanço');
+  push(findings, documentType, 'equity', values.equity, 0.85, 'Balanço');
+  push(findings, documentType, 'afac', values.afac, 0.8, 'Balanço');
+  push(findings, documentType, 'grossRevenue', values.grossRevenue, 0.9, 'DRE');
+  push(findings, documentType, 'simplesNacionalExpense', values.simplesNacionalExpense, 0.85, 'DRE');
+  push(findings, documentType, 'netRevenue', values.netRevenue, 0.85, 'DRE');
+  push(findings, documentType, 'serviceCosts', values.serviceCosts, 0.85, 'DRE');
+  push(findings, documentType, 'grossProfit', values.grossProfit, 0.85, 'DRE');
+  push(findings, documentType, 'operatingExpenses', values.operatingExpenses, 0.85, 'DRE');
+  push(findings, documentType, 'netProfit', values.netProfit, 0.85, 'DRE');
+  push(findings, documentType, 'inputCostPercent', values.inputCostPercent, 0.85, 'DRE');
+  push(findings, documentType, 'grossMargin', values.grossMargin, 0.8, 'DRE');
+  push(findings, documentType, 'netMargin', values.netMargin, 0.8, 'DRE');
+  push(findings, documentType, 'annualEffectiveTaxRate', values.annualEffectiveTaxRate, 0.85, 'DRE');
+  push(findings, documentType, 'annualPayrollFromDre', values.annualPayrollFromDre, 0.8, 'DRE');
+  push(findings, documentType, 'payrollPercentFromDre', values.payrollPercentFromDre, 0.8, 'DRE');
+
+  return { values, findings, warnings };
+}
+
 const summary = (values: ExtractedValues) => {
   const parts: string[] = [];
   if (typeof values.revenue === 'number') parts.push(`receita ${values.revenue}`);
@@ -81,53 +292,10 @@ function extract(documentType: string, text: string) {
   if (!text.trim()) warnings.push('Arquivo sem texto extraível.');
 
   if (documentType === 'dre' || documentType === 'balancete') {
-    const revenue = numberAfter(text, ['receita bruta', 'receita operacional bruta', 'faturamento bruto', 'receitas', 'receita']);
-    const costs = numberAfter(text, ['cmv', 'cpv', 'custo dos serviços', 'custo dos servicos', 'custos', 'compras']);
-    // Folha em DRE: itera linha-a-linha somando contas trabalhistas explícitas
-    // UMA única vez por linha de origem, evitando que variantes do mesmo rótulo
-    // dupliquem a mesma conta (ex.: "Decimo Terceiro" e "Décimo Terceiro").
-    const payrollTargets = new Set<string>([
-      'decimo terceiro salario', '13 salario',
-      'f.g.t.s.', 'fgts',
-      'ferias', 'ordenados e gratificacoes',
-      'aviso previo', 'despesas c/ estagiarios', 'estagiarios',
-      'ajuda de custo', 'pro-labore',
-    ]);
-    const normLbl = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s./()-]/g,'').replace(/\s+/g,' ').trim();
-    const _lines = text.replace(/\r/g,'\n').split('\n').map(l=>l.trim());
-    let payroll = 0; let payrollHits = 0;
-    const usedLines = new Set<number>();
-    for (let i = 0; i < _lines.length; i += 1) {
-      const label = _lines[i];
-      if (!label || /\d/.test(label)) continue;
-      if (!payrollTargets.has(normLbl(label))) continue;
-      // Próxima linha numérica (até 3 linhas à frente).
-      for (let j = i + 1; j < Math.min(_lines.length, i + 4); j += 1) {
-        const nxt = _lines[j];
-        if (!nxt) continue;
-        if (!/^\(?-?\d{1,3}(?:\.\d{3})*,\d{2}\)?$/.test(nxt)) break;
-        const n = normalizeNumber(nxt.replace(/^\(|\)$/g,''));
-        if (n !== undefined && !usedLines.has(i)) {
-          payroll += Math.abs(n); payrollHits += 1; usedLines.add(i);
-        }
-        break;
-      }
-    }
-    const grossProfit = numberAfter(text, ['lucro bruto', 'resultado bruto']);
-    const expenses = numberAfter(text, ['despesas operacionais', 'despesas']);
-    const netProfit = numberAfter(text, ['lucro líquido', 'lucro liquido', 'resultado líquido', 'resultado liquido', 'resultado']);
-    values.revenue = revenue;
-    values.operatingExpenses = expenses;
-    values.netProfit = netProfit;
-    if (revenue && costs !== undefined) values.inputCostPercent = Number(((Math.abs(costs) / revenue) * 100).toFixed(2));
-    if (revenue && payrollHits > 0) {
-      values.annualPayrollFromDre = Number(payroll.toFixed(2));
-      values.payrollPercent = Number(((payroll / revenue) * 100).toFixed(2));
-    }
-    if (revenue && grossProfit !== undefined) values.grossMargin = Number(((grossProfit / revenue) * 100).toFixed(2));
-    push(findings, documentType, 'revenue', values.revenue, 0.8, documentType.toUpperCase());
-    push(findings, documentType, 'inputCostPercent', values.inputCostPercent, 0.78, documentType.toUpperCase());
-    push(findings, documentType, 'payrollPercent', values.payrollPercent, 0.65, documentType.toUpperCase());
+    const parsed = parseBalanceAndDre(text, documentType);
+    Object.assign(values, parsed.values);
+    findings.push(...parsed.findings);
+    warnings.push(...parsed.warnings);
   } else if (documentType === 'pgdas') {
     values.grossRevenue12m = numberAfter(text, ['rbt12', 'receita bruta acumulada', 'receita bruta total dos últimos 12 meses', 'receita bruta total dos ultimos 12 meses'], 10);
     values.revenue = numberAfter(text, ['receita bruta do pa', 'receita mensal', 'receita do período', 'receita do periodo'], 10);
