@@ -4,8 +4,10 @@ import {
   extractAllNumbers,
   extractCnpj,
   extractNumberAfterLabel,
+  findFirstLineByLabels,
   findSectionLine,
   findValueByLabels,
+  normalizeLabel,
   normalizeNumber,
   pushFinding,
   summarizeExtractedValues,
@@ -226,7 +228,19 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
   const map = buildLineLabelValueMap(text);
   const activoLine = findSectionLine(text, ['A T I V O', 'BALANÇO PATRIMONIAL']);
   const passivoLine = findSectionLine(text, ['P A S S I V O']);
-  const dreLine = findSectionLine(text, ['DEMONSTRAÇÃO DO RESULTADO', 'DEMONSTRACAO DO RESULTADO']);
+  const dreMarkers = [
+    'RECEITA BRUTA OPERACIONAL',
+    'PRESTAÇÃO DE SERVIÇOS',
+    'PRESTACAO DE SERVICOS',
+    'CUSTO DOS SERVIÇOS PRESTADOS',
+    'CUSTO DOS SERVICOS PRESTADOS',
+    'LUCRO BRUTO',
+    'RESULTADO LÍQUIDO DO EXERCÍCIO',
+    'RESULTADO LIQUIDO DO EXERCICIO',
+  ];
+  const headingDreLine = findSectionLine(text, ['DEMONSTRAÇÃO DO RESULTADO', 'DEMONSTRACAO DO RESULTADO']);
+  const firstDreAccountLine = findFirstLineByLabels(map, dreMarkers);
+  const dreLine = headingDreLine >= 0 ? headingDreLine : firstDreAccountLine;
 
   const ativoEnd = passivoLine > 0 ? passivoLine : (dreLine > 0 ? dreLine : undefined);
   const passivoEnd = dreLine > 0 ? dreLine : undefined;
@@ -274,7 +288,7 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
   }
 
   // ---- DRE ----
-  if (dreLine > 0) {
+  if (dreLine >= 0) {
     values.grossRevenue = findValueByLabels(map, ['RECEITA BRUTA OPERACIONAL'], { fromLine: dreLine });
     values.serviceRevenue = findValueByLabels(map, ['PRESTAÇÃO DE SERVIÇOS', 'PRESTACAO DE SERVICOS'], { fromLine: dreLine });
     values.simplesNacionalExpense = findValueByLabels(map, ['SIMPLES NACIONAL'], { fromLine: dreLine });
@@ -315,20 +329,13 @@ export function parseBalanceAndDreDocument(text: string, documentType = 'dre'): 
       'ajuda de custo',
       'pro-labore',
     ]);
-    const normLabel = (s: string) => s
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9\s./()-]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
     const usedLines = new Set<number>();
     let payrollSum = 0;
     let payrollHits = 0;
     for (const entry of map) {
       if (entry.lineIndex < dreLine) continue;
       if (usedLines.has(entry.lineIndex)) continue;
-      if (!payrollTargets.has(normLabel(entry.label))) continue;
+      if (!payrollTargets.has(normalizeLabel(entry.label))) continue;
       payrollSum += Math.abs(entry.value);
       payrollHits += 1;
       usedLines.add(entry.lineIndex);
