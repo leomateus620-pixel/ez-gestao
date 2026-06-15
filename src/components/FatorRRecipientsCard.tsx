@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useState } from 'react';
 import { Mail, Plus, Save, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -180,7 +181,7 @@ export function FatorRRecipientsCard() {
             <Mail className="h-4 w-4" /> Envio automático de alertas
           </h3>
           <p className="text-sm text-foreground/75 mt-1">
-            Cada empresa abaixo recebe os alertas de Fator R nos e-mails cadastrados. PDFs com Fator R ≤ 28% disparam alerta crítico; ≤ 32% disparam alerta preventivo.
+            Cada empresa abaixo recebe os alertas de Fator R nos e-mails cadastrados. PDFs com Fator R abaixo de 28% disparam alerta crítico; entre 28% e 32% disparam alerta preventivo.
           </p>
           {withoutEmail > 0 && (
             <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">

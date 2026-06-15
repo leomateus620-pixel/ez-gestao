@@ -1,8 +1,17 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
-import { getFatorRRecommendation, parsePgdasFatorR, type FatorRStatus } from "../_shared/fatorRParser.ts";
+import {
+  FATOR_R_PROCESSING_TIMEOUT_MS,
+  FATOR_R_VALID_CONFIDENCE_THRESHOLD,
+  cnpjMatchesExpected,
+  getFatorRRecommendation,
+  isValidFatorROperationalResult,
+  parsePgdasFatorR,
+  type FatorRStatus,
+} from "../_shared/fatorRParser.ts";
 import { computeSha256, moveFileToFolder, resolveAnalyzedFolder } from "../_shared/fator-r-drive-storage.ts";
 
 const DRIVE_GW = "https://connector-gateway.lovable.dev/google_drive/drive/v3";
@@ -15,11 +24,26 @@ const reqEnv = (name: string) => {
   return value;
 };
 const gwHeaders = (driveKey: string, lovableKey: string) => ({ Authorization: `Bearer ${lovableKey}`, "X-Connection-Api-Key": driveKey, "Content-Type": "application/json" });
-const shouldSendAlert = (status: FatorRStatus, confidence: number) => (status === "attention" || status === "critical") && confidence >= 0.75;
+const shouldSendAlert = (status: FatorRStatus, confidence: number) => (status === "attention" || status === "critical") && confidence >= FATOR_R_VALID_CONFIDENCE_THRESHOLD;
 const formatMoney = (value: number | null) => value === null ? "-" : value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const formatPercent = (value: number | null) => value === null ? "-" : `${value.toFixed(2)}%`;
 const formatPeriod = (parsed: any) => parsed.period ?? (parsed.referenceMonth && parsed.referenceYear ? `${String(parsed.referenceMonth).padStart(2, "0")}/${parsed.referenceYear}` : "Periodo nao identificado");
 const statusLabel = (status: FatorRStatus) => ({ critical: "Critico", attention: "Atencao", safe: "OK", not_applicable: "Nao se aplica", parse_error: "Erro de leitura", unknown: "Erro de leitura" }[status]);
+const isStorageReady = (status: string) => status === "analyzed" || status === "skipped_duplicate" || status === "drive_native";
+
+async function withProcessingTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+  let timeoutId: number | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(message)), FATOR_R_PROCESSING_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 
 async function extractPdf(bytes: Uint8Array) {
   try {
@@ -143,14 +167,53 @@ serve(async (req) => {
         if (!dl.ok) throw new Error(`download_failed_${dl.status}`);
         const bytes = new Uint8Array(await dl.arrayBuffer());
         const fileHash = await computeSha256(bytes);
-        const rawText = await extractPdf(bytes);
+        const rawText = await withProcessingTimeout(
+          extractPdf(bytes),
+          "Tempo limite de 20 segundos excedido ao extrair texto do PGDAS.",
+        );
         await logStep(supabase, { documentId, eventType: "pdf_text_extracted", message: `Texto extraido de ${file.name}`, data: { raw_text_preview: rawText.slice(0, 1000), file_hash: fileHash } });
 
         const parsed = parsePgdasFatorR(rawText, file.name);
         const status = parsed.status;
-        const alert = shouldSendAlert(status, parsed.confidence);
+        let alert = shouldSendAlert(status, parsed.confidence);
         await logStep(supabase, { documentId, eventType: "pgdas_fields_parsed", message: `Campos PGDAS interpretados em ${file.name}`, data: parsed });
         await logStep(supabase, { documentId, eventType: "fator_r_classified", message: `Fator R classificado como ${status}`, data: { status, confidence: parsed.confidence } });
+
+        if (file.sourceCompanyId) {
+          const { data: expectedCompany } = await supabase
+            .from("fator_r_companies")
+            .select("id,name,cnpj,normalized_cnpj")
+            .eq("id", file.sourceCompanyId)
+            .maybeSingle();
+          const expectedCnpj = expectedCompany?.normalized_cnpj ?? expectedCompany?.cnpj ?? null;
+          const detectedCnpj = parsed.cnpj ?? parsed.cnpjBase;
+          if (expectedCnpj && (!detectedCnpj || !cnpjMatchesExpected(detectedCnpj, expectedCnpj))) {
+            const message = `CNPJ do PGDAS (${detectedCnpj ?? "nao identificado"}) diverge da empresa vinculada a pasta (${expectedCompany?.name ?? file.sourceCompanyId}).`;
+            await supabase.from("fator_r_documents").update({
+              company_id: file.sourceCompanyId,
+              user_id: syncUserId,
+              file_hash: fileHash,
+              file_month: parsed.referenceMonth,
+              file_year: parsed.referenceYear,
+              detected_cnpj: detectedCnpj,
+              detected_company_name: parsed.companyName,
+              extraction_confidence: parsed.confidence,
+              declared_fator_r: parsed.declaredFatorRValue,
+              computed_fator_r: parsed.computedFatorRValue,
+              fator_r_status: "parse_error",
+              not_applicable: parsed.notApplicable,
+              raw_text: rawText.slice(0, 20000),
+              parse_json: parsed,
+              extracted_data: { ...parsed, cnpj_divergence: true, expected_cnpj: expectedCnpj, detected_cnpj: detectedCnpj },
+              processing_status: "failed",
+              error_message: message,
+              processed_at: new Date().toISOString(),
+            }).eq("id", documentId);
+            await logStep(supabase, { documentId, companyId: file.sourceCompanyId, eventType: "cnpj_divergence_detected", message, data: { expected_cnpj: expectedCnpj, detected_cnpj: detectedCnpj } });
+            results.push({ fileName: file.name, status: "parse_error", companyId: file.sourceCompanyId, documentId, movedToAnalyzed: false, alert: false, error: message });
+            continue;
+          }
+        }
 
         const normalizedCnpj = parsed.cnpj?.replace(/\D/g, "") ?? parsed.cnpjBase?.replace(/\D/g, "") ?? null;
         if (!companyId && normalizedCnpj) {
@@ -184,7 +247,7 @@ serve(async (req) => {
         let driveWebUrl = file.webViewLink ?? null;
         let storageStatus = duplicateDocument ? "skipped_duplicate" : "drive_native";
 
-        if (status !== "parse_error" && status !== "unknown") {
+        if (isValidFatorROperationalResult(parsed)) {
           try {
             const analyzed = await resolveAnalyzedFolder({
               supabase,
@@ -216,6 +279,19 @@ serve(async (req) => {
           }
         }
 
+        const storageError = storageStatus === "failed"
+          ? "PGDAS interpretado, mas houve falha ao mover para Analisados; resultado nao consolidado."
+          : null;
+        const operationalResult = isValidFatorROperationalResult(parsed) && isStorageReady(storageStatus);
+        if (!operationalResult) alert = false;
+        const docStatus = operationalResult ? status : "parse_error";
+        const processingStatus = duplicateDocument
+          ? "duplicate"
+          : operationalResult
+            ? "processed"
+            : "failed";
+        const processingError = operationalResult ? null : storageError ?? parsed.errors?.[0] ?? "Leitura inconclusiva; resultado enviado para revisao manual.";
+
         await supabase.from("fator_r_documents").update({
           company_id: companyId,
           user_id: syncUserId,
@@ -227,7 +303,7 @@ serve(async (req) => {
           extraction_confidence: parsed.confidence,
           declared_fator_r: parsed.declaredFatorRValue,
           computed_fator_r: parsed.computedFatorRValue,
-          fator_r_status: status,
+          fator_r_status: docStatus,
           not_applicable: parsed.notApplicable,
           rpa: parsed.rpa,
           rbt12: parsed.rbt12,
@@ -245,13 +321,14 @@ serve(async (req) => {
           drive_processed_folder_id: driveProcessedFolderId,
           cloud_storage_path: processedPath,
           storage_status: storageStatus,
-          extracted_data: { ...parsed, source_folder_id: file.sourceFolderId, moved_to_analyzed: movedToAnalyzed, duplicate_document_id: duplicateDocument?.id ?? null },
-          processing_status: duplicateDocument ? "duplicate" : "processed",
+          extracted_data: { ...parsed, source_folder_id: file.sourceFolderId, moved_to_analyzed: movedToAnalyzed, duplicate_document_id: duplicateDocument?.id ?? null, operational_result: operationalResult },
+          processing_status: processingStatus,
+          error_message: processingError,
           processed_at: new Date().toISOString(),
         }).eq("id", documentId);
 
         let monthlyResultId = null;
-        if (companyId && parsed.referenceMonth && parsed.referenceYear && status !== "parse_error" && status !== "unknown") {
+        if (companyId && parsed.referenceMonth && parsed.referenceYear && operationalResult) {
           const { data: company } = await supabase.from("fator_r_companies").select("*").eq("id", companyId).single();
           const upsert = await supabase.from("fator_r_monthly_results").upsert({
             company_id: companyId,
@@ -317,13 +394,20 @@ serve(async (req) => {
           }
         }
 
-        await logStep(supabase, { documentId, companyId, eventType: "file_processed", message: `Arquivo ${file.name} processado com sucesso.`, data: { moved_to_analyzed: movedToAnalyzed, status } });
-        results.push({ fileName: file.name, status, companyId, documentId, movedToAnalyzed, alert });
-        processed += 1;
+        await logStep(supabase, {
+          documentId,
+          companyId,
+          eventType: operationalResult ? "file_processed" : "file_processing_blocked",
+          message: operationalResult ? `Arquivo ${file.name} processado com sucesso.` : processingError,
+          data: { moved_to_analyzed: movedToAnalyzed, status: docStatus, operational_result: operationalResult },
+        });
+        results.push({ fileName: file.name, status: docStatus, companyId, documentId, movedToAnalyzed, alert, error: processingError });
+        if (operationalResult) processed += 1;
       } catch (error) {
-        await supabase.from("fator_r_documents").update({ processing_status: "failed", fator_r_status: "parse_error", error_message: "Nao foi possivel processar este PDF." }).eq("id", documentId);
-        await logStep(supabase, { documentId, companyId, eventType: "pdf_processing_failed", message: error instanceof Error ? error.message : String(error), data: { file_name: file.name } });
-        results.push({ fileName: file.name, status: "parse_error", movedToAnalyzed: false, alert: false });
+        const message = error instanceof Error ? error.message : String(error);
+        await supabase.from("fator_r_documents").update({ processing_status: "failed", fator_r_status: "parse_error", error_message: message }).eq("id", documentId);
+        await logStep(supabase, { documentId, companyId, eventType: "pdf_processing_failed", message, data: { file_name: file.name } });
+        results.push({ fileName: file.name, status: "parse_error", movedToAnalyzed: false, alert: false, error: message });
       }
     }
 

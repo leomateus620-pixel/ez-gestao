@@ -41,7 +41,7 @@ Parser em `src/services/fatorRParser.ts` trabalha por linhas/seções do PGDAS e
 - FS12 preferencialmente pela seção `2.3.1) Total de Folhas de Salários Anteriores (R$)`, sem capturar meses/valores mensais da tabela.
 - `Fator r = Não se aplica` vira status `not_applicable`, com alta confiança, sem alerta e card "Não se aplica ao Fator R".
 - `Fator r = 0,31 - Anexo III` e `Fator r = 0,28 - Anexo III` são lidos apenas da seção 2.4; a alíquota presente no nome do arquivo não é usada como Fator R.
-- Quando há FS12 e RBT12, calcula `computedFatorRValue = FS12 / RBT12` e mantém o valor declarado pelo PGDAS quando disponível.
+- Quando há FS12 e RBT12, calcula `computedFatorRValue = FS12 / RBT12` apenas como conferência; se o PGDAS não declara `Fator r`, a leitura fica inconclusiva e não alimenta resultado mensal.
 - Também extrai Anexo, DAS total e reconhecimento de pagamento quando o texto do PGDAS traz essas informações.
 
 ## Alertas e deduplicação
@@ -71,7 +71,7 @@ Além da rotina agendada via Drive, a tela **Monitoramento de Fator R** possui a
 1. O usuário seleciona um ou mais PDFs no navegador.
 2. A tela envia cada arquivo para a Edge Function `fator-r-process-upload`; o frontend não usa `file.text()` para interpretar PDF.
 3. A função extrai o texto nativo do PDF com `unpdf`; se a extração falhar, retorna erro técnico claro em vez de resultado falso com baixa confiança.
-4. Quando o Fator R fica em faixa crítica (`<= 0,28`) ou de atenção (`<= 0,32`), a função cria alerta e chama `fator-r-send-alert`.
+4. Quando o Fator R fica em faixa crítica (`< 0,28`) ou de atenção (`>= 0,28` e `< 0,32`), a função cria alerta e chama `fator-r-send-alert`.
 5. Quando `persist` está ativo, o processamento também registra documento, resultado mensal, alerta e log nas tabelas `fator_r_*`.
 6. Quando o Drive está configurado, o PDF validado fica salvo na pasta `Analisados`.
 
@@ -85,4 +85,4 @@ Além da rotina agendada via Drive, a tela **Monitoramento de Fator R** possui a
 O teste do parser usa fixtures textuais extraídas dos PDFs reais:
 - `042026 SERV. 7,43%.pdf`: `not_applicable`, sem e-mail.
 - `042026 SERV. 7,36%.pdf`: `attention`, e-mail preventivo em dry-run.
-- `042026 SERV. 6,43%.pdf`: `critical`, e-mail urgente em dry-run.
+- caso abaixo de 28%: `critical`, e-mail urgente em dry-run.

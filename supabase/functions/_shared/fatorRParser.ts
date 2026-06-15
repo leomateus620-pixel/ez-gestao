@@ -1,4 +1,5 @@
 export type FatorRStatus = 'critical' | 'attention' | 'safe' | 'not_applicable' | 'parse_error' | 'unknown';
+export type FatorRReadingSource = 'pgdas' | 'manual' | 'unknown';
 
 export interface FatorRParseResult {
   companyName: string | null;
@@ -19,6 +20,9 @@ export interface FatorRParseResult {
   shouldSendEmail: boolean;
   alertReason: string | null;
   sourceFileName: string;
+  applies: boolean;
+  source: FatorRReadingSource;
+  errors: string[];
 
   // Backward-compatible aliases used by the current UI and Edge Functions.
   fatorRValue: number | null;
@@ -39,6 +43,8 @@ export interface FatorRParseResult {
 
 export const FATOR_R_CRITICAL_THRESHOLD = 0.28;
 export const FATOR_R_ATTENTION_THRESHOLD = 0.32;
+export const FATOR_R_VALID_CONFIDENCE_THRESHOLD = 0.7;
+export const FATOR_R_PROCESSING_TIMEOUT_MS = 20_000;
 
 const monthNames: Record<string, number> = {
   janeiro: 1,
@@ -111,6 +117,18 @@ const deriveCnpjBase = (cnpj: string | null) => {
   return formatCnpjBase(digits.slice(0, 8));
 };
 
+export function normalizeCnpjDigits(value?: string | null) {
+  const digits = value?.replace(/\D/g, '') ?? '';
+  return digits.length >= 8 ? digits : null;
+}
+
+export function cnpjMatchesExpected(detected?: string | null, expected?: string | null) {
+  const detectedDigits = normalizeCnpjDigits(detected);
+  const expectedDigits = normalizeCnpjDigits(expected);
+  if (!detectedDigits || !expectedDigits) return true;
+  return detectedDigits.slice(0, 8) === expectedDigits.slice(0, 8);
+}
+
 export function extractCompanyName(lines: string[]) {
   for (const line of lines) {
     const match = line.match(/Nome\s+Empresarial\s*:\s*(.+)$/i) || line.match(/Raz[aã]o\s+Social\s*:\s*(.+)$/i);
@@ -142,8 +160,8 @@ export function extractCnpj(lines: string[]) {
 export function extractReferencePeriod(lines: string[]) {
   const text = lines.join(' ');
   const numeric = text.match(/Per[ií]odo\s+de\s+Apura[cç][aã]o\s*\(PA\)\s*:\s*(0?[1-9]|1[0-2])\/(20\d{2})/i)
-    || text.match(/(?:\bPA\b|compet[eê]ncia|refer[eê]ncia)[^\d]{0,20}(0?[1-9]|1[0-2])[\/\-_\s](20\d{2})/i)
-    || text.match(/(?:\bPA\b|compet[eê]ncia|refer[eê]ncia)[^\d]{0,20}(20\d{2})[\/\-_\s](0?[1-9]|1[0-2])/i);
+    || text.match(/(?:\bPA\b|compet[eê]ncia|refer[eê]ncia)[^\d]{0,20}(0?[1-9]|1[0-2])[/_\s-](20\d{2})/i)
+    || text.match(/(?:\bPA\b|compet[eê]ncia|refer[eê]ncia)[^\d]{0,20}(20\d{2})[/_\s-](0?[1-9]|1[0-2])/i);
   if (numeric) {
     const first = Number(numeric[1]);
     const second = Number(numeric[2]);
@@ -239,7 +257,7 @@ export function extractFs12(lines: string[]) {
 export function extractFatorR(lines: string[]) {
   for (let index = 0; index < lines.length; index += 1) {
     const windowText = `${lines[index]} ${lines[index + 1] ?? ''}`;
-    const match = windowText.match(/Fator\s*r\s*=\s*(N[aã]o\s+se\s+aplica|\d{1,3}(?:[\.,]\d{1,4})?\s*%?)(?:\s*-\s*Anexo\s+([IVXLCDM]+))?/i);
+    const match = windowText.match(/Fator\s*r\s*=\s*(N[aã]o\s+se\s+aplica|\d{1,3}(?:[.,]\d{1,4})?\s*%?)(?:\s*-\s*Anexo\s+([IVXLCDM]+))?/i);
     if (!match?.[1]) continue;
     if (/n[aã]o\s+se\s+aplica/i.test(match[1])) return { fatorRValue: null, notApplicable: true, anexo: null };
     return { fatorRValue: parseBrazilianDecimal(match[1]), notApplicable: false, anexo: match[2] ?? null };
@@ -276,32 +294,44 @@ export function extractActivitySubjectToFatorR(lines: string[]) {
 }
 
 export function classifyFatorR(input: number | null | Pick<FatorRParseResult, 'fatorRValue' | 'notApplicable'>): FatorRStatus {
-  if (typeof input === 'object' && input !== null && input.notApplicable) return 'not_applicable';
-  const value = typeof input === 'object' && input !== null ? input.fatorRValue : input;
+  let value: number | null;
+  if (input !== null && typeof input === 'object') {
+    if (input.notApplicable) return 'not_applicable';
+    value = input.fatorRValue;
+  } else if (typeof input === 'number') {
+    value = input;
+  } else {
+    value = null;
+  }
   if (value === null || !Number.isFinite(value)) return 'parse_error';
-  if (value <= FATOR_R_CRITICAL_THRESHOLD) return 'critical';
-  if (value <= FATOR_R_ATTENTION_THRESHOLD) return 'attention';
+  if (value < FATOR_R_CRITICAL_THRESHOLD) return 'critical';
+  if (value < FATOR_R_ATTENTION_THRESHOLD) return 'attention';
   return 'safe';
 }
 
 export function getFatorRRecommendation(status: FatorRStatus) {
-  if (status === 'critical') return 'Indice critico: revisar imediatamente pro-labore, folha e encargos para buscar Fator R acima de 28%.';
-  if (status === 'attention') return 'Indice em atencao: alerta preventivo para avaliar pro-labore/folha antes do fechamento.';
-  if (status === 'safe') return 'Fator R acima da faixa de atencao; manter acompanhamento mensal.';
-  if (status === 'not_applicable') return 'Este PGDAS informa que o Fator R nao se aplica para esta apuracao.';
-  return 'Nao foi possivel processar este PDF.';
+  if (status === 'critical') return 'Fator R abaixo do limite. Avaliar ajuste de folha/pro-labore.';
+  if (status === 'attention') return 'Fator R proximo do limite. Monitorar folha/pro-labore.';
+  if (status === 'safe') return 'Fator R em margem segura.';
+  if (status === 'not_applicable') return 'Documento informa que Fator R nao se aplica para esta apuracao.';
+  return 'Nao foi possivel identificar Fator R no documento.';
 }
 
 const getAlertReason = (status: FatorRStatus, fatorRValue: number | null) => {
   if (status === 'critical') {
-    if (fatorRValue !== null && fatorRValue < FATOR_R_CRITICAL_THRESHOLD) return 'Fator R abaixo do limite minimo de 28%.';
-    return 'Fator R no limite minimo de 28%.';
+    return 'Fator R abaixo do limite minimo de 28%.';
   }
-  if (status === 'attention') return 'Fator R menor ou igual a 32% e proximo do limite minimo de 28%.';
+  if (status === 'attention') return 'Fator R entre 28% e 32%; monitorar folha/pro-labore.';
   if (status === 'not_applicable') return 'Atividade nao sujeita ao Fator R nesta apuracao.';
   if (status === 'safe') return null;
   return 'Nao foi possivel identificar o Fator R no PGDAS.';
 };
+
+export function isValidFatorROperationalResult(result: Pick<FatorRParseResult, 'status' | 'confidence'>) {
+  return result.confidence >= FATOR_R_VALID_CONFIDENCE_THRESHOLD
+    && result.status !== 'parse_error'
+    && result.status !== 'unknown';
+}
 
 export function parsePgdasFatorR(rawText: string, fileName = ''): FatorRParseResult {
   const lines = splitPdfLines(`${fileName}\n${rawText}`);
@@ -311,7 +341,9 @@ export function parsePgdasFatorR(rawText: string, fileName = ''): FatorRParseRes
   const { referenceMonth, referenceYear, period } = extractReferencePeriod(lines);
   const rpa = extractRpa(lines);
   const revenue12m = extractRbt12(lines);
-  let { payroll12m, folhaAusente } = extractFs12(lines);
+  const fs12 = extractFs12(lines);
+  let { payroll12m } = fs12;
+  const { folhaAusente } = fs12;
   const declared = extractFatorR(lines);
   const dasTotal = extractDasTotal(lines);
   const paymentRecognized = extractPaymentRecognized(lines);
@@ -323,8 +355,9 @@ export function parsePgdasFatorR(rawText: string, fileName = ''): FatorRParseRes
   }
 
   const computedFatorRValue = payroll12m !== null && revenue12m !== null && revenue12m > 0 ? payroll12m / revenue12m : null;
-  const fatorRValue = declared.fatorRValue ?? computedFatorRValue;
+  const fatorRValue = declared.fatorRValue;
   const notApplicable = declared.notApplicable;
+  const errors: string[] = [];
 
   if (!companyName) warnings.push('Empresa nao identificada automaticamente.');
   if (!cnpjBase) warnings.push('CNPJ basico nao identificado automaticamente.');
@@ -333,7 +366,14 @@ export function parsePgdasFatorR(rawText: string, fileName = ''): FatorRParseRes
   if (rpa === null) warnings.push('Receita Bruta do PA (RPA) nao identificada.');
   if (revenue12m === null) warnings.push('RBT12 nao identificado na secao de receita bruta acumulada.');
   if (payroll12m === null && !folhaAusente && !notApplicable) warnings.push('FS12 nao identificado na secao 2.3.1 de folhas de salarios anteriores.');
-  if (declared.fatorRValue === null && !notApplicable && computedFatorRValue === null) warnings.push('Fator R nao identificado e calculo por FS12/RBT12 indisponivel.');
+  if (declared.fatorRValue === null && !notApplicable) {
+    errors.push('Nao foi possivel identificar Fator R no documento.');
+    warnings.push(
+      computedFatorRValue === null
+        ? 'Fator R nao identificado e calculo por FS12/RBT12 indisponivel.'
+        : 'Fator R declarado nao identificado; valor calculado por FS12/RBT12 mantido apenas como conferencia.',
+    );
+  }
   if (declared.fatorRValue !== null && computedFatorRValue !== null && Math.abs(declared.fatorRValue - computedFatorRValue) > 0.005) {
     warnings.push('Fator R declarado difere do calculo interno; provavel arredondamento/criterio do PGDAS.');
   }
@@ -347,23 +387,24 @@ export function parsePgdasFatorR(rawText: string, fileName = ''): FatorRParseRes
     revenue12m !== null,
     dasTotal !== null,
     paymentRecognized !== null,
-    declared.fatorRValue !== null || notApplicable || computedFatorRValue !== null,
+    declared.fatorRValue !== null || notApplicable,
   ].filter(Boolean).length;
   const confidence = status === 'parse_error'
     ? Math.min(0.68, 0.25 + fieldsFound * 0.05)
     : Math.min(0.98, Math.max(0.9, 0.62 + fieldsFound * 0.045));
 
-  const source = declared.fatorRValue !== null && computedFatorRValue !== null
+  const parserSource = declared.fatorRValue !== null && computedFatorRValue !== null
     ? 'declared_pgdas_and_computed_check'
     : declared.fatorRValue !== null
       ? 'declared_pgdas'
       : computedFatorRValue !== null
-        ? 'computed_from_fs12_rbt12'
+        ? 'computed_check_without_declared_fator_r'
         : notApplicable
           ? 'declared_pgdas_not_applicable'
           : 'parse_error';
+  const source: FatorRReadingSource = status === 'parse_error' ? 'unknown' : 'pgdas';
 
-  const shouldSendEmail = (status === 'attention' || status === 'critical') && confidence >= 0.75;
+  const shouldSendEmail = (status === 'attention' || status === 'critical') && confidence >= FATOR_R_VALID_CONFIDENCE_THRESHOLD;
   const alertReason = getAlertReason(status, fatorRValue);
   const fatorRPercent = fatorRValue !== null ? Number((fatorRValue * 100).toFixed(6)) : null;
   const declaredFatorRPercent = declared.fatorRValue !== null ? Number((declared.fatorRValue * 100).toFixed(6)) : null;
@@ -388,6 +429,9 @@ export function parsePgdasFatorR(rawText: string, fileName = ''): FatorRParseRes
     shouldSendEmail,
     alertReason,
     sourceFileName: fileName,
+    applies: activitySubjectToFatorR ?? !notApplicable,
+    source,
+    errors,
     fatorRValue,
     declaredFatorRValue: declared.fatorRValue,
     declaredFatorRPercent,
@@ -402,7 +446,7 @@ export function parsePgdasFatorR(rawText: string, fileName = ''): FatorRParseRes
     confidence,
     warnings,
     metadata: {
-      source,
+      source: parserSource,
       declaredFatorR: declared.fatorRValue,
       computedFatorR: computedFatorRValue,
       rpa,
