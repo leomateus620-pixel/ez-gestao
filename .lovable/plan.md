@@ -1,39 +1,65 @@
-## Diagnóstico
+## Objetivo
+Revalidar no Lovable Cloud o endurecimento do módulo Fator R sem alterar UI, rotas, tabelas ou nomes de Edge Functions. Apenas reimplantar as funções, rodar testes reais e produzir relatório.
 
-**1. Faturamento projetado 12 meses**
-- Campo aparece em `CompanyForm` (linha 524 de `TaxReformWorkspace.tsx`) e é capturado no estado `form.projectedRevenue`, persistido em `tax_reform_companies.projected_revenue`.
-- Usuário não quer mais esse campo no cadastro.
+## Etapas
 
-**2. Contraste do formulário**
-- `Label` usa `text-[hsl(var(--text-secondary))]` e `Input` usa `bg-[hsla(var(--surface-panel-strong))]` com placeholder em `text-[hsl(var(--text-tertiary))]`.
-- No fundo creme da tela (GlassCard) os rótulos e placeholders ficam quase invisíveis, conforme o print enviado.
-- Precisamos reforçar o contraste do rótulo (usar `--text-primary` ou peso/opacidade maior) e do placeholder dos inputs neste formulário, sem mexer no design system global.
+### 1. Reimplantação
+- Reimplantar `fator-r-process-upload` e `fator-r-drive-sync` via `supabase--deploy_edge_functions`.
+- Conferir via `code--view` que ambas importam de `supabase/functions/_shared/fatorRParser.ts` (parser compartilhado).
 
-**3. Persistência no Cloud**
-- `upsertCompany` (linha 1519) atualiza apenas o estado local.
-- O `useEffect` da linha 1439 detecta a mudança no `store` e chama `saveTaxReformStore(derived)` (debounce 700ms), que executa `upsertTaxReformCompany` no Supabase.
-- Fluxo está correto, mas vamos confirmar editando um campo da empresa Zimmermann (rbt12, alíquota e responsável) e checando o registro em `tax_reform_companies` após o debounce. Se houver falha, ajustamos o tratamento de erro.
+### 2. Inspeção do parser e regras
+- Ler `_shared/fatorRParser.ts` para confirmar:
+  - faixas: `>=0,32` OK, `>=0,28 && <0,32` atenção, `<0,28` crítico;
+  - `Não se aplica` retorna `not_applicable` sem alerta;
+  - ausência de campo Fator R → `parse_error`/inconclusivo, sem inventar percentual e sem consolidar `fator_r_monthly_results`;
+  - confiança mínima e timeout de 20s aplicados em `fator-r-process-upload`.
 
-## Alterações
+### 3. Testes funcionais reais
+Para cada PDF abaixo, chamar `fator-r-process-upload` (com `persist=true` quando indicado) e verificar resposta + tabelas:
 
-1. **Remover campo "Faturamento projetado 12 meses"**
-   - Tirar o input da grade do `CompanyForm`.
-   - Remover `projectedRevenue` do estado `form`, do `useEffect` de sincronização e do payload de `onSave`.
-   - Manter o campo `projectedRevenue` no tipo `TaxReformCompany` e na persistência (coluna existe no banco) — apenas não enviamos mais valor pelo formulário. Isso evita migração e mantém compatibilidade com dados antigos.
+| Caso | PDF (fixture/real) | Esperado |
+|---|---|---|
+| A | Fator R > 32% | status `safe`, sem alerta |
+| B | 28% ≤ Fator R < 32% | status `attention`, alerta atenção |
+| C | Fator R < 28% | status `critical`, alerta urgente |
+| D | "Fator r = Não se aplica" | status `not_applicable`, sem alerta |
+| E | PDF sem campo Fator R | status `parse_error`, sem `monthly_results`, sem alerta |
 
-2. **Corrigir contraste do formulário de empresa**
-   - Trocar os `Label` deste formulário (e do `SelectField` usado nele) para tom mais escuro: `text-[hsl(var(--text-primary))]` com `font-semibold`.
-   - Reforçar placeholders dos `Input` deste formulário com classe local `placeholder:text-[hsl(var(--text-secondary))]` para ficarem legíveis sobre o fundo claro.
-   - Sem mexer nos componentes globais `ui/input.tsx` e `ui/label.tsx` (evita afetar o resto do app).
+Usar `supabase--curl_edge_functions` com PDFs de teste presentes em `src/services/fatorRParser.test.ts`/fixtures. Quando faltar fixture real, gerar payload mínimo com o texto correspondente.
 
-3. **Validar gravação no Cloud**
-   - Após as alterações, abrir a empresa Zimmermann no preview, editar `rbt12`, `effectiveTaxRate` e `responsibleUser`, salvar e validar via `supabase--read_query` que a linha foi atualizada (`updated_at` mudou e valores batem).
-   - Se a gravação falhar, investigar via logs do navegador e ajustar `upsertTaxReformCompany`/tratamento de erros.
+### 4. Drive Sync
+- Disparar `fator-r-drive-sync` via curl.
+- Verificar com `supabase--read_query` em `fator_r_processing_logs`:
+  - CNPJ do documento confere com `fator_r_companies` vinculada;
+  - CNPJ divergente bloqueia gravação em `fator_r_monthly_results` e registra log de erro;
+  - falha em mover para `Analisados` não cria/atualiza resultado mensal.
 
-4. **Não mexer** em outros painéis, parsers, Edge Function ou no aviso já removido em ajustes anteriores.
+### 5. Validação no Supabase
+Consultas com `supabase--read_query`:
+- `fator_r_documents`: status por caso de teste.
+- `fator_r_monthly_results`: apenas leituras válidas (sem casos D/E).
+- `fator_r_alerts`: ausência de duplicatas (chave empresa+monthly_result+tipo+destinatário).
+- Histórico: leituras de meses diferentes não se sobrescrevem.
+- `fator_r_processing_logs`: presença dos eventos esperados.
+- `information_schema`/`pg_indexes`: confirmar constraints únicas:
+  - `fator_r_monthly_results (company_id, month, year)`
+  - `fator_r_alerts (company_id, monthly_result_id, alert_type, recipient_email)`
 
-## Validação
+### 6. Envio de alerta
+- Forçar `dryRun=true` (manter `FATOR_R_EMAIL_DRY_RUN`).
+- Confirmar via logs que somente `attention` e `critical` chamam `fator-r-send-alert`; `not_applicable` e `parse_error` não disparam.
 
-- Form do passo "Empresa" não mostra mais "Faturamento projetado".
-- Labels e placeholders nítidos no fundo claro.
-- Edição da empresa persiste no Cloud (confirmado por consulta na tabela).
+### 7. Sanidade UI
+- Abrir `/fator-r` via `browser--view_preview`; verificar console sem erros novos.
+
+### 8. Entrega
+Relatório final em chat com:
+- Funções reimplantadas e hashes/horário do deploy.
+- Tabela dos 5 PDFs testados × status esperado/obtido.
+- Resultado do Drive Sync (CNPJ ok, divergente bloqueado, move-fail isolado).
+- Consultas SQL executadas e contagens (documents, monthly_results, alerts, logs).
+- Confirmação explícita: (a) Fator R ausente não é inventado; (b) "Não se aplica" não gera alerta crítico; (c) constraints únicas presentes; (d) `/fator-r` sem erros de console.
+
+## Não-escopo
+- Sem mudanças de código, schema, UI, rotas ou rename de funções.
+- Sem novas migrations exceto se uma constraint obrigatória estiver faltando — neste caso, listar a lacuna no relatório e pedir aprovação antes de criar migration.
