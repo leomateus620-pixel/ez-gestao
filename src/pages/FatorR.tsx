@@ -54,7 +54,7 @@ const ALERT_TO = 'ricardo@escritoriozimmermann.com.br';
 const FATOR_R_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 const withProcessingTimeout = async <T,>(promise: Promise<T>, message: string): Promise<T> => {
-  let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
+  let timeoutId: number | undefined;
   try {
     return await Promise.race([
       promise,
@@ -63,7 +63,7 @@ const withProcessingTimeout = async <T,>(promise: Promise<T>, message: string): 
       }),
     ]);
   } finally {
-    if (timeoutId) window.clearTimeout(timeoutId);
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
   }
 };
 
