@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { GlassCard } from '@/components/GlassCard';
-import { type FatorRParseResult, type FatorRStatus } from '@/services/fatorRParser';
+import { FATOR_R_PROCESSING_TIMEOUT_MS, classifyFatorR, type FatorRParseResult, type FatorRStatus } from '@/services/fatorRParser';
 import { FatorRRecipientsCard } from '@/components/FatorRRecipientsCard';
 
 type EmailResult = {
@@ -51,6 +51,25 @@ type PdfCardData = {
 
 const ALERT_FROM = 'leomateus620@gmail.com';
 const ALERT_TO = 'ricardo@escritoriozimmermann.com.br';
+const FATOR_R_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+const withProcessingTimeout = async <T,>(promise: Promise<T>, message: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = window.setTimeout(() => reject(new Error(message)), FATOR_R_PROCESSING_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  }
+};
+
+const errorMessageFrom = (error: unknown, fallback: string) => (
+  error instanceof Error && error.message ? error.message : fallback
+);
 
 const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
@@ -94,8 +113,7 @@ const formatFatorR = (parsed?: Partial<FatorRParseResult> | null) => {
 const statusHeadline = (status: FatorRStatus, parsed?: Partial<FatorRParseResult> | null) => {
   if (status === 'not_applicable') return 'Não se aplica ao Fator R';
   if (status === 'critical') {
-    const fator = parsed?.fatorR ?? parsed?.fatorRValue ?? null;
-    return fator !== null && fator !== undefined && fator < 0.28 ? 'Crítico — Fator R abaixo do limite' : 'Crítico — Fator R no limite de 28%';
+    return 'Crítico — Fator R abaixo do limite';
   }
   if (status === 'attention') {
     const percent = parsed?.fatorRPercent ?? null;
@@ -172,7 +190,11 @@ function PdfResultCard({ card }: { card: PdfCardData }) {
         ))}
       </div>
 
-      {card.error && <p className="text-sm text-red-700 dark:text-red-300 mt-3 font-medium">Não foi possível processar este PDF.</p>}
+      {card.error && (
+        <p className="text-sm text-red-700 dark:text-red-300 mt-3 font-medium">
+          {card.error === 'parse_error' ? 'Não foi possível processar este PDF.' : card.error}
+        </p>
+      )}
       {!card.error && card.recommendation && <p className={`text-sm mt-3 font-medium ${card.status === 'critical' ? 'text-red-700 dark:text-red-300' : card.status === 'attention' ? 'text-amber-700 dark:text-amber-300' : 'text-foreground'}`}>{card.recommendation}</p>}
       <div className="flex items-center gap-2 text-sm mt-3 text-foreground/75 font-medium">
         <Archive className="h-3.5 w-3.5" />
@@ -211,7 +233,7 @@ export default function FatorR() {
 
   const documentCards = useMemo<PdfCardData[]>(() => documents.map((row) => {
     const parsed = parsedFromDocument(row);
-    const status = normalizeStatus(row.fator_r_status ?? parsed?.status ?? (row.processing_status === 'failed' ? 'parse_error' : null));
+    const status = normalizeStatus(row.processing_status === 'failed' ? 'parse_error' : row.fator_r_status ?? parsed?.status ?? null);
     const alert = status === 'attention' || status === 'critical';
     const movedToAnalyzed = row.storage_status === 'analyzed' || Boolean(row.drive_processed_file_id) || Boolean(row.extracted_data?.moved_to_analyzed);
     const emailLabel = row.email_status === 'sent'
@@ -231,7 +253,7 @@ export default function FatorR() {
       emailLabel,
       movedToAnalyzed,
       driveWebUrl: row.drive_web_url,
-      error: row.processing_status === 'failed' ? 'parse_error' : null,
+      error: row.error_message ?? (row.processing_status === 'failed' ? 'parse_error' : null),
     };
   }), [documents]);
 
@@ -261,13 +283,16 @@ export default function FatorR() {
   const runNow = async () => {
     setLoadingSync(true);
     try {
-      const { data, error } = await supabase.functions.invoke('fator-r-drive-sync', { body: { trigger: 'manual' } });
+      const { data, error } = await withProcessingTimeout(
+        supabase.functions.invoke('fator-r-drive-sync', { body: { trigger: 'manual' } }),
+        'Tempo limite de 20 segundos excedido ao processar a pasta do Drive.',
+      );
       if (error || data?.ok === false) throw error ?? new Error(data?.error ?? 'Falha no processamento');
       toast.success('Pasta do Drive processada.');
       await load();
     } catch (error) {
       toast.error('Não foi possível processar a pasta do Drive.', {
-        description: error instanceof Error ? error.message : 'Verifique a função fator-r-drive-sync.',
+        description: errorMessageFrom(error, 'Verifique a função fator-r-drive-sync.'),
       });
     } finally {
       setLoadingSync(false);
@@ -280,15 +305,29 @@ export default function FatorR() {
 
     const pdfs = selectedFiles.filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
     if (pdfs.length !== selectedFiles.length) toast.warning('Apenas arquivos PDF serão processados.');
-    if (!pdfs.length) return;
+    const validPdfs = pdfs.filter((file) => {
+      if (file.size === 0) {
+        toast.error(`${file.name}: arquivo vazio.`);
+        return false;
+      }
+      if (file.size > FATOR_R_MAX_UPLOAD_BYTES) {
+        toast.error(`${file.name}: arquivo muito grande.`, { description: 'Limite por PDF: 10MB.' });
+        return false;
+      }
+      return true;
+    });
+    if (!validPdfs.length) return;
 
     setProcessingManualPdfs(true);
     try {
-      const payloadFiles = await Promise.all(pdfs.map(async (file) => ({ name: file.name, base64: await fileToBase64(file) })));
+      const payloadFiles = await Promise.all(validPdfs.map(async (file) => ({ name: file.name, base64: await fileToBase64(file) })));
       const dryRun = (import.meta.env.VITE_FATOR_R_EMAIL_DRY_RUN as string | undefined) !== 'false';
-      const { data, error } = await supabase.functions.invoke('fator-r-process-upload', {
-        body: { files: payloadFiles, alertFrom: ALERT_FROM, alertTo: ALERT_TO, persist: true, sendAlerts: true, dryRun },
-      });
+      const { data, error } = await withProcessingTimeout(
+        supabase.functions.invoke('fator-r-process-upload', {
+          body: { files: payloadFiles, alertFrom: ALERT_FROM, alertTo: ALERT_TO, persist: true, sendAlerts: true, dryRun },
+        }),
+        'Tempo limite de 20 segundos excedido ao processar o upload.',
+      );
 
       if (error) throw error;
       if (data?.ok === false) throw new Error(data.error ?? 'Falha no processamento');
@@ -296,9 +335,11 @@ export default function FatorR() {
       setManualResults(processed);
       toast.success(`${processed.length} PDF(s) processado(s).`);
       await load();
-    } catch (_error) {
+    } catch (error) {
       setManualResults([]);
-      toast.error('Não foi possível processar este PDF.');
+      toast.error('Não foi possível processar este PDF.', {
+        description: errorMessageFrom(error, 'Verifique a função fator-r-process-upload.'),
+      });
     } finally {
       setProcessingManualPdfs(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -321,7 +362,11 @@ export default function FatorR() {
 
     const { data: userData } = await supabase.auth.getUser();
     const oldData = { fator_r_value: result.fator_r_value, fator_r_percent: result.fator_r_percent, status: result.status };
-    const status: FatorRStatus = raw <= 0.28 ? 'critical' : raw <= 0.32 ? 'attention' : 'safe';
+    const status = classifyFatorR(raw);
+    if (status === 'parse_error' || status === 'unknown' || status === 'not_applicable') {
+      toast.error('Fator R inválido', { description: 'Informe um decimal como 0,31 ou um percentual como 31%.' });
+      return;
+    }
     const newData = { fator_r_value: raw, fator_r_percent: raw * 100, status, reason, manual: true };
 
     const { error: updateError } = await (supabase as any)

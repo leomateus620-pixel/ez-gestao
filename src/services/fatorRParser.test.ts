@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePgdasFatorR } from './fatorRParser';
+import { classifyFatorR, cnpjMatchesExpected, isValidFatorROperationalResult, parsePgdasFatorR } from './fatorRParser';
 
 const fixtures = {
   naoSeAplica: `
@@ -129,12 +129,13 @@ describe('parsePgdasFatorR', () => {
     expect(result.confidence).toBeGreaterThanOrEqual(0.9);
   });
 
-  it('interpreta 042026 SERV. 6,43%.pdf como critico e gera alerta urgente', () => {
-    const result = parsePgdasFatorR(fixtures.critico, '042026 SERV. 6,43%.pdf');
+  it('classifica Fator R abaixo de 28% como critico e gera alerta urgente', () => {
+    const criticalText = fixtures.critico.replace('Fator r = 0,28 - Anexo III', 'Fator r = 0,27 - Anexo III');
+    const result = parsePgdasFatorR(criticalText, '042026 SERV. 6,43%.pdf');
 
     expect(result.notApplicable).toBe(false);
-    expect(result.fatorR).toBe(0.28);
-    expect(result.fatorRPercent).toBe(28);
+    expect(result.fatorR).toBe(0.27);
+    expect(result.fatorRPercent).toBe(27);
     expect(result.status).toBe('critical');
     expect(result.shouldSendEmail).toBe(true);
     expect(result.shouldAlert).toBe(true);
@@ -144,7 +145,7 @@ describe('parsePgdasFatorR', () => {
     expect(result.rpa).toBe(9276.02);
     expect(result.rbt12).toBe(196305.84);
     expect(result.payroll12).toBe(55437.28);
-    expect(result.declaredFatorRValue).toBe(0.28);
+    expect(result.declaredFatorRValue).toBe(0.27);
     expect(result.computedFatorRValue).toBeCloseTo(0.2824, 4);
     expect(result.anexo).toBe('III');
     expect(result.dasTotal).toBe(596.64);
@@ -157,7 +158,12 @@ describe('parsePgdasFatorR', () => {
     const result = parsePgdasFatorR(textWithoutFatorR, '042026 SERV. 7,36%.pdf');
 
     expect(result.declaredFatorRValue).toBeNull();
-    expect(result.fatorR).toBeCloseTo(0.3139675, 6);
+    expect(result.fatorR).toBeNull();
+    expect(result.fatorRPercent).toBeNull();
+    expect(result.status).toBe('parse_error');
+    expect(result.confidence).toBeLessThan(0.7);
+    expect(result.errors).toContain('Nao foi possivel identificar Fator R no documento.');
+    expect(result.computedFatorRValue).toBeCloseTo(0.3139675, 6);
     expect(result.fatorR).not.toBe(0.0736);
   });
 
@@ -172,6 +178,43 @@ describe('parsePgdasFatorR', () => {
     expect(result.declaredFatorRValue).toBe(0.31);
     expect(result.status).toBe('attention');
   });
+
+  it('classifica as faixas operacionais de 28% e 32%', () => {
+    expect(classifyFatorR(0.2799)).toBe('critical');
+    expect(classifyFatorR(0.28)).toBe('attention');
+    expect(classifyFatorR(0.3199)).toBe('attention');
+    expect(classifyFatorR(0.32)).toBe('safe');
+  });
+
+  it('classifica Fator R de 32% como OK', () => {
+    const safeText = fixtures.atencao.replace('Fator r = 0,31 - Anexo III', 'Fator r = 0,32 - Anexo III');
+    const result = parsePgdasFatorR(safeText, '042026 SERV. 7,36%.pdf');
+
+    expect(result.fatorR).toBe(0.32);
+    expect(result.fatorRPercent).toBe(32);
+    expect(result.status).toBe('safe');
+    expect(result.shouldSendEmail).toBe(false);
+    expect(isValidFatorROperationalResult(result)).toBe(true);
+  });
+
+  it('detecta CNPJ divergente contra empresa esperada', () => {
+    const result = parsePgdasFatorR(fixtures.atencao, '042026 SERV. 7,36%.pdf');
+
+    expect(cnpjMatchesExpected(result.cnpj ?? result.cnpjBase, '44.527.939/0001-84')).toBe(true);
+    expect(cnpjMatchesExpected(result.cnpj ?? result.cnpjBase, '55.371.662/0001-60')).toBe(false);
+  });
+
+  it('mantem chaves historicas distintas para periodos diferentes do mesmo CNPJ', () => {
+    const april = parsePgdasFatorR(fixtures.atencao, '042026 SERV. 7,36%.pdf');
+    const mayText = fixtures.atencao.replace('44527939202604001', '44527939202605001');
+    const may = parsePgdasFatorR(mayText, '052026 SERV. 7,36%.pdf');
+    const keyFor = (result: typeof april) => `${result.cnpjBase}:${result.referenceYear}:${result.referenceMonth}`;
+
+    expect(april.cnpjBase).toBe(may.cnpjBase);
+    expect(april.period).toBe('04/2026');
+    expect(may.period).toBe('05/2026');
+    expect(keyFor(april)).not.toBe(keyFor(may));
+  });
 });
 
 describe('fluxo E2E simulado do Fator R', () => {
@@ -179,7 +222,7 @@ describe('fluxo E2E simulado do Fator R', () => {
     const driveInput = [
       { fileId: 'drive-743', name: '042026 SERV. 7,43%.pdf', text: fixtures.naoSeAplica },
       { fileId: 'drive-736', name: '042026 SERV. 7,36%.pdf', text: fixtures.atencao },
-      { fileId: 'drive-643', name: '042026 SERV. 6,43%.pdf', text: fixtures.critico },
+      { fileId: 'drive-643', name: '042026 SERV. 6,43%.pdf', text: fixtures.critico.replace('Fator r = 0,28 - Anexo III', 'Fator r = 0,27 - Anexo III') },
     ];
 
     const analyzedFolder: string[] = [];
