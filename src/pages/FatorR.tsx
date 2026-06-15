@@ -59,7 +59,7 @@ const withProcessingTimeout = async <T,>(promise: Promise<T>, message: string): 
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
-        timeoutId = window.setTimeout(() => reject(new Error(message)), FATOR_R_PROCESSING_TIMEOUT_MS);
+        timeoutId = window.setTimeout(() => reject(new Error(message)), FATOR_R_PROCESSING_TIMEOUT_MS) as ReturnType<typeof window.setTimeout>;
       }),
     ]);
   } finally {
