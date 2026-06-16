@@ -22,6 +22,9 @@ const guideLabels: Record<GuiaStatus, string> = {
   enviada: 'Enviada',
   erro: 'Erro',
   revisao: 'Revisao',
+  pronta_envio: 'Pronta p/ envio',
+  nao_identificada: 'Não identificada',
+  duplicada: 'Duplicada',
 };
 
 function GuideBadge({ status }: { status: GuiaStatus }) {

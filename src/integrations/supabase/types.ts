@@ -956,6 +956,7 @@ export type Database = {
       }
       empresas: {
         Row: {
+          aliases: string[] | null
           canal_preferido: Database["public"]["Enums"]["canal_envio"] | null
           cnpj: string
           comunicacao_ativa: boolean
@@ -970,6 +971,7 @@ export type Database = {
           observacoes: string
           razao_social: string
           regime_tributario: Database["public"]["Enums"]["regime_tributario"]
+          regra_envio_especial: string | null
           responsavel_cliente: string
           responsavel_interno: string
           saudacao_guia: string
@@ -979,6 +981,7 @@ export type Database = {
           whatsapp_principal: string
         }
         Insert: {
+          aliases?: string[] | null
           canal_preferido?: Database["public"]["Enums"]["canal_envio"] | null
           cnpj: string
           comunicacao_ativa?: boolean
@@ -993,6 +996,7 @@ export type Database = {
           observacoes?: string
           razao_social: string
           regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
+          regra_envio_especial?: string | null
           responsavel_cliente?: string
           responsavel_interno?: string
           saudacao_guia?: string
@@ -1002,6 +1006,7 @@ export type Database = {
           whatsapp_principal?: string
         }
         Update: {
+          aliases?: string[] | null
           canal_preferido?: Database["public"]["Enums"]["canal_envio"] | null
           cnpj?: string
           comunicacao_ativa?: boolean
@@ -1016,6 +1021,7 @@ export type Database = {
           observacoes?: string
           razao_social?: string
           regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
+          regra_envio_especial?: string | null
           responsavel_cliente?: string
           responsavel_interno?: string
           saudacao_guia?: string
@@ -1794,21 +1800,28 @@ export type Database = {
       guias: {
         Row: {
           cnpj_detectado: string | null
+          codigo_barras: string | null
           competencia: string | null
+          confidence_score: number | null
           created_at: string
+          dedup_hash: string | null
           drive_file_id: string
           empresa_id: string | null
           extraction_method: string | null
           file_name: string
           has_text_layer: boolean | null
           id: string
+          identificador_guia: string | null
           match_source: Database["public"]["Enums"]["guia_match_source"] | null
           mime_type: string
+          modo: string
           pagina_count: number | null
           pasta_atual: string
           processed_at: string | null
           provider_error: string | null
+          razao_social_detectada: string | null
           received_at: string
+          revisao_correcoes: Json | null
           sent_at: string | null
           sent_folder_id: string | null
           sha256: string | null
@@ -1816,27 +1829,37 @@ export type Database = {
           status: Database["public"]["Enums"]["guia_status"]
           texto_extraido_preview: string | null
           tipo_guia: string | null
+          tipo_guia_confidence: number | null
+          tipo_guia_normalized: Database["public"]["Enums"]["tipo_guia"] | null
           updated_at: string
           valor: number | null
+          valor_extraido_raw: string | null
           vencimento: string | null
         }
         Insert: {
           cnpj_detectado?: string | null
+          codigo_barras?: string | null
           competencia?: string | null
+          confidence_score?: number | null
           created_at?: string
+          dedup_hash?: string | null
           drive_file_id: string
           empresa_id?: string | null
           extraction_method?: string | null
           file_name: string
           has_text_layer?: boolean | null
           id?: string
+          identificador_guia?: string | null
           match_source?: Database["public"]["Enums"]["guia_match_source"] | null
           mime_type?: string
+          modo?: string
           pagina_count?: number | null
           pasta_atual?: string
           processed_at?: string | null
           provider_error?: string | null
+          razao_social_detectada?: string | null
           received_at?: string
+          revisao_correcoes?: Json | null
           sent_at?: string | null
           sent_folder_id?: string | null
           sha256?: string | null
@@ -1844,27 +1867,37 @@ export type Database = {
           status?: Database["public"]["Enums"]["guia_status"]
           texto_extraido_preview?: string | null
           tipo_guia?: string | null
+          tipo_guia_confidence?: number | null
+          tipo_guia_normalized?: Database["public"]["Enums"]["tipo_guia"] | null
           updated_at?: string
           valor?: number | null
+          valor_extraido_raw?: string | null
           vencimento?: string | null
         }
         Update: {
           cnpj_detectado?: string | null
+          codigo_barras?: string | null
           competencia?: string | null
+          confidence_score?: number | null
           created_at?: string
+          dedup_hash?: string | null
           drive_file_id?: string
           empresa_id?: string | null
           extraction_method?: string | null
           file_name?: string
           has_text_layer?: boolean | null
           id?: string
+          identificador_guia?: string | null
           match_source?: Database["public"]["Enums"]["guia_match_source"] | null
           mime_type?: string
+          modo?: string
           pagina_count?: number | null
           pasta_atual?: string
           processed_at?: string | null
           provider_error?: string | null
+          razao_social_detectada?: string | null
           received_at?: string
+          revisao_correcoes?: Json | null
           sent_at?: string | null
           sent_folder_id?: string | null
           sha256?: string | null
@@ -1872,8 +1905,11 @@ export type Database = {
           status?: Database["public"]["Enums"]["guia_status"]
           texto_extraido_preview?: string | null
           tipo_guia?: string | null
+          tipo_guia_confidence?: number | null
+          tipo_guia_normalized?: Database["public"]["Enums"]["tipo_guia"] | null
           updated_at?: string
           valor?: number | null
+          valor_extraido_raw?: string | null
           vencimento?: string | null
         }
         Relationships: [
@@ -1885,6 +1921,158 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      guide_audit: {
+        Row: {
+          action: string
+          actor: string
+          after: Json | null
+          before: Json | null
+          created_at: string
+          guia_id: string | null
+          id: string
+        }
+        Insert: {
+          action: string
+          actor: string
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          guia_id?: string | null
+          id?: string
+        }
+        Update: {
+          action?: string
+          actor?: string
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          guia_id?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_audit_guia_id_fkey"
+            columns: ["guia_id"]
+            isOneToOne: false
+            referencedRelation: "guias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guide_batch_runs: {
+        Row: {
+          duplicadas: number
+          enviadas: number
+          erros: number
+          finished_at: string | null
+          id: string
+          identificadas: number
+          modo: string
+          nao_identificadas: number
+          notes: string | null
+          revisao: number
+          started_at: string
+          total: number
+          triggered_by: string | null
+        }
+        Insert: {
+          duplicadas?: number
+          enviadas?: number
+          erros?: number
+          finished_at?: string | null
+          id?: string
+          identificadas?: number
+          modo?: string
+          nao_identificadas?: number
+          notes?: string | null
+          revisao?: number
+          started_at?: string
+          total?: number
+          triggered_by?: string | null
+        }
+        Update: {
+          duplicadas?: number
+          enviadas?: number
+          erros?: number
+          finished_at?: string | null
+          id?: string
+          identificadas?: number
+          modo?: string
+          nao_identificadas?: number
+          notes?: string | null
+          revisao?: number
+          started_at?: string
+          total?: number
+          triggered_by?: string | null
+        }
+        Relationships: []
+      }
+      guide_templates: {
+        Row: {
+          assunto: string | null
+          ativo: boolean
+          canal: string
+          corpo: string
+          created_at: string
+          id: string
+          tipo_guia: Database["public"]["Enums"]["tipo_guia"]
+          twilio_content_sid: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          assunto?: string | null
+          ativo?: boolean
+          canal: string
+          corpo: string
+          created_at?: string
+          id?: string
+          tipo_guia: Database["public"]["Enums"]["tipo_guia"]
+          twilio_content_sid?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          assunto?: string | null
+          ativo?: boolean
+          canal?: string
+          corpo?: string
+          created_at?: string
+          id?: string
+          tipo_guia?: Database["public"]["Enums"]["tipo_guia"]
+          twilio_content_sid?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      guide_test_config: {
+        Row: {
+          email_teste: string | null
+          id: number
+          modo_global: string
+          updated_at: string
+          updated_by: string | null
+          whatsapp_teste: string | null
+        }
+        Insert: {
+          email_teste?: string | null
+          id?: number
+          modo_global?: string
+          updated_at?: string
+          updated_by?: string | null
+          whatsapp_teste?: string | null
+        }
+        Update: {
+          email_teste?: string | null
+          id?: number
+          modo_global?: string
+          updated_at?: string
+          updated_by?: string | null
+          whatsapp_teste?: string | null
+        }
+        Relationships: []
       }
       health_logs: {
         Row: {
@@ -1943,9 +2131,14 @@ export type Database = {
         Row: {
           created_at: string
           display_name: string
+          duplicates_folder_id: string | null
+          errors_folder_id: string | null
           last_check_at: string | null
           last_error: string | null
+          not_identified_folder_id: string | null
           provider: string
+          review_folder_id: string | null
+          root_folder_id: string | null
           schedule_minutes: number
           sender_identity: string | null
           sent_folder_id: string | null
@@ -1956,9 +2149,14 @@ export type Database = {
         Insert: {
           created_at?: string
           display_name: string
+          duplicates_folder_id?: string | null
+          errors_folder_id?: string | null
           last_check_at?: string | null
           last_error?: string | null
+          not_identified_folder_id?: string | null
           provider: string
+          review_folder_id?: string | null
+          root_folder_id?: string | null
           schedule_minutes?: number
           sender_identity?: string | null
           sent_folder_id?: string | null
@@ -1969,9 +2167,14 @@ export type Database = {
         Update: {
           created_at?: string
           display_name?: string
+          duplicates_folder_id?: string | null
+          errors_folder_id?: string | null
           last_check_at?: string | null
           last_error?: string | null
+          not_identified_folder_id?: string | null
           provider?: string
+          review_folder_id?: string | null
+          root_folder_id?: string | null
           schedule_minutes?: number
           sender_identity?: string | null
           sent_folder_id?: string | null
@@ -2479,7 +2682,7 @@ export type Database = {
         | "concluido"
         | "parcial"
         | "falha"
-      canal_envio: "email" | "whatsapp"
+      canal_envio: "email" | "whatsapp" | "ambos"
       cnd_lookup_status:
         | "negativa"
         | "positiva_com_efeitos"
@@ -2544,6 +2747,9 @@ export type Database = {
         | "enviada"
         | "revisao"
         | "erro"
+        | "pronta_envio"
+        | "nao_identificada"
+        | "duplicada"
       health_status: "ok" | "degradado" | "indisponivel"
       job_status:
         | "queued"
@@ -2590,6 +2796,15 @@ export type Database = {
         | "parsing"
         | "persistencia"
       run_step_status: "sucesso" | "falha" | "pulado" | "executando"
+      tipo_guia:
+        | "das"
+        | "fgts"
+        | "daf"
+        | "darf"
+        | "gps_inss"
+        | "iss"
+        | "icms"
+        | "outros"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2729,7 +2944,7 @@ export const Constants = {
       ],
       artifact_type: ["screenshot", "html", "pdf", "trace", "text"],
       batch_status: ["agendado", "executando", "concluido", "parcial", "falha"],
-      canal_envio: ["email", "whatsapp"],
+      canal_envio: ["email", "whatsapp", "ambos"],
       cnd_lookup_status: [
         "negativa",
         "positiva_com_efeitos",
@@ -2799,6 +3014,9 @@ export const Constants = {
         "enviada",
         "revisao",
         "erro",
+        "pronta_envio",
+        "nao_identificada",
+        "duplicada",
       ],
       health_status: ["ok", "degradado", "indisponivel"],
       job_status: [
@@ -2851,6 +3069,16 @@ export const Constants = {
         "persistencia",
       ],
       run_step_status: ["sucesso", "falha", "pulado", "executando"],
+      tipo_guia: [
+        "das",
+        "fgts",
+        "daf",
+        "darf",
+        "gps_inss",
+        "iss",
+        "icms",
+        "outros",
+      ],
     },
   },
 } as const

@@ -1,8 +1,14 @@
 // deno-lint-ignore-file no-explicit-any
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
+import {
+  MIN_TEXT_LENGTH, MIN_CONFIDENCE_AUTO_DISPATCH,
+  normalizeCnpj, classifyGuideType, extractMetadata,
+  calculateConfidence, dedupHash, renderTemplate, buildTemplateData,
+  slugifyEmpresa, competenciaToFolder,
+} from "../_shared/guide-parser.ts";
+import { DRIVE_GW, gwHeaders, downloadFile, moveFile, findOrCreateFolder } from "../_shared/guide-drive.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -11,55 +17,7 @@ const cors = {
   "Content-Type": "application/json",
 };
 
-const DRIVE_GW = "https://connector-gateway.lovable.dev/google_drive/drive/v3";
 const GMAIL_GW = "https://connector-gateway.lovable.dev/google_mail/gmail/v1";
-const MIN_TEXT_LENGTH = 40;
-
-function gwHeaders(connectionKey: string) {
-  return {
-    Authorization: `Bearer ${Deno.env.get("LOVABLE_API_KEY")}`,
-    "X-Connection-Api-Key": connectionKey,
-    "Content-Type": "application/json",
-  };
-}
-
-function normalizeCnpj(value: string) { return (value || "").replace(/\D/g, ""); }
-function validCnpj(value: string) {
-  const c = normalizeCnpj(value);
-  if (c.length !== 14 || /^(\d)\1+$/.test(c)) return false;
-  const dig = (base: string, w: number[]) => {
-    const t = w.reduce((s, weight, i) => s + Number(base[i]) * weight, 0);
-    const r = t % 11;
-    return r < 2 ? 0 : 11 - r;
-  };
-  const d1 = dig(c.slice(0, 12), [5,4,3,2,9,8,7,6,5,4,3,2]);
-  const d2 = dig(c.slice(0, 12) + d1, [6,5,4,3,2,9,8,7,6,5,4,3,2]);
-  return c.endsWith(`${d1}${d2}`);
-}
-function cnpjCandidates(text: string, relax = false) {
-  const m = text.match(/\d{2}[.\s-]?\d{3}[.\s-]?\d{3}[\/\s-]?\d{4}[-\s]?\d{2}/g) || [];
-  const all = [...new Set(m.map(normalizeCnpj))]
-    .filter((c) => c.length === 14 && !/^(\d)\1+$/.test(c));
-  return relax ? all : all.filter(validCnpj);
-}
-function fiscalSignals(text: string) {
-  const due = /(?:vencimento|venc\.)\s*[:\-]?\s*\d{2}\/\d{2}\/\d{4}/i.test(text);
-  const amount = /(?:valor(?:\s+total)?|total)\s*[:\-]?\s*R?\$?\s*[\d.]+,\d{2}/i.test(text);
-  const kind = /\b(DAS|DARF|FGTS|INSS|ICMS|ISS|GPS|DAE)\b/i.test(text);
-  return [due, amount, kind].filter(Boolean).length;
-}
-function metadataFromText(text: string) {
-  const competencia = text.match(/(?:compet[eê]ncia|periodo)\s*[:\-]?\s*(\d{2}\/\d{4})/i)?.[1] || null;
-  const due = text.match(/(?:vencimento|venc\.)\s*[:\-]?\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1] || null;
-  const amount = text.match(/(?:valor(?:\s+total)?|total)\s*[:\-]?\s*R?\$?\s*([\d.]+,\d{2})/i)?.[1] || null;
-  const kind = text.match(/\b(DAS|DARF|FGTS|INSS|ICMS|ISS|GPS|DAE)\b/i)?.[1]?.toUpperCase() || null;
-  return {
-    tipo_guia: kind,
-    competencia,
-    vencimento: due ? due.split("/").reverse().join("-") : null,
-    valor: amount ? Number(amount.replace(/\./g, "").replace(",", ".")) : null,
-  };
-}
 
 async function extractPdf(bytes: Uint8Array) {
   const pdf = await getDocumentProxy(bytes);
@@ -67,7 +25,7 @@ async function extractPdf(bytes: Uint8Array) {
   const normalized = (Array.isArray(text) ? text.join("\n") : (text as string))
     .replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim();
   return {
-    text: normalized.slice(0, 20000),
+    text: normalized.slice(0, 30000),
     pageCount: totalPages || 0,
     hasTextLayer: normalized.length >= MIN_TEXT_LENGTH,
     extractionMethod: "native_pdf_text",
@@ -85,244 +43,270 @@ function base64(bytes: Uint8Array) {
   return btoa(raw);
 }
 
-async function logException(db: any, guideId: string, type: string, reason: string, action: string, meta: any = {}) {
-  await db.from("guias").update({ status: "revisao", provider_error: reason }).eq("id", guideId);
+async function logEvent(db: any, guideId: string, eventType: string, message: string, meta: any = {}, level: 'info'|'warning'|'error' = 'info') {
+  await db.from("guia_eventos").insert({
+    guia_id: guideId, event_type: eventType, level, message, metadata_json: meta,
+  });
+}
+
+async function logException(db: any, guideId: string, type: string, reason: string, action: string, meta: any = {}, severity: 'warning'|'error' = 'warning') {
   await db.from("guia_excecoes").insert({
-    guia_id: guideId, exception_type: type, severity: "warning",
+    guia_id: guideId, exception_type: type, severity,
     reason, action_recommended: action,
   });
-  await db.from("guia_eventos").insert({
-    guia_id: guideId, event_type: "exception", level: "warning",
-    message: reason, metadata_json: { type, ...meta },
-  });
+  await logEvent(db, guideId, 'exception', reason, { type, ...meta }, severity === 'error' ? 'error' : 'warning');
 }
 
-async function logEvent(db: any, guideId: string, eventType: string, message: string, meta: any = {}) {
-  await db.from("guia_eventos").insert({
-    guia_id: guideId, event_type: eventType, message, metadata_json: meta,
-  });
-}
-
-async function processOneGuide(db: any, guide: any, driveKey: string, gmailKey: string, mode: "simulate" | "live", relaxCnpj = false) {
-  // 1. Download
-  await db.from("guias").update({ status: "lendo" }).eq("id", guide.id);
-  const dl = await fetch(`${DRIVE_GW}/files/${guide.drive_file_id}?alt=media`, {
-    headers: gwHeaders(driveKey),
-  });
-  if (!dl.ok) {
-    const body = await dl.text();
-    await logException(db, guide.id, "drive_download_failed",
-      `Nao foi possivel baixar o PDF do Drive (HTTP ${dl.status}).`,
-      "Verifique a conexao Google Drive e as permissoes do arquivo.",
-      { status: dl.status, body: body.slice(0, 500) });
-    return { status: "revisao", reason: "drive_download_failed" };
+async function moveToFolder(db: any, guide: any, driveKey: string, destFolderId: string, fromFolderId: string, pastaAtual: string) {
+  try {
+    await moveFile(driveKey, guide.drive_file_id, destFolderId, fromFolderId);
+    await db.from("guias").update({ pasta_atual: pastaAtual }).eq("id", guide.id);
+  } catch (err) {
+    await logEvent(db, guide.id, 'drive_move_failed', String(err).slice(0, 300), {}, 'warning');
   }
-  const bytes = new Uint8Array(await dl.arrayBuffer());
+}
+
+async function loadTemplate(db: any, tipo: string, canal: 'email' | 'whatsapp') {
+  const { data } = await db.from('guide_templates').select('*').eq('tipo_guia', tipo).eq('canal', canal).eq('ativo', true).maybeSingle();
+  if (data) return data;
+  const { data: fallback } = await db.from('guide_templates').select('*').eq('tipo_guia', 'outros').eq('canal', canal).maybeSingle();
+  return fallback;
+}
+
+async function sendEmail(gmailKey: string, to: string, subject: string, body: string, pdfBytes: Uint8Array, filename: string) {
+  const prof = await fetch(`${GMAIL_GW}/users/me/profile`, { headers: gwHeaders(gmailKey) });
+  const from = prof.ok ? (await prof.json()).emailAddress : "me";
+  const boundary = `lovable-${crypto.randomUUID()}`;
+  const mime = [
+    `From: ${from}`, `To: ${to}`, `Subject: ${subject}`,
+    "MIME-Version: 1.0", `Content-Type: multipart/mixed; boundary="${boundary}"`, "",
+    `--${boundary}`, "Content-Type: text/plain; charset=UTF-8", "", body,
+    `--${boundary}`,
+    `Content-Type: application/pdf; name="${filename}"`,
+    "Content-Transfer-Encoding: base64",
+    `Content-Disposition: attachment; filename="${filename}"`, "",
+    base64(pdfBytes), `--${boundary}--`,
+  ].join("\r\n");
+  const send = await fetch(`${GMAIL_GW}/users/me/messages/send`, {
+    method: "POST", headers: gwHeaders(gmailKey),
+    body: JSON.stringify({ raw: base64Url(new TextEncoder().encode(mime)) }),
+  });
+  if (!send.ok) throw new Error(`gmail_send_failed_${send.status}:${(await send.text()).slice(0,200)}`);
+  return { messageId: (await send.json()).id as string, from };
+}
+
+async function processOneGuide(db: any, guide: any, driveKey: string, gmailKey: string, folders: any, testConfig: any) {
+  const modo = testConfig.modo_global as 'teste' | 'producao';
+  await db.from("guias").update({ status: "lendo", modo }).eq("id", guide.id);
+
+  // 1. Download
+  let bytes: Uint8Array;
+  try { bytes = await downloadFile(driveKey, guide.drive_file_id); }
+  catch (err) {
+    await db.from("guias").update({ status: "erro", provider_error: String(err).slice(0,300), pasta_atual: 'erros' }).eq("id", guide.id);
+    await moveToFolder(db, guide, driveKey, folders.errors_folder_id, folders.source_folder_id, 'erros');
+    await logException(db, guide.id, 'drive_download_failed', 'Falha ao baixar PDF.', 'Verifique a conexão Drive.', {}, 'error');
+    return { status: 'erro', reason: 'drive_download_failed' };
+  }
 
   // 2. Extract
   let extraction;
   try { extraction = await extractPdf(bytes); }
   catch (err) {
-    await logException(db, guide.id, "pdf_text_extraction_failed",
-      "Falha ao ler o conteudo do PDF.", "Reenvie ou revise manualmente.",
-      { error: String(err).slice(0, 300) });
-    return { status: "revisao", reason: "pdf_text_extraction_failed" };
+    await db.from("guias").update({ status: "erro", provider_error: 'pdf_text_extraction_failed', pasta_atual: 'erros' }).eq("id", guide.id);
+    await moveToFolder(db, guide, driveKey, folders.errors_folder_id, folders.source_folder_id, 'erros');
+    await logException(db, guide.id, 'pdf_text_extraction_failed', 'Falha ao ler o PDF.', 'Reenvie ou processe manualmente.', { error: String(err).slice(0,200) }, 'error');
+    return { status: 'erro', reason: 'pdf_text_extraction_failed' };
   }
-  await logEvent(db, guide.id, "pdf_text_extracted", "Leitura nativa concluida.", {
-    page_count: extraction.pageCount, has_text_layer: extraction.hasTextLayer,
-    text_length: extraction.text.length,
-  });
-
-  // 3. CNPJ identification
-  const filenameCands = cnpjCandidates(guide.file_name, relaxCnpj);
-  const contentCands = cnpjCandidates(extraction.text, relaxCnpj);
-  if (!extraction.hasTextLayer && filenameCands.length === 0) {
-    await logException(db, guide.id, "pdf_without_text_layer",
-      "O PDF parece ser escaneado ou imagem (sem camada de texto).",
-      "Substitua por um PDF digital com texto ou processe manualmente.",
-      { page_count: extraction.pageCount });
-    return { status: "revisao", reason: "pdf_without_text_layer" };
-  }
-  const candidates = [...new Set([...filenameCands, ...contentCands])];
-  if (candidates.length !== 1) {
-    if (relaxCnpj && candidates.length > 1) {
-      // In relax mode, try to match any candidate to an existing active company
-      const { data: companiesPre } = await db.from("empresas").select("id,cnpj,status");
-      const match = candidates.find((c: string) =>
-        companiesPre?.some((co: any) => normalizeCnpj(co.cnpj) === c && co.status === "ativa"));
-      if (match) {
-        candidates.splice(0, candidates.length, match);
-      }
-    }
-  }
-  if (candidates.length !== 1) {
-    await logException(db, guide.id, "cnpj_ambiguous",
-      "Nao foi encontrado um unico CNPJ valido na guia.",
-      "Vincule a empresa manualmente.",
-      { candidates, text_sample: extraction.text.slice(0, 400) });
-    return { status: "revisao", reason: "cnpj_ambiguous" };
-  }
-  const minSignals = relaxCnpj ? 0 : 1;
-  if (contentCands.length === 0 && fiscalSignals(extraction.text) < minSignals) {
-    await logException(db, guide.id, "insufficient_pdf_signals",
-      "O PDF nao tem indicios fiscais suficientes para envio automatico.",
-      "Revise manualmente antes de enviar.", { text_length: extraction.text.length });
-    return { status: "revisao", reason: "insufficient_pdf_signals" };
+  if (!extraction.hasTextLayer) {
+    await db.from("guias").update({
+      status: 'erro', provider_error: 'pdf_without_text_layer', pasta_atual: 'erros',
+      pagina_count: extraction.pageCount, extraction_method: extraction.extractionMethod, has_text_layer: false,
+    }).eq('id', guide.id);
+    await moveToFolder(db, guide, driveKey, folders.errors_folder_id, folders.source_folder_id, 'erros');
+    await logException(db, guide.id, 'pdf_without_text_layer', 'PDF escaneado/sem texto.', 'Envie versão digital.', {}, 'error');
+    return { status: 'erro', reason: 'pdf_without_text_layer' };
   }
 
-  // 4. Company match
+  // 3. Parse metadata + classify
+  const metadata = extractMetadata(extraction.text);
+  const classification = classifyGuideType(extraction.text);
+
+  // 4. CNPJ → empresa
   const { data: companies } = await db.from("empresas").select("*");
-  const matched = companies?.find((c: any) => normalizeCnpj(c.cnpj) === candidates[0]);
-  if (!matched) {
-    await logException(db, guide.id, "company_not_found",
-      "Nenhuma empresa corresponde ao CNPJ detectado.",
-      "Cadastre a empresa antes de reenviar.", { cnpj: candidates[0] });
-    return { status: "revisao", reason: "company_not_found" };
-  }
-  if (matched.status !== "ativa") {
-    await logException(db, guide.id, "company_inactive",
-      "A empresa identificada esta inativa.",
-      "Ative a empresa antes de reenviar.", { cnpj: candidates[0] });
-    return { status: "revisao", reason: "company_inactive" };
+  let matched: any = null;
+  for (const c of metadata.cnpjCandidates) {
+    const m = companies?.find((co: any) => normalizeCnpj(co.cnpj) === c && co.status === 'ativa');
+    if (m) { matched = m; break; }
   }
 
-  const meta = metadataFromText(extraction.text);
-  const matchSource = filenameCands.length && contentCands.length ? "cnpj_pdf"
-    : filenameCands.length ? "filename" : "cnpj_pdf";
-  await db.from("guias").update({
-    status: "identificada",
-    match_source: matchSource,
-    cnpj_detectado: candidates[0],
-    empresa_id: matched.id,
+  const conf = calculateConfidence(metadata, classification, !!matched);
+
+  const baseUpdate: any = {
+    cnpj_detectado: metadata.cnpjCandidates[0] || null,
+    empresa_id: matched?.id || null,
+    tipo_guia: classification.label,
+    tipo_guia_normalized: classification.tipo,
+    tipo_guia_confidence: classification.confidence,
+    competencia: metadata.competencia,
+    vencimento: metadata.vencimento,
+    valor: metadata.valor,
+    valor_extraido_raw: metadata.valorRaw,
+    codigo_barras: metadata.codigoBarras,
+    identificador_guia: metadata.identificador,
+    razao_social_detectada: metadata.razaoSocial,
     texto_extraido_preview: extraction.text.slice(0, 600),
     pagina_count: extraction.pageCount,
     extraction_method: extraction.extractionMethod,
-    has_text_layer: extraction.hasTextLayer,
+    has_text_layer: true,
+    confidence_score: conf.overallConfidence,
     processed_at: new Date().toISOString(),
-    ...meta,
-  }).eq("id", guide.id);
-  await logEvent(db, guide.id, "company_matched", "Empresa identificada.", {
-    cnpj: candidates[0], empresa: matched.razao_social, match_source: matchSource,
-  });
-
-  // 5. Channel validation
-  if (!matched.comunicacao_ativa || matched.canal_preferido !== "email") {
-    await logException(db, guide.id, "invalid_channel",
-      "Empresa sem canal de e-mail ativo.",
-      "Configure canal_preferido='email' e comunicacao_ativa=true.", {});
-    return { status: "revisao", reason: "invalid_channel" };
-  }
-  if (!matched.email_validado || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(matched.email_principal || "")) {
-    await logException(db, guide.id, "missing_email",
-      "E-mail principal nao foi validado ou esta invalido.",
-      "Valide o e-mail da empresa antes do envio.", { email: matched.email_principal });
-    return { status: "revisao", reason: "missing_email" };
-  }
-
-  // 6. Idempotency
-  const idemKey = `${guide.id}:email`;
-  const { data: prior } = await db.from("guia_envios").select("*")
-    .eq("idempotency_key", idemKey).maybeSingle();
-  if (prior && prior.status !== "falhou" && !(mode === "live" && prior.status === "simulado")) {
-    return { status: prior.status, duplicate_prevented: true };
-  }
-  if (prior && mode === "live" && prior.status === "simulado") {
-    await db.from("guia_envios").delete().eq("id", prior.id);
-  }
-
-  // 7. Build email
-  const subject = `Guia ${meta.tipo_guia || "fiscal"} - ${matched.razao_social}`;
-  const facts = [
-    meta.tipo_guia && `Guia: ${meta.tipo_guia}`,
-    meta.competencia && `Competencia: ${meta.competencia}`,
-    meta.vencimento && `Vencimento: ${meta.vencimento.split("-").reverse().join("/")}`,
-    meta.valor != null && `Valor: R$ ${Number(meta.valor).toFixed(2).replace(".", ",")}`,
-  ].filter(Boolean).join(" | ");
-  const greet = matched.saudacao_guia?.trim() || `Ola, ${matched.razao_social}.`;
-  const body = `${greet}\n\nSua guia esta disponivel em anexo.${facts ? `\n\n${facts}.` : ""}\n\n— Envio automatico.`;
-  const destinatario = matched.email_principal;
-
-  if (mode === "simulate") {
-    await db.from("guia_envios").insert({
-      guia_id: guide.id, empresa_id: matched.id, canal: "email",
-      destinatario, assunto: subject, mensagem_preview: body,
-      idempotency_key: idemKey, status: "simulado",
-      sanitized_payload: { mode: "simulate", subject, body_preview: body.slice(0, 200) },
-    });
-    await db.from("guias").update({ status: "identificada" }).eq("id", guide.id);
-    await logEvent(db, guide.id, "dispatch_simulated",
-      "Simulacao concluida: e-mail seria enviado mas nao foi disparado.",
-      { destinatario, subject });
-    return { status: "simulado", destinatario, subject, body_preview: body };
-  }
-
-  // 8. Live: send via Gmail gateway
-  await db.from("guias").update({ status: "enviando" }).eq("id", guide.id);
-  const sender = await fetch(`${GMAIL_GW}/users/me/profile`, { headers: gwHeaders(gmailKey) });
-  const senderEmail = sender.ok ? (await sender.json()).emailAddress : "me";
-  const boundary = `lovable-${crypto.randomUUID()}`;
-  const mime = [
-    `From: ${senderEmail}`, `To: ${destinatario}`, `Subject: ${subject}`,
-    "MIME-Version: 1.0", `Content-Type: multipart/mixed; boundary="${boundary}"`, "",
-    `--${boundary}`, "Content-Type: text/plain; charset=UTF-8", "", body,
-    `--${boundary}`,
-    `Content-Type: application/pdf; name="${guide.file_name}"`,
-    "Content-Transfer-Encoding: base64",
-    `Content-Disposition: attachment; filename="${guide.file_name}"`, "",
-    base64(bytes), `--${boundary}--`,
-  ].join("\r\n");
-
-  const send = await fetch(`${GMAIL_GW}/users/me/messages/send`, {
-    method: "POST", headers: gwHeaders(gmailKey),
-    body: JSON.stringify({ raw: base64Url(new TextEncoder().encode(mime)) }),
-  });
-  if (!send.ok) {
-    const errBody = await send.text();
-    await db.from("guias").update({ status: "erro", provider_error: `Gmail HTTP ${send.status}` })
-      .eq("id", guide.id);
-    await db.from("guia_excecoes").insert({
-      guia_id: guide.id, exception_type: "dispatch_failed", severity: "error",
-      reason: `Gmail recusou o envio (HTTP ${send.status}).`,
-      action_recommended: "Verifique escopos do conector Gmail (gmail.send) e tente novamente.",
-    });
-    await logEvent(db, guide.id, "dispatch_failed", "Falha no envio via Gmail.", {
-      status: send.status, body: errBody.slice(0, 500),
-    });
-    return { status: "erro", reason: "gmail_send_failed", details: errBody.slice(0, 500) };
-  }
-  const sendResult = await send.json();
-
-  await db.from("guia_envios").insert({
-    guia_id: guide.id, empresa_id: matched.id, canal: "email",
-    destinatario, assunto: subject, mensagem_preview: body,
-    provider_message_id: sendResult.id, idempotency_key: idemKey,
-    status: "aceito",
-    sanitized_payload: { mode: "live", message_id: sendResult.id, sender: senderEmail },
-  });
-
-  // 9. Move file in Drive
-  const move = await fetch(
-    `${DRIVE_GW}/files/${guide.drive_file_id}?addParents=${encodeURIComponent(guide.sent_folder_id)}&removeParents=${encodeURIComponent(guide.source_folder_id)}`,
-    { method: "PATCH", headers: gwHeaders(driveKey), body: "{}" },
-  );
-  if (!move.ok) {
-    await logException(db, guide.id, "drive_move_failed",
-      "E-mail enviado, mas a movimentacao para enviados falhou.",
-      "Mova o PDF manualmente para a subpasta 'enviados'.",
-      { status: move.status });
-  } else {
-    await db.from("guias").update({
-      status: "enviada", pasta_atual: "enviados",
-      sent_at: new Date().toISOString(), provider_error: null,
-    }).eq("id", guide.id);
-  }
-  await logEvent(db, guide.id, "dispatch_accepted",
-    "E-mail enviado pelo Gmail e arquivo movido.",
-    { provider_message_id: sendResult.id, destinatario });
-  return {
-    status: "enviada", destinatario, subject,
-    provider_message_id: sendResult.id, sender: senderEmail,
+    match_source: metadata.cnpjCandidates.length ? 'cnpj_pdf' : 'filename',
   };
+
+  // 5. Routing
+  if (metadata.cnpjCandidates.length === 0) {
+    await db.from('guias').update({ ...baseUpdate, status: 'nao_identificada', pasta_atual: 'nao_identificadas' }).eq('id', guide.id);
+    await moveToFolder(db, guide, driveKey, folders.not_identified_folder_id, folders.source_folder_id, 'nao_identificadas');
+    await logException(db, guide.id, 'cnpj_not_found', 'Nenhum CNPJ identificado no PDF.', 'Revise manualmente.');
+    return { status: 'nao_identificada' };
+  }
+
+  // Dedup
+  if (matched) {
+    const hash = await dedupHash({
+      cnpj: normalizeCnpj(matched.cnpj),
+      tipo: classification.tipo,
+      competencia: metadata.competencia,
+      vencimento: metadata.vencimento,
+      valor: metadata.valor,
+    });
+    baseUpdate.dedup_hash = hash;
+    const { data: dup } = await db.from('guias').select('id, status')
+      .eq('dedup_hash', hash).neq('id', guide.id).limit(1).maybeSingle();
+    if (dup && !['duplicada', 'erro'].includes(dup.status)) {
+      await db.from('guias').update({ ...baseUpdate, status: 'duplicada', pasta_atual: 'duplicadas' }).eq('id', guide.id);
+      await moveToFolder(db, guide, driveKey, folders.duplicates_folder_id, folders.source_folder_id, 'duplicadas');
+      await logException(db, guide.id, 'duplicate', `Duplicata de guia ${dup.id}.`, 'Revise se realmente é repetida.', { duplicate_of: dup.id });
+      return { status: 'duplicada' };
+    }
+  }
+
+  if (!matched || conf.overallConfidence < MIN_CONFIDENCE_AUTO_DISPATCH) {
+    await db.from('guias').update({ ...baseUpdate, status: 'revisao', pasta_atual: 'revisao_manual' }).eq('id', guide.id);
+    await moveToFolder(db, guide, driveKey, folders.review_folder_id, folders.source_folder_id, 'revisao_manual');
+    await logException(db, guide.id, matched ? 'low_confidence' : 'company_not_found',
+      matched ? `Confiança ${conf.overallConfidence} abaixo de ${MIN_CONFIDENCE_AUTO_DISPATCH}.` : 'CNPJ encontrado mas empresa não cadastrada.',
+      'Revise dados e aprove manualmente.', { confidence: conf, cnpj_candidates: metadata.cnpjCandidates });
+    return { status: 'revisao', confidence: conf.overallConfidence };
+  }
+
+  // Tudo OK
+  await db.from('guias').update({ ...baseUpdate, status: 'pronta_envio' }).eq('id', guide.id);
+  await logEvent(db, guide.id, 'identified', 'Guia identificada com sucesso.', { confidence: conf, tipo: classification.tipo, empresa: matched.razao_social });
+
+  // 6. Validate dispatch preconditions
+  const canal = matched.canal_preferido as 'email' | 'whatsapp' | 'ambos' | null;
+  if (!matched.comunicacao_ativa || !canal) {
+    await db.from('guias').update({ status: 'revisao', pasta_atual: 'revisao_manual' }).eq('id', guide.id);
+    await moveToFolder(db, guide, driveKey, folders.review_folder_id, folders.source_folder_id, 'revisao_manual');
+    await logException(db, guide.id, 'invalid_channel', 'Empresa sem canal de envio configurado.', 'Configure canal_preferido e comunicacao_ativa.');
+    return { status: 'revisao', reason: 'invalid_channel' };
+  }
+
+  // 7. Dispatch
+  const canais: ('email'|'whatsapp')[] = canal === 'ambos' ? ['email', 'whatsapp'] : [canal];
+  const tplData = buildTemplateData({
+    empresa: matched.razao_social, cnpj: matched.cnpj, tipoGuia: classification.label,
+    competencia: metadata.competencia, vencimento: metadata.vencimento, valor: metadata.valor,
+  });
+  const results: any[] = [];
+
+  for (const ch of canais) {
+    const tpl = await loadTemplate(db, classification.tipo, ch);
+    if (!tpl) { results.push({ canal: ch, skipped: 'no_template' }); continue; }
+    const subject = tpl.assunto ? renderTemplate(tpl.assunto, tplData) : null;
+    const body = renderTemplate(tpl.corpo, tplData);
+    const isTest = modo === 'teste';
+    const destinatario = isTest
+      ? (ch === 'email' ? (testConfig.email_teste || matched.email_principal) : (testConfig.whatsapp_teste || matched.whatsapp_principal))
+      : (ch === 'email' ? matched.email_principal : matched.whatsapp_principal);
+    const finalBody = isTest ? `[TESTE - destinatário real: ${ch === 'email' ? matched.email_principal : matched.whatsapp_principal}]\n\n${body}` : body;
+    const finalSubject = isTest && subject ? `[TESTE] ${subject}` : subject;
+    const idemKey = `${guide.id}:${ch}:${modo}`;
+
+    const { data: prior } = await db.from('guia_envios').select('id,status').eq('idempotency_key', idemKey).maybeSingle();
+    if (prior && ['aceito','entregue'].includes(prior.status)) {
+      results.push({ canal: ch, skipped: 'already_sent' }); continue;
+    }
+
+    if (!destinatario) {
+      await logException(db, guide.id, 'missing_destination', `Destinatário ${ch} não configurado.`, 'Preencha contato no cadastro da empresa.');
+      results.push({ canal: ch, error: 'no_destinatario' }); continue;
+    }
+
+    try {
+      if (ch === 'email') {
+        const { messageId, from } = await sendEmail(gmailKey, destinatario, finalSubject || `Guia ${classification.label}`, finalBody, bytes, guide.file_name);
+        await db.from('guia_envios').insert({
+          guia_id: guide.id, empresa_id: matched.id, canal: 'email',
+          destinatario, assunto: finalSubject, mensagem_preview: finalBody.slice(0, 400),
+          provider_message_id: messageId, idempotency_key: idemKey,
+          status: isTest ? 'simulado' : 'aceito',
+          sanitized_payload: { mode: modo, message_id: messageId, sender: from },
+        });
+        results.push({ canal: 'email', status: isTest ? 'simulado' : 'aceito', messageId });
+      } else {
+        // WhatsApp via Twilio: invoca send-whatsapp-message existente
+        const wpRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-whatsapp-message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
+          body: JSON.stringify({ to: destinatario, body: finalBody, guia_id: guide.id }),
+        });
+        const ok = wpRes.ok;
+        await db.from('guia_envios').insert({
+          guia_id: guide.id, empresa_id: matched.id, canal: 'whatsapp',
+          destinatario, mensagem_preview: finalBody.slice(0, 400),
+          idempotency_key: idemKey,
+          status: ok ? (isTest ? 'simulado' : 'aceito') : 'falhou',
+          sanitized_payload: { mode: modo, ok },
+        });
+        results.push({ canal: 'whatsapp', status: ok ? 'aceito' : 'falhou' });
+      }
+    } catch (err) {
+      await db.from('guia_envios').insert({
+        guia_id: guide.id, empresa_id: matched.id, canal: ch,
+        destinatario, mensagem_preview: finalBody.slice(0, 400),
+        idempotency_key: idemKey, status: 'falhou',
+        sanitized_payload: { mode: modo, error: String(err).slice(0, 300) },
+      });
+      await logException(db, guide.id, 'dispatch_failed', `Falha no envio via ${ch}.`, 'Verifique conector e tente reenviar.', { error: String(err).slice(0,200) }, 'error');
+      results.push({ canal: ch, error: String(err).slice(0,200) });
+    }
+  }
+
+  const allOk = results.every((r) => r.status === 'aceito' || r.status === 'simulado');
+  if (allOk && modo === 'producao') {
+    // Move para Enviadas/[Empresa]/[YYYY-MM]/
+    const empresaFolderName = slugifyEmpresa(matched.razao_social, matched.cnpj);
+    const compFolderName = competenciaToFolder(metadata.competencia, metadata.vencimento);
+    try {
+      const empresaFolderId = await findOrCreateFolder(driveKey, empresaFolderName, folders.sent_folder_id);
+      const compFolderId = await findOrCreateFolder(driveKey, compFolderName, empresaFolderId);
+      await moveFile(driveKey, guide.drive_file_id, compFolderId, folders.source_folder_id);
+      await db.from('guias').update({ status: 'enviada', pasta_atual: 'enviadas', sent_at: new Date().toISOString() }).eq('id', guide.id);
+    } catch (err) {
+      await logException(db, guide.id, 'drive_move_failed', 'Envio OK mas falha ao mover PDF.', 'Mova manualmente para Enviadas.', { error: String(err).slice(0,200) }, 'warning');
+      await db.from('guias').update({ status: 'enviada', sent_at: new Date().toISOString() }).eq('id', guide.id);
+    }
+  } else if (allOk && modo === 'teste') {
+    await db.from('guias').update({ status: 'enviada', sent_at: new Date().toISOString() }).eq('id', guide.id);
+    // Não move em modo teste
+  } else {
+    await db.from('guias').update({ status: 'erro' }).eq('id', guide.id);
+  }
+
+  return { status: allOk ? 'enviada' : 'erro', modo, results, confidence: conf.overallConfidence };
 }
 
 async function isAuthorized(req: Request) {
@@ -336,37 +320,28 @@ async function isAuthorized(req: Request) {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "method_not_allowed" }), { status: 405, headers: cors });
-  }
-  if (!(await isAuthorized(req))) {
-    return new Response(JSON.stringify({ error: "authentication_required" }), { status: 401, headers: cors });
-  }
+  if (req.method !== "POST") return new Response(JSON.stringify({ error: "method_not_allowed" }), { status: 405, headers: cors });
+  if (!(await isAuthorized(req))) return new Response(JSON.stringify({ error: "authentication_required" }), { status: 401, headers: cors });
 
   const driveKey = Deno.env.get("GOOGLE_DRIVE_API_KEY");
   const gmailKey = Deno.env.get("GOOGLE_MAIL_API_KEY");
   if (!driveKey || !gmailKey || !Deno.env.get("LOVABLE_API_KEY")) {
-    return new Response(JSON.stringify({
-      error: "connectors_missing",
-      message: "Conectores Google Drive e Gmail precisam estar conectados.",
-    }), { status: 409, headers: cors });
+    return new Response(JSON.stringify({ error: "connectors_missing" }), { status: 409, headers: cors });
   }
 
-  const body = await req.json().catch(() => ({}));
-  const mode: "simulate" | "live" = body?.mode === "live" ? "live" : "simulate";
-  const relaxCnpj = body?.relax_cnpj === true;
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-
-  const { data: drive } = await db.from("integracoes_guias").select("*")
-    .eq("provider", "google_drive").single();
-  if (!drive?.source_folder_id || !drive?.sent_folder_id || drive.status !== "ativo") {
-    return new Response(JSON.stringify({
-      error: "drive_integration_inactive",
-      message: "Execute bootstrap-test-folder para configurar as pastas.",
-    }), { status: 409, headers: cors });
+  const { data: drive } = await db.from("integracoes_guias").select("*").eq("provider", "google_drive").single();
+  if (!drive?.source_folder_id || drive.status !== "ativo") {
+    return new Response(JSON.stringify({ error: "drive_integration_inactive", message: "Execute bootstrap-test-folder para configurar pastas." }), { status: 409, headers: cors });
   }
 
-  // List files in source folder
+  const { data: testConfig } = await db.from('guide_test_config').select('*').eq('id', 1).maybeSingle();
+  const config = testConfig || { modo_global: 'teste', email_teste: null, whatsapp_teste: null };
+
+  // Criar batch
+  const { data: batch } = await db.from('guide_batch_runs').insert({ modo: config.modo_global }).select().single();
+
+  // List files
   const params = new URLSearchParams({
     q: `'${drive.source_folder_id}' in parents and trashed = false`,
     fields: "files(id,name,mimeType,md5Checksum,modifiedTime)",
@@ -374,56 +349,61 @@ serve(async (req) => {
   });
   const list = await fetch(`${DRIVE_GW}/files?${params}`, { headers: gwHeaders(driveKey) });
   if (!list.ok) {
-    const text = await list.text();
-    return new Response(JSON.stringify({
-      error: "drive_list_failed", status: list.status, details: text.slice(0, 500),
-    }), { status: 502, headers: cors });
+    return new Response(JSON.stringify({ error: "drive_list_failed", status: list.status }), { status: 502, headers: cors });
   }
   const files = ((await list.json()).files || []) as any[];
 
   const results: any[] = [];
+  const counters = { total: 0, enviadas: 0, revisao: 0, erros: 0, duplicadas: 0, nao_identificadas: 0, identificadas: 0 };
+
   for (const file of files) {
-    // Upsert guia
-    const { data: existing } = await db.from("guias").select("*")
-      .eq("drive_file_id", file.id).maybeSingle();
+    counters.total++;
+    const { data: existing } = await db.from("guias").select("*").eq("drive_file_id", file.id).maybeSingle();
     let guide = existing;
     if (!guide) {
       const { data: inserted } = await db.from("guias").insert({
         drive_file_id: file.id, file_name: file.name, mime_type: file.mimeType,
         sha256: file.md5Checksum || null, source_folder_id: drive.source_folder_id,
-        sent_folder_id: drive.sent_folder_id,
+        sent_folder_id: drive.sent_folder_id, modo: config.modo_global,
       }).select().single();
       guide = inserted;
     }
     if (!guide) continue;
-    if (["enviada", "enviando"].includes(guide.status)) {
-      results.push({ file: file.name, skipped: true, reason: "already_processed", status: guide.status });
-      continue;
+    if (['enviada','enviando'].includes(guide.status)) {
+      results.push({ file: file.name, skipped: true, status: guide.status }); continue;
     }
-    if (file.mimeType !== "application/pdf") {
-      await db.from("guias").update({ status: "revisao", provider_error: "Formato nao suportado." })
-        .eq("id", guide.id);
-      await db.from("guia_excecoes").insert({
-        guia_id: guide.id, exception_type: "unsupported_file",
-        reason: "Somente PDFs sao processados.",
-        action_recommended: "Envie o arquivo em formato PDF.",
-      });
-      results.push({ file: file.name, skipped: true, reason: "not_pdf" });
-      continue;
+    if (file.mimeType !== 'application/pdf') {
+      await db.from('guias').update({ status: 'erro', provider_error: 'Formato não suportado.', pasta_atual: 'erros' }).eq('id', guide.id);
+      await logException(db, guide.id, 'unsupported_file', 'Somente PDFs são processados.', 'Envie em PDF.', {}, 'error');
+      counters.erros++;
+      results.push({ file: file.name, skipped: true, reason: 'not_pdf' }); continue;
     }
     try {
-      const r = await processOneGuide(db, guide, driveKey, gmailKey, mode, relaxCnpj);
+      const r = await processOneGuide(db, guide, driveKey, gmailKey, drive, config);
+      if (r.status === 'enviada') counters.enviadas++;
+      else if (r.status === 'revisao') counters.revisao++;
+      else if (r.status === 'erro') counters.erros++;
+      else if (r.status === 'duplicada') counters.duplicadas++;
+      else if (r.status === 'nao_identificada') counters.nao_identificadas++;
+      if (['enviada','revisao','duplicada'].includes(r.status)) counters.identificadas++;
       results.push({ file: file.name, guia_id: guide.id, ...r });
     } catch (err) {
-      results.push({ file: file.name, error: String(err).slice(0, 500) });
+      counters.erros++;
+      results.push({ file: file.name, error: String(err).slice(0,500) });
     }
   }
 
-  await db.from("integracoes_guias").update({
+  if (batch) {
+    await db.from('guide_batch_runs').update({
+      finished_at: new Date().toISOString(), ...counters,
+    }).eq('id', batch.id);
+  }
+
+  await db.from('integracoes_guias').update({
     last_check_at: new Date().toISOString(), last_error: null,
-  }).eq("provider", "google_drive");
+  }).eq('provider', 'google_drive');
 
   return new Response(JSON.stringify({
-    mode, scanned: files.length, results,
+    modo: config.modo_global, scanned: files.length, batch_id: batch?.id, counters, results,
   }), { headers: cors });
 });
