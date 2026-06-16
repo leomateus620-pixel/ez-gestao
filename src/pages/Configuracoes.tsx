@@ -2,6 +2,8 @@ import { Clock, Database, KeyRound, Lock, Palette, ShieldCheck } from 'lucide-re
 import { GlassCard } from '@/components/GlassCard';
 import { PageHeader } from '@/components/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import TemplatesGuias from '@/pages/configuracoes/TemplatesGuias';
 
 const controls = [
   {
@@ -30,7 +32,12 @@ export default function Configuracoes() {
   return (
     <div className="space-y-6">
       <PageHeader title="Configuracoes" subtitle="Seguranca e operação do envio automático de guias." />
-
+      <Tabs defaultValue="geral" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="geral">Geral</TabsTrigger>
+          <TabsTrigger value="templates">Templates de Guias</TabsTrigger>
+        </TabsList>
+        <TabsContent value="geral" className="space-y-6">
       <GlassCard variant="elevated">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex items-start gap-3">
@@ -71,6 +78,11 @@ export default function Configuracoes() {
           </div>
         </div>
       </GlassCard>
+        </TabsContent>
+        <TabsContent value="templates">
+          <TemplatesGuias />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

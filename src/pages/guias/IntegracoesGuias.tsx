@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Database, FileText, FolderInput, Mail, MessageCircle, ShieldCheck } from 'lucide-react';
+import { Database, FileText, FolderCog, FolderInput, Mail, MessageCircle, Send, ShieldCheck } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { GlassCard } from '@/components/GlassCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useGuides } from '@/features/guias/GuideProvider';
+import { useBootstrapFolders, useTestConnection } from '@/features/guias/useGuideOps';
 import type { IntegracaoGuia, IntegrationProvider } from '@/data/types';
 import { formatDateTime } from '@/lib/formatters';
 import { supabase } from '@/integrations/supabase/client';
@@ -39,10 +41,29 @@ const providerDescriptions: Partial<Record<IntegrationProvider, string>> = {
     'Extração direta de texto em PDFs digitais, sem OCR externo. PDFs escaneados são enviados para Exceções.',
 };
 
-function ConnectorCard({ integration }: { integration: IntegracaoGuia }) {
+type Folders = {
+  root_folder_id: string | null;
+  source_folder_id: string | null;
+  sent_folder_id: string | null;
+  review_folder_id: string | null;
+  not_identified_folder_id: string | null;
+  errors_folder_id: string | null;
+  duplicates_folder_id: string | null;
+};
+
+function ConnectorCard({ integration, folders, onTest, onBootstrap, bootstrapping }: {
+  integration: IntegracaoGuia;
+  folders?: Folders | null;
+  onTest?: (canal: 'email' | 'whatsapp', dest: string) => void;
+  onBootstrap?: () => void;
+  bootstrapping?: boolean;
+}) {
   const Icon = icons[integration.provider];
   const logo = logos[integration.provider];
   const isConnected = integration.status === 'ativo' || integration.status === 'configurado';
+  const [testDest, setTestDest] = useState('');
+  const testCanal: 'email' | 'whatsapp' | null = integration.provider === 'gmail' ? 'email'
+    : integration.provider === 'twilio_whatsapp' ? 'whatsapp' : null;
   return (
     <GlassCard variant="elevated" className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
@@ -69,9 +90,33 @@ function ConnectorCard({ integration }: { integration: IntegracaoGuia }) {
         </Badge>
       </div>
       {integration.provider === 'google_drive' && (
-        <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-xs text-foreground/76">
-          <p>`a enviar`: {integration.sourceFolderId || 'Não configurada'}</p>
-          <p className="mt-1">`enviados`: {integration.sentFolderId || 'Não configurada'}</p>
+        <div className="space-y-2">
+          <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-[11px] text-foreground/76 space-y-1 font-mono">
+            <p>A Enviar: {folders?.source_folder_id || '—'}</p>
+            <p>Enviadas: {folders?.sent_folder_id || '—'}</p>
+            <p>Revisão Manual: {folders?.review_folder_id || '—'}</p>
+            <p>Não Identificadas: {folders?.not_identified_folder_id || '—'}</p>
+            <p>Erros: {folders?.errors_folder_id || '—'}</p>
+            <p>Duplicadas: {folders?.duplicates_folder_id || '—'}</p>
+          </div>
+          {onBootstrap && (
+            <Button size="sm" variant="outline" onClick={onBootstrap} disabled={bootstrapping} className="w-full">
+              <FolderCog className="mr-2 h-3.5 w-3.5" /> {bootstrapping ? 'Recriando...' : 'Recriar estrutura de pastas'}
+            </Button>
+          )}
+        </div>
+      )}
+      {testCanal && onTest && (
+        <div className="flex gap-2">
+          <Input
+            value={testDest}
+            placeholder={testCanal === 'email' ? 'teste@exemplo.com' : '+5511999999999'}
+            onChange={(e) => setTestDest(e.target.value)}
+            className="text-xs"
+          />
+          <Button size="sm" variant="outline" disabled={!testDest} onClick={() => onTest(testCanal, testDest)}>
+            <Send className="mr-1 h-3.5 w-3.5" /> Testar
+          </Button>
         </div>
       )}
       <p className="text-xs text-foreground/68">
@@ -85,11 +130,17 @@ function ConnectorCard({ integration }: { integration: IntegracaoGuia }) {
 export default function IntegracoesGuias() {
   const { integrations } = useGuides();
   const [liveStatus, setLiveStatus] = useState<Record<string, boolean>>({});
+  const [folders, setFolders] = useState<Folders | null>(null);
+  const bootstrap = useBootstrapFolders();
+  const testConn = useTestConnection();
 
   useEffect(() => {
     supabase.functions.invoke('integracoes-status').then(({ data }) => {
       if (data) setLiveStatus(data as Record<string, boolean>);
     }).catch(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any).from('integracoes_guias').select('*').eq('provider', 'google_drive').maybeSingle()
+      .then(({ data }: any) => { if (data) setFolders(data as Folders); });
   }, []);
 
   const buildIntegration = (provider: IntegrationProvider): IntegracaoGuia => {
@@ -138,7 +189,16 @@ export default function IntegracoesGuias() {
 
       <div className="grid gap-4 md:grid-cols-2">
         {providers.map((provider) => (
-          <ConnectorCard key={provider} integration={buildIntegration(provider)} />
+          <ConnectorCard
+            key={provider}
+            integration={buildIntegration(provider)}
+            folders={provider === 'google_drive' ? folders : null}
+            onBootstrap={provider === 'google_drive' ? () => bootstrap.mutate() : undefined}
+            bootstrapping={bootstrap.isPending}
+            onTest={provider === 'gmail' || provider === 'twilio_whatsapp'
+              ? (canal, dest) => testConn.mutate({ canal, destinatario: dest })
+              : undefined}
+          />
         ))}
       </div>
     </div>

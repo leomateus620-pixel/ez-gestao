@@ -31,5 +31,6 @@ export const loadClassifica = cachedImport(() => import('@/pages/Classifica'));
 export const loadGuias = cachedImport(() => import('@/pages/guias/Guias'));
 export const loadGuiaDetalhe = cachedImport(() => import('@/pages/guias/GuiaDetalhe'));
 export const loadIntegracoesGuias = cachedImport(() => import('@/pages/guias/IntegracoesGuias'));
+export const loadRevisaoManual = cachedImport(() => import('@/pages/guias/RevisaoManual'));
 export const loadNotFound = cachedImport(() => import('@/pages/NotFound'));
 export const loadWhatsAppPage = cachedImport(() => import('@/pages/admin/WhatsApp'));

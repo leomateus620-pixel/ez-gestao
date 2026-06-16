@@ -24,6 +24,7 @@ import {
   loadGuiaDetalhe,
   loadGuias,
   loadIntegracoesGuias,
+  loadRevisaoManual,
   loadLogs,
   loadNotFound,
   loadWhatsAppPage,
@@ -46,6 +47,7 @@ const Classifica = lazyRetry(loadClassifica);
 const Guias = lazyRetry(loadGuias);
 const GuiaDetalhe = lazyRetry(loadGuiaDetalhe);
 const IntegracoesGuias = lazyRetry(loadIntegracoesGuias);
+const RevisaoManual = lazyRetry(loadRevisaoManual);
 const NotFound = lazyRetry(loadNotFound);
 const WhatsAppPage = lazyRetry(loadWhatsAppPage);
 
@@ -169,6 +171,7 @@ function AuthenticatedApp() {
                   <Route path="/guias/fila" element={<Guias view="fila" />} />
                   <Route path="/guias/enviadas" element={<Guias view="enviadas" />} />
                   <Route path="/guias/excecoes" element={<Guias view="excecoes" />} />
+                  <Route path="/guias/revisao" element={<RevisaoManual />} />
                   <Route path="/guias/:id" element={<GuiaDetalhe />} />
                   <Route path="/empresas" element={<Empresas />} />
                   <Route path="/empresas/:id" element={<EmpresaDetalhe />} />
