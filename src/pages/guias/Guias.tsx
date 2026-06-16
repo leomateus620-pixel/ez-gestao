@@ -1,12 +1,15 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, FileText, Loader2, Play, Send, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, ArrowRight, FileText, FolderCog, Loader2, Play, Send, ShieldAlert, FlaskConical, Rocket } from 'lucide-react';
 import { useGuides } from '@/features/guias/GuideProvider';
+import { useTestConfig, useBatchRuns, useBootstrapFolders } from '@/features/guias/useGuideOps';
 import { PageHeader } from '@/components/PageHeader';
 import { GlassCard } from '@/components/GlassCard';
 import { EmptyState } from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCNPJ, formatDate, formatDateTime } from '@/lib/formatters';
 import type { Guia, GuiaStatus } from '@/data/types';
@@ -87,12 +90,28 @@ function GuidesTable({ guides }: { guides: Guia[] }) {
 
 export default function Guias({ view }: { view: GuideView }) {
   const { guides, exceptions, isInitialLoading, isScanning, runScan, resolveException } = useGuides();
+  const testConfig = useTestConfig();
+  const batches = useBatchRuns(5);
+  const bootstrap = useBootstrapFolders();
+  const [editEmail, setEditEmail] = useState<string>('');
+  const [editWp, setEditWp] = useState<string>('');
+
+  const modo = testConfig.data?.modo_global ?? 'teste';
+  const isTeste = modo === 'teste';
+
   const pending = useMemo(() =>
     guides.filter((guide) => guide.status !== 'enviada'), [guides]);
   const sent = useMemo(() =>
     guides.filter((guide) => guide.status === 'enviada'), [guides]);
   const openExceptions = useMemo(() =>
     exceptions.filter((entry) => entry.status !== 'resolved' && entry.status !== 'ignored'), [exceptions]);
+  const reviewing = useMemo(() => guides.filter((g) => ['revisao', 'nao_identificada', 'duplicada', 'erro'].includes(g.status)), [guides]);
+  const byStatus = useMemo(() => {
+    const out: Partial<Record<GuiaStatus, number>> = {};
+    for (const g of guides) out[g.status] = (out[g.status] || 0) + 1;
+    return out;
+  }, [guides]);
+  const lastBatch = batches.data?.[0];
 
   const title = view === 'fila' ? 'Fila de Guias' : view === 'enviadas' ? 'Guias Enviadas' : 'Exceções de Guias';
   const subtitle = view === 'fila'
@@ -104,11 +123,117 @@ export default function Guias({ view }: { view: GuideView }) {
   return (
     <div className="space-y-6">
       <PageHeader title={title} subtitle={subtitle}>
-        <Button onClick={runScan} disabled={isScanning} className="gap-2">
-          {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-          Processar agora
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => bootstrap.mutate()} disabled={bootstrap.isPending} className="gap-2">
+            <FolderCog className="h-4 w-4" /> Recriar pastas
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/guias/revisao">Revisão manual ({reviewing.length})</Link>
+          </Button>
+          <Button onClick={runScan} disabled={isScanning} className="gap-2">
+            {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            Varredura agora
+          </Button>
+        </div>
       </PageHeader>
+
+      {/* Toggle Modo Teste/Produção */}
+      <GlassCard variant={isTeste ? 'critical' : 'elevated'} className="p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            {isTeste ? <FlaskConical className="h-5 w-5 text-warning" /> : <Rocket className="h-5 w-5 text-success" />}
+            <div>
+              <p className="text-sm font-semibold">
+                Modo {isTeste ? 'TESTE' : 'PRODUÇÃO'}
+                <Badge variant="outline" className={cn('ml-2', isTeste ? 'border-warning/40 bg-warning/10 text-warning' : 'border-success/40 bg-success/10 text-success')}>
+                  {isTeste ? 'envios redirecionados' : 'envios reais'}
+                </Badge>
+              </p>
+              <p className="mt-0.5 text-xs text-foreground/70">
+                {isTeste
+                  ? 'Em modo teste, e-mails e WhatsApp vão para os destinatários abaixo, PDFs NÃO são movidos no Drive.'
+                  : 'Em produção, envios vão para os contatos reais da empresa e PDFs são movidos para Enviadas/[Empresa]/[AAAA-MM].'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-foreground/68">TESTE</span>
+            <Switch
+              checked={!isTeste}
+              disabled={testConfig.update.isPending}
+              onCheckedChange={(checked) => testConfig.update.mutate({ modo_global: checked ? 'producao' : 'teste' })}
+            />
+            <span className="text-xs text-foreground/68">PRODUÇÃO</span>
+          </div>
+        </div>
+
+        {isTeste && (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-foreground/72">E-mail de teste</label>
+              <div className="flex gap-2">
+                <Input
+                  defaultValue={testConfig.data?.email_teste ?? ''}
+                  placeholder="teste@exemplo.com"
+                  onChange={(e) => setEditEmail(e.target.value)}
+                />
+                <Button size="sm" variant="outline" onClick={() => testConfig.update.mutate({ email_teste: editEmail || testConfig.data?.email_teste || null })}>Salvar</Button>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-foreground/72">WhatsApp de teste (E.164)</label>
+              <div className="flex gap-2">
+                <Input
+                  defaultValue={testConfig.data?.whatsapp_teste ?? ''}
+                  placeholder="+5511999999999"
+                  onChange={(e) => setEditWp(e.target.value)}
+                />
+                <Button size="sm" variant="outline" onClick={() => testConfig.update.mutate({ whatsapp_teste: editWp || testConfig.data?.whatsapp_teste || null })}>Salvar</Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </GlassCard>
+
+      {/* Cards de status */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        {([
+          ['aguardando', 'A processar', byStatus.aguardando ?? 0],
+          ['pronta_envio', 'Pronta envio', byStatus.pronta_envio ?? 0],
+          ['enviada', 'Enviadas', byStatus.enviada ?? 0],
+          ['revisao', 'Revisão', byStatus.revisao ?? 0],
+          ['nao_identificada', 'Não ident.', byStatus.nao_identificada ?? 0],
+          ['duplicada', 'Duplicadas', byStatus.duplicada ?? 0],
+          ['erro', 'Erros', byStatus.erro ?? 0],
+        ] as const).map(([key, label, count]) => (
+          <GlassCard key={key} className="p-3">
+            <p className="text-[10px] uppercase tracking-wide text-foreground/60">{label}</p>
+            <p className="mt-1 text-2xl font-semibold">{count}</p>
+          </GlassCard>
+        ))}
+      </div>
+
+      {/* Métricas última varredura */}
+      {lastBatch && (
+        <GlassCard className="p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-foreground/60">Última varredura</p>
+              <p className="mt-0.5 text-sm font-semibold">
+                {formatDateTime(lastBatch.started_at)} • modo {lastBatch.modo}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-4 text-xs text-foreground/72">
+              <span>Total: <b>{lastBatch.total ?? 0}</b></span>
+              <span>Identificadas: <b>{lastBatch.identificadas ?? 0}</b></span>
+              <span>Enviadas: <b className="text-success">{lastBatch.enviadas ?? 0}</b></span>
+              <span>Revisão: <b className="text-warning">{lastBatch.revisao ?? 0}</b></span>
+              <span>Erros: <b className="text-destructive">{lastBatch.erros ?? 0}</b></span>
+              <span>Duplicadas: <b>{lastBatch.duplicadas ?? 0}</b></span>
+            </div>
+          </div>
+        </GlassCard>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <Button asChild size="sm" variant={view === 'fila' ? 'default' : 'outline'}>
