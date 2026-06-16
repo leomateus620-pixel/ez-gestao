@@ -1,7 +1,7 @@
 export type EmpresaStatus = 'ativa' | 'pausada' | 'arquivada';
 export type RegimeTributario = 'simples_nacional' | 'lucro_presumido' | 'lucro_real' | 'mei';
 
-export type CanalEnvio = 'email' | 'whatsapp';
+export type CanalEnvio = 'email' | 'whatsapp' | 'ambos';
 export type CanalPreferido = CanalEnvio | null;
 export type EnvioStatus = 'enviado' | 'entregue' | 'lido' | 'erro' | 'pendente';
 export type AlertaPrioridade = 'critica' | 'alta' | 'media' | 'baixa';
@@ -95,7 +95,7 @@ export interface AuditEntry {
   metadata?: Record<string, unknown>;
 }
 
-export type GuiaStatus = 'aguardando' | 'lendo' | 'identificada' | 'enviando' | 'enviada' | 'erro' | 'revisao';
+export type GuiaStatus = 'aguardando' | 'lendo' | 'identificada' | 'enviando' | 'enviada' | 'erro' | 'revisao' | 'pronta_envio' | 'nao_identificada' | 'duplicada';
 export type MatchSource = 'filename' | 'pdf_text' | 'pdf_native' | 'multiple' | 'none';
 export type DispatchStatus = 'pendente' | 'aceito' | 'entregue' | 'falhou';
 export type IntegrationProvider = 'google_drive' | 'gmail' | 'twilio_whatsapp' | 'pdf_native_reader';
