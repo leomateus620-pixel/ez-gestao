@@ -2479,7 +2479,7 @@ export type Database = {
         | "concluido"
         | "parcial"
         | "falha"
-      canal_envio: "email" | "whatsapp"
+      canal_envio: "email" | "whatsapp" | "ambos"
       cnd_lookup_status:
         | "negativa"
         | "positiva_com_efeitos"
@@ -2544,6 +2544,9 @@ export type Database = {
         | "enviada"
         | "revisao"
         | "erro"
+        | "pronta_envio"
+        | "nao_identificada"
+        | "duplicada"
       health_status: "ok" | "degradado" | "indisponivel"
       job_status:
         | "queued"
@@ -2590,6 +2593,15 @@ export type Database = {
         | "parsing"
         | "persistencia"
       run_step_status: "sucesso" | "falha" | "pulado" | "executando"
+      tipo_guia:
+        | "das"
+        | "fgts"
+        | "daf"
+        | "darf"
+        | "gps_inss"
+        | "iss"
+        | "icms"
+        | "outros"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2729,7 +2741,7 @@ export const Constants = {
       ],
       artifact_type: ["screenshot", "html", "pdf", "trace", "text"],
       batch_status: ["agendado", "executando", "concluido", "parcial", "falha"],
-      canal_envio: ["email", "whatsapp"],
+      canal_envio: ["email", "whatsapp", "ambos"],
       cnd_lookup_status: [
         "negativa",
         "positiva_com_efeitos",
@@ -2799,6 +2811,9 @@ export const Constants = {
         "enviada",
         "revisao",
         "erro",
+        "pronta_envio",
+        "nao_identificada",
+        "duplicada",
       ],
       health_status: ["ok", "degradado", "indisponivel"],
       job_status: [
@@ -2851,6 +2866,16 @@ export const Constants = {
         "persistencia",
       ],
       run_step_status: ["sucesso", "falha", "pulado", "executando"],
+      tipo_guia: [
+        "das",
+        "fgts",
+        "daf",
+        "darf",
+        "gps_inss",
+        "iss",
+        "icms",
+        "outros",
+      ],
     },
   },
 } as const
