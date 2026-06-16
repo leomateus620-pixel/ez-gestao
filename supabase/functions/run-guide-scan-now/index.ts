@@ -338,9 +338,21 @@ serve(async (req) => {
   const { data: testConfig } = await db.from('guide_test_config').select('*').eq('id', 1).maybeSingle();
   const config = testConfig || { modo_global: 'teste', email_teste: null, whatsapp_teste: null };
 
+  // Optional reprocess targeting
+  let reprocessIds: string[] = [];
+  try {
+    const body = await req.json();
+    if (Array.isArray(body?.guide_ids)) reprocessIds = body.guide_ids.filter((x: unknown) => typeof x === 'string');
+  } catch { /* no body is fine */ }
+
   // Criar batch
   const { data: batch } = await db.from('guide_batch_runs').insert({ modo: config.modo_global }).select().single();
 
+  let files: any[] = [];
+  if (reprocessIds.length > 0) {
+    const { data: targets } = await db.from('guias').select('drive_file_id, file_name, mime_type, sha256').in('id', reprocessIds);
+    files = (targets || []).map((t: any) => ({ id: t.drive_file_id, name: t.file_name, mimeType: t.mime_type, md5Checksum: t.sha256 }));
+  } else {
   // List files
   const params = new URLSearchParams({
     q: `'${drive.source_folder_id}' in parents and trashed = false`,
@@ -351,7 +363,8 @@ serve(async (req) => {
   if (!list.ok) {
     return new Response(JSON.stringify({ error: "drive_list_failed", status: list.status }), { status: 502, headers: cors });
   }
-  const files = ((await list.json()).files || []) as any[];
+    files = ((await list.json()).files || []) as any[];
+  }
 
   const results: any[] = [];
   const counters = { total: 0, enviadas: 0, revisao: 0, erros: 0, duplicadas: 0, nao_identificadas: 0, identificadas: 0 };
@@ -369,7 +382,7 @@ serve(async (req) => {
       guide = inserted;
     }
     if (!guide) continue;
-    if (['enviada','enviando'].includes(guide.status)) {
+    if (reprocessIds.length === 0 && ['enviada','enviando'].includes(guide.status)) {
       results.push({ file: file.name, skipped: true, status: guide.status }); continue;
     }
     if (file.mimeType !== 'application/pdf') {
