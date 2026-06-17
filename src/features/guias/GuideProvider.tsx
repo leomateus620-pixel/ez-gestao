@@ -23,6 +23,12 @@ function mapGuide(row: any): Guia {
     competencia: row.competencia,
     vencimento: row.vencimento,
     valor: row.valor,
+    confidenceScore: row.confidence_score ?? null,
+    criticalFieldsJson: row.critical_fields_json ?? null,
+    validationIssuesJson: row.validation_issues_json ?? null,
+    decisionReason: row.decision_reason ?? null,
+    manualReviewLevel: row.manual_review_level ?? null,
+    duplicateLevel: row.duplicate_level ?? null,
     textoExtraidoPreview: row.texto_extraido_preview,
     paginaCount: row.pagina_count ?? null,
     extractionMethod: row.extraction_method ?? null,
@@ -179,7 +185,7 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
   const enableEvents = useCallback(() => setEventsEnabled(true), []);
 
   const metrics = useMemo(() => ({
-    waiting: guides.filter((guide) => ['aguardando', 'lendo', 'ocr', 'identificada', 'enviando'].includes(guide.status)).length,
+    waiting: guides.filter((guide) => ['aguardando', 'aguardando_processamento', 'lendo', 'processando', 'validando', 'identificada', 'enviando', 'pronta_envio'].includes(guide.status)).length,
     sent: guides.filter((guide) => guide.status === 'enviada').length,
     failures: guides.filter((guide) => guide.status === 'erro').length,
     reviewing: exceptions.filter((entry) => entry.status === 'open' || entry.status === 'investigating').length,

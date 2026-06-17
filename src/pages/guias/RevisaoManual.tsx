@@ -25,7 +25,7 @@ function useReviewGuides() {
     queryFn: async () => {
       const { data, error } = await db.from('guias')
         .select('*')
-        .in('status', ['revisao', 'nao_identificada', 'duplicada', 'erro'])
+        .in('status', ['revisao', 'revisao_manual', 'quarentena', 'nao_identificada', 'duplicada', 'erro'])
         .order('received_at', { ascending: false });
       if (error) throw error;
       return data || [];
@@ -89,7 +89,7 @@ export default function RevisaoManual() {
         cnpj_detectado: selected.cnpj_detectado ?? '',
       });
     }
-  }, [selected?.id]);
+  }, [selected]);
 
   if (isLoading) return <div className="p-6 text-sm text-foreground/68">Carregando guias para revisão...</div>;
 
@@ -104,7 +104,7 @@ export default function RevisaoManual() {
     );
   }
 
-  const submit = async (mode: 'approve_send' | 'approve_no_send' | 'mark_error' | 'reprocess') => {
+  const submit = async (mode: 'approve_send' | 'approve_no_send' | 'mark_duplicate' | 'mark_error' | 'reprocess') => {
     if (!selected) return;
     const overrides: Record<string, unknown> = {
       empresa_id: form.empresa_id || null,
@@ -121,14 +121,30 @@ export default function RevisaoManual() {
       refetch();
       return;
     }
+    if (mode === 'mark_duplicate') {
+      await db.from('guias').update({ ...overrides, status: 'duplicada', duplicate_level: selected.duplicate_level || 'probable' }).eq('id', selected.id);
+      await db.from('guide_audit').insert({ guia_id: selected.id, action: 'mark_duplicate', actor: 'manual', before: selected, after: { ...overrides, status: 'duplicada' } });
+      refetch();
+      return;
+    }
     if (mode === 'approve_no_send') {
-      await db.from('guias').update({ ...overrides, status: 'enviada', sent_at: new Date().toISOString() }).eq('id', selected.id);
+      await db.from('guias').update({
+        ...overrides,
+        status: 'pronta_envio',
+        dispatch_blocked_reason: 'Correcao manual salva sem envio.',
+        decision_reason: 'Correcao manual salva sem envio.',
+      }).eq('id', selected.id);
       await db.from('guide_audit').insert({ guia_id: selected.id, action: 'approve_no_send', actor: 'manual', before: selected, after: overrides });
       refetch();
       return;
     }
     // approve_send ou reprocess → dispatch
-    await dispatch.mutateAsync({ guide_id: selected.id, overrides });
+    await dispatch.mutateAsync({
+      guide_id: selected.id,
+      overrides,
+      force_dispatch: mode === 'approve_send',
+      manual_approval: mode === 'approve_send',
+    });
     refetch();
   };
 
@@ -176,6 +192,29 @@ export default function RevisaoManual() {
               )}
             </div>
 
+            {selected.decision_reason && (
+              <p className="rounded-lg bg-warning/10 p-2 text-xs text-warning">{selected.decision_reason}</p>
+            )}
+
+            {selected.critical_fields_json && Object.keys(selected.critical_fields_json).length > 0 && (
+              <div className="rounded-lg border border-border/50 p-3">
+                <p className="text-xs font-semibold text-foreground/72">Scores por campo</p>
+                <div className="mt-2 grid gap-2">
+                  {Object.entries(selected.critical_fields_json as Record<string, any>).map(([name, evidence]) => (
+                    <div key={name} className="rounded-md bg-muted/30 p-2 text-[11px]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium">{name.replace(/_/g, ' ')}</span>
+                        <Badge variant="outline" className="text-[10px]">
+                          {evidence?.status || 'sem status'} {Math.round((Number(evidence?.confidence) || 0) * 100)}%
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-foreground/64">{evidence?.justification || evidence?.source || '-'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label className="text-xs">Empresa</Label>
               <Select value={form.empresa_id || ''} onValueChange={(v) => setForm({ ...form, empresa_id: v })}>
@@ -220,10 +259,13 @@ export default function RevisaoManual() {
 
             <div className="flex flex-wrap gap-2 pt-2">
               <Button size="sm" onClick={() => submit('approve_send')} disabled={dispatch.isPending}>
-                <CheckCircle2 className="mr-1 h-4 w-4" /> Aprovar e enviar
+                <CheckCircle2 className="mr-1 h-4 w-4" /> Corrigir e enviar
               </Button>
               <Button size="sm" variant="outline" onClick={() => submit('approve_no_send')}>
-                Aprovar sem enviar
+                Corrigir e salvar
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => submit('mark_duplicate')}>
+                Marcar duplicada
               </Button>
               <Button size="sm" variant="outline" onClick={() => submit('reprocess')} disabled={dispatch.isPending}>
                 <RefreshCw className="mr-1 h-4 w-4" /> Reprocessar

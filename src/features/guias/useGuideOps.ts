@@ -8,6 +8,15 @@ const db = supabase as any;
 export type TestConfig = {
   id: number;
   modo_global: 'teste' | 'producao';
+  operation_level:
+    | 'automacao_desligada'
+    | 'somente_classificacao'
+    | 'leitura_revisao'
+    | 'envio_automatico_seguro'
+    | 'producao_total';
+  auto_dispatch_enabled: boolean;
+  require_batch_approval: boolean;
+  high_value_threshold: number | null;
   email_teste: string | null;
   whatsapp_teste: string | null;
   updated_by: string | null;
@@ -20,7 +29,17 @@ export function useTestConfig() {
     queryFn: async () => {
       const { data, error } = await db.from('guide_test_config').select('*').eq('id', 1).maybeSingle();
       if (error) throw error;
-      return (data || { id: 1, modo_global: 'teste', email_teste: null, whatsapp_teste: null }) as TestConfig;
+      return (data || {
+        id: 1,
+        modo_global: 'teste',
+        operation_level: 'somente_classificacao',
+        auto_dispatch_enabled: false,
+        require_batch_approval: true,
+        high_value_threshold: null,
+        email_teste: null,
+        whatsapp_teste: null,
+        updated_by: null,
+      }) as TestConfig;
     },
     staleTime: 30_000,
   });
@@ -81,7 +100,7 @@ export function useGuideTemplates() {
 export function useDispatchGuide() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { guide_id: string; overrides?: Record<string, unknown> }) => {
+    mutationFn: async (params: { guide_id: string; overrides?: Record<string, unknown>; force_dispatch?: boolean; manual_approval?: boolean }) => {
       const { data, error } = await supabase.functions.invoke('dispatch-guide', { body: params });
       if (error) throw error;
       return data;

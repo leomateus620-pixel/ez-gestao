@@ -95,7 +95,23 @@ export interface AuditEntry {
   metadata?: Record<string, unknown>;
 }
 
-export type GuiaStatus = 'aguardando' | 'lendo' | 'identificada' | 'enviando' | 'enviada' | 'erro' | 'revisao' | 'pronta_envio' | 'nao_identificada' | 'duplicada';
+export type GuiaStatus =
+  | 'aguardando'
+  | 'aguardando_processamento'
+  | 'lendo'
+  | 'ocr'
+  | 'processando'
+  | 'validando'
+  | 'identificada'
+  | 'enviando'
+  | 'enviada'
+  | 'erro'
+  | 'revisao'
+  | 'revisao_manual'
+  | 'quarentena'
+  | 'pronta_envio'
+  | 'nao_identificada'
+  | 'duplicada';
 export type MatchSource = 'filename' | 'pdf_text' | 'pdf_native' | 'multiple' | 'none';
 export type DispatchStatus = 'pendente' | 'aceito' | 'entregue' | 'falhou';
 export type IntegrationProvider = 'google_drive' | 'gmail' | 'twilio_whatsapp' | 'pdf_native_reader';
@@ -116,7 +132,15 @@ export type GuideExceptionType =
   | 'dispatch_failed'
   | 'delivery_failed'
   | 'drive_download_failed'
-  | 'drive_move_failed';
+  | 'drive_move_failed'
+  | 'multiple_cnpj'
+  | 'cnpj_missing'
+  | 'cnpj_invalid'
+  | 'duplicate_exact'
+  | 'duplicate_operational'
+  | 'duplicate_probable'
+  | 'dispatch_precondition_failed'
+  | 'connector_inactive';
 
 export interface Guia {
   id: string;
@@ -132,11 +156,17 @@ export interface Guia {
   competencia: string | null;
   vencimento: string | null;
   valor: number | null;
+  confidenceScore: number | null;
+  criticalFieldsJson: Record<string, unknown> | null;
+  validationIssuesJson: Array<Record<string, unknown>> | null;
+  decisionReason: string | null;
+  manualReviewLevel: 'quick' | 'full' | 'none' | null;
+  duplicateLevel: 'exact' | 'operational' | 'probable' | null;
   textoExtraidoPreview: string | null;
   paginaCount: number | null;
   extractionMethod: string | null;
   hasTextLayer: boolean | null;
-  pastaAtual: 'a_enviar' | 'enviados';
+  pastaAtual: 'a_enviar' | 'enviados' | 'enviadas' | 'revisao_manual' | 'nao_identificadas' | 'erros' | 'duplicadas';
   providerError: string | null;
   receivedAt: string;
   processedAt: string | null;

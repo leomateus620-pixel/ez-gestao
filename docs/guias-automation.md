@@ -2,6 +2,42 @@
 
 ## Fluxo
 
+## Pipeline seguro
+
+Regra central: envio automatico somente com certeza alta. Qualquer ambiguidade vai para
+`revisao_manual` ou `quarentena`; duplicidade nunca e reenviada automaticamente.
+
+Limites de confianca:
+
+- `confidence_score >= 0.92` e todos os campos criticos validos: pode ficar `pronta_envio`.
+- `confidence_score >= 0.85` e `< 0.92`: revisao rapida.
+- `confidence_score < 0.85`: revisao manual completa.
+- Campo critico ausente, invalido ou duvidoso: sem envio automatico.
+
+Campos criticos registrados em `critical_fields_json`: CNPJ, empresa, tipo da guia,
+competencia, vencimento, valor, destinatario e canal. Cada campo guarda valor,
+origem, metodo, score, justificativa e status.
+
+Matriz de decisao implementada no Edge Function `run-guide-scan-now`:
+
+- CNPJ ausente ou invalido -> `nao_identificada`.
+- Multiplos CNPJs validos -> `revisao_manual`.
+- Empresa inexistente ou inativa -> `revisao_manual`.
+- Tipo, valor, competencia ou vencimento duvidoso -> `revisao_manual`.
+- Inconsistencia entre campos -> `quarentena`.
+- Duplicidade exata ou operacional -> `duplicada`.
+- Duplicidade provavel -> `revisao_manual`.
+- Template, destinatario ou conector necessario invalido -> `quarentena`/`erro`.
+- Tudo valido, score alto e automacao habilitada -> `pronta_envio` e dispatch.
+
+Modo teste nunca chama Gmail/WhatsApp e nunca move para `Enviadas`; ele grava preview
+do lote em `guide_batch_runs.preview_json`, que pode ser exportado pela tela de Guias.
+
+Google Drive e Gmail continuam usando exclusivamente os gateways Lovable:
+
+- Drive: `https://connector-gateway.lovable.dev/google_drive/drive/v3`
+- Gmail: `https://connector-gateway.lovable.dev/google_mail/gmail/v1`
+
 1. `scan-guide-folder` lista arquivos da pasta Google Drive `a enviar`.
 2. PDFs novos são registrados em `guias`; formatos diferentes geram exceção.
 3. `process-guide` tenta identificar CNPJ e metadados no PDF. Quando necessário,

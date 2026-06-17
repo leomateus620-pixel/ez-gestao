@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, FileText, FolderCog, Loader2, Play, Send, ShieldAlert, FlaskConical, Rocket } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Download, FileText, FolderCog, Loader2, Play, Send, ShieldAlert, FlaskConical, Rocket } from 'lucide-react';
 import { useGuides } from '@/features/guias/GuideProvider';
-import { useTestConfig, useBatchRuns, useBootstrapFolders } from '@/features/guias/useGuideOps';
+import { useTestConfig, useBatchRuns, useBootstrapFolders, type TestConfig } from '@/features/guias/useGuideOps';
 import { PageHeader } from '@/components/PageHeader';
 import { GlassCard } from '@/components/GlassCard';
 import { EmptyState } from '@/components/EmptyState';
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatCNPJ, formatDate, formatDateTime } from '@/lib/formatters';
 import type { Guia, GuiaStatus } from '@/data/types';
@@ -19,15 +20,38 @@ type GuideView = 'fila' | 'enviadas' | 'excecoes';
 
 const guideLabels: Record<GuiaStatus, string> = {
   aguardando: 'Aguardando',
+  aguardando_processamento: 'Aguard. processamento',
   lendo: 'Lendo',
+  ocr: 'OCR',
+  processando: 'Processando',
+  validando: 'Validando',
   identificada: 'Identificada',
   enviando: 'Enviando',
   enviada: 'Enviada',
   erro: 'Erro',
   revisao: 'Revisao',
+  revisao_manual: 'Revisao manual',
+  quarentena: 'Quarentena',
   pronta_envio: 'Pronta p/ envio',
   nao_identificada: 'Não identificada',
   duplicada: 'Duplicada',
+};
+
+const operationLabels = {
+  automacao_desligada: 'Automacao desligada',
+  somente_classificacao: 'Somente classificacao',
+  leitura_revisao: 'Leitura + revisao',
+  envio_automatico_seguro: 'Envio automatico seguro',
+  producao_total: 'Producao total',
+} as const;
+
+type BatchPreviewRow = {
+  file?: string;
+  status?: string;
+  reason?: string;
+  error?: string;
+  preview?: Record<string, unknown>;
+  [key: string]: unknown;
 };
 
 function GuideBadge({ status }: { status: GuiaStatus }) {
@@ -35,9 +59,9 @@ function GuideBadge({ status }: { status: GuiaStatus }) {
     <Badge variant="outline" className={cn(
       'font-medium',
       status === 'enviada' && 'border-success/30 bg-success/10 text-success',
-      ['lendo', 'identificada', 'enviando'].includes(status) && 'border-primary/30 bg-primary/10 text-primary',
-      status === 'aguardando' && 'border-info/30 bg-info/10 text-info',
-      status === 'revisao' && 'border-warning/30 bg-warning/10 text-warning',
+      ['lendo', 'ocr', 'processando', 'validando', 'identificada', 'enviando'].includes(status) && 'border-primary/30 bg-primary/10 text-primary',
+      ['aguardando', 'aguardando_processamento', 'pronta_envio'].includes(status) && 'border-info/30 bg-info/10 text-info',
+      ['revisao', 'revisao_manual', 'quarentena'].includes(status) && 'border-warning/30 bg-warning/10 text-warning',
       status === 'erro' && 'border-destructive/30 bg-destructive/10 text-destructive',
     )}>
       {guideLabels[status]}
@@ -53,7 +77,9 @@ function GuidesTable({ guides }: { guides: Guia[] }) {
           <TableHead>Arquivo</TableHead>
           <TableHead>Identificação</TableHead>
           <TableHead>Guia</TableHead>
+          <TableHead>Score</TableHead>
           <TableHead>Status</TableHead>
+          <TableHead>Decisao</TableHead>
           <TableHead>Recebida</TableHead>
           <TableHead className="w-12" />
         </TableRow>
@@ -74,7 +100,13 @@ function GuidesTable({ guides }: { guides: Guia[] }) {
               {guide.tipoGuia || 'A extrair'}
               {guide.competencia && <span className="block text-foreground/68">{guide.competencia}</span>}
             </TableCell>
+            <TableCell className="text-xs font-medium">
+              {guide.confidenceScore == null ? '-' : `${Math.round(guide.confidenceScore * 100)}%`}
+            </TableCell>
             <TableCell><GuideBadge status={guide.status} /></TableCell>
+            <TableCell className="max-w-64 truncate text-xs text-foreground/72">
+              {guide.decisionReason || '-'}
+            </TableCell>
             <TableCell className="text-xs text-foreground/72">{formatDateTime(guide.receivedAt)}</TableCell>
             <TableCell>
               <Button asChild size="icon" variant="ghost" className="h-8 w-8">
@@ -105,13 +137,47 @@ export default function Guias({ view }: { view: GuideView }) {
     guides.filter((guide) => guide.status === 'enviada'), [guides]);
   const openExceptions = useMemo(() =>
     exceptions.filter((entry) => entry.status !== 'resolved' && entry.status !== 'ignored'), [exceptions]);
-  const reviewing = useMemo(() => guides.filter((g) => ['revisao', 'nao_identificada', 'duplicada', 'erro'].includes(g.status)), [guides]);
+  const reviewing = useMemo(() => guides.filter((g) => ['revisao', 'revisao_manual', 'quarentena', 'nao_identificada', 'duplicada', 'erro'].includes(g.status)), [guides]);
   const byStatus = useMemo(() => {
     const out: Partial<Record<GuiaStatus, number>> = {};
     for (const g of guides) out[g.status] = (out[g.status] || 0) + 1;
     return out;
   }, [guides]);
   const lastBatch = batches.data?.[0];
+  const totalGuides = guides.length || 1;
+  const reliability = {
+    autoReady: Math.round(((byStatus.pronta_envio ?? 0) + (byStatus.enviada ?? 0)) / totalGuides * 100),
+    manualReview: Math.round(((byStatus.revisao ?? 0) + (byStatus.revisao_manual ?? 0) + (byStatus.quarentena ?? 0)) / totalGuides * 100),
+    errors: Math.round(((byStatus.erro ?? 0) + (byStatus.nao_identificada ?? 0) + (byStatus.duplicada ?? 0)) / totalGuides * 100),
+  };
+  const exportLastBatch = () => {
+    const rows = Array.isArray(lastBatch?.preview_json) ? lastBatch.preview_json : [];
+    if (!rows.length) return;
+    const headers = ['arquivo', 'guia_id', 'status', 'empresa', 'cnpj', 'tipo', 'competencia', 'vencimento', 'valor', 'score', 'motivo'];
+    const csv = [
+      headers.join(','),
+      ...rows.map((row: BatchPreviewRow) => {
+        const preview = row.preview || {};
+        return headers.map((key) => {
+          const value = key === 'arquivo'
+            ? row.file
+            : key === 'status'
+              ? row.status
+              : key === 'motivo'
+                ? (row.reason || preview.motivo || row.error || '')
+                : (row[key] ?? preview[key] ?? '');
+          return `"${String(value ?? '').replace(/"/g, '""')}"`;
+        }).join(',');
+      }),
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `guias-lote-${lastBatch?.id || 'preview'}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   const title = view === 'fila' ? 'Fila de Guias' : view === 'enviadas' ? 'Guias Enviadas' : 'Exceções de Guias';
   const subtitle = view === 'fila'
@@ -193,12 +259,47 @@ export default function Guias({ view }: { view: GuideView }) {
             </div>
           </div>
         )}
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-end">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-foreground/72">Nivel operacional</label>
+            <Select
+              value={testConfig.data?.operation_level ?? 'somente_classificacao'}
+              onValueChange={(value) => testConfig.update.mutate({ operation_level: value as TestConfig['operation_level'] })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(operationLabels).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <label className="flex items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-xs">
+            <Switch
+              checked={testConfig.data?.auto_dispatch_enabled ?? false}
+              disabled={testConfig.update.isPending || isTeste}
+              onCheckedChange={(checked) => testConfig.update.mutate({ auto_dispatch_enabled: checked })}
+            />
+            Envio automatico seguro
+          </label>
+          <label className="flex items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-xs">
+            <Switch
+              checked={testConfig.data?.require_batch_approval ?? true}
+              disabled={testConfig.update.isPending}
+              onCheckedChange={(checked) => testConfig.update.mutate({ require_batch_approval: checked })}
+            />
+            Aprovar lote
+          </label>
+        </div>
       </GlassCard>
 
       {/* Cards de status */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
         {([
-          ['aguardando', 'A processar', byStatus.aguardando ?? 0],
+          ['aguardando', 'A processar', (byStatus.aguardando ?? 0) + (byStatus.aguardando_processamento ?? 0)],
           ['pronta_envio', 'Pronta envio', byStatus.pronta_envio ?? 0],
           ['enviada', 'Enviadas', byStatus.enviada ?? 0],
           ['revisao', 'Revisão', byStatus.revisao ?? 0],
@@ -211,9 +312,34 @@ export default function Guias({ view }: { view: GuideView }) {
             <p className="mt-1 text-2xl font-semibold">{count}</p>
           </GlassCard>
         ))}
+        <GlassCard className="p-3">
+          <p className="text-[10px] uppercase tracking-wide text-foreground/60">Revisao manual</p>
+          <p className="mt-1 text-2xl font-semibold">{byStatus.revisao_manual ?? 0}</p>
+        </GlassCard>
+        <GlassCard className="p-3">
+          <p className="text-[10px] uppercase tracking-wide text-foreground/60">Quarentena</p>
+          <p className="mt-1 text-2xl font-semibold">{byStatus.quarentena ?? 0}</p>
+        </GlassCard>
       </div>
 
       {/* Métricas última varredura */}
+      <GlassCard className="p-4">
+        <div className="grid gap-3 text-xs sm:grid-cols-3">
+          <div>
+            <p className="uppercase tracking-wide text-foreground/60">Prontas/seguras</p>
+            <p className="mt-1 text-xl font-semibold text-success">{reliability.autoReady}%</p>
+          </div>
+          <div>
+            <p className="uppercase tracking-wide text-foreground/60">Revisao/quarentena</p>
+            <p className="mt-1 text-xl font-semibold text-warning">{reliability.manualReview}%</p>
+          </div>
+          <div>
+            <p className="uppercase tracking-wide text-foreground/60">Erro/duplicidade</p>
+            <p className="mt-1 text-xl font-semibold text-destructive">{reliability.errors}%</p>
+          </div>
+        </div>
+      </GlassCard>
+
       {lastBatch && (
         <GlassCard className="p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -223,11 +349,18 @@ export default function Guias({ view }: { view: GuideView }) {
                 {formatDateTime(lastBatch.started_at)} • modo {lastBatch.modo}
               </p>
             </div>
+            {Array.isArray(lastBatch.preview_json) && lastBatch.preview_json.length > 0 && (
+              <Button size="sm" variant="outline" className="gap-2" onClick={exportLastBatch}>
+                <Download className="h-4 w-4" /> CSV
+              </Button>
+            )}
             <div className="flex flex-wrap gap-4 text-xs text-foreground/72">
               <span>Total: <b>{lastBatch.total ?? 0}</b></span>
+              <span>Prontas: <b className="text-info">{lastBatch.prontas_envio ?? 0}</b></span>
               <span>Identificadas: <b>{lastBatch.identificadas ?? 0}</b></span>
               <span>Enviadas: <b className="text-success">{lastBatch.enviadas ?? 0}</b></span>
               <span>Revisão: <b className="text-warning">{lastBatch.revisao ?? 0}</b></span>
+              <span>Quarentena: <b className="text-warning">{lastBatch.quarentena ?? 0}</b></span>
               <span>Erros: <b className="text-destructive">{lastBatch.erros ?? 0}</b></span>
               <span>Duplicadas: <b>{lastBatch.duplicadas ?? 0}</b></span>
             </div>
