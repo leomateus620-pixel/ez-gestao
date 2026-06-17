@@ -1804,32 +1804,21 @@ export type Database = {
           competencia: string | null
           confidence_score: number | null
           created_at: string
-          critical_fields_json: Json
           dedup_hash: string | null
-          decision_reason: string | null
-          decision_reasons: Json
-          decision_status: string | null
-          dispatch_blocked_reason: string | null
           drive_file_id: string
-          drive_organization_pending: boolean
-          duplicate_level: string | null
-          duplicate_of: string | null
           empresa_id: string | null
           extraction_method: string | null
           file_name: string
           has_text_layer: boolean | null
           id: string
           identificador_guia: string | null
-          manual_review_level: string | null
           match_source: Database["public"]["Enums"]["guia_match_source"] | null
           mime_type: string
           modo: string
-          operation_batch_id: string | null
           pagina_count: number | null
           pasta_atual: string
           processed_at: string | null
           provider_error: string | null
-          quarantined_at: string | null
           razao_social_detectada: string | null
           received_at: string
           revisao_correcoes: Json | null
@@ -1838,13 +1827,11 @@ export type Database = {
           sha256: string | null
           source_folder_id: string | null
           status: Database["public"]["Enums"]["guia_status"]
-          test_preview_json: Json
           texto_extraido_preview: string | null
           tipo_guia: string | null
           tipo_guia_confidence: number | null
           tipo_guia_normalized: Database["public"]["Enums"]["tipo_guia"] | null
           updated_at: string
-          validation_issues_json: Json
           valor: number | null
           valor_extraido_raw: string | null
           vencimento: string | null
@@ -1855,32 +1842,21 @@ export type Database = {
           competencia?: string | null
           confidence_score?: number | null
           created_at?: string
-          critical_fields_json?: Json
           dedup_hash?: string | null
-          decision_reason?: string | null
-          decision_reasons?: Json
-          decision_status?: string | null
-          dispatch_blocked_reason?: string | null
           drive_file_id: string
-          drive_organization_pending?: boolean
-          duplicate_level?: string | null
-          duplicate_of?: string | null
           empresa_id?: string | null
           extraction_method?: string | null
           file_name: string
           has_text_layer?: boolean | null
           id?: string
           identificador_guia?: string | null
-          manual_review_level?: string | null
           match_source?: Database["public"]["Enums"]["guia_match_source"] | null
           mime_type?: string
           modo?: string
-          operation_batch_id?: string | null
           pagina_count?: number | null
           pasta_atual?: string
           processed_at?: string | null
           provider_error?: string | null
-          quarantined_at?: string | null
           razao_social_detectada?: string | null
           received_at?: string
           revisao_correcoes?: Json | null
@@ -1889,13 +1865,11 @@ export type Database = {
           sha256?: string | null
           source_folder_id?: string | null
           status?: Database["public"]["Enums"]["guia_status"]
-          test_preview_json?: Json
           texto_extraido_preview?: string | null
           tipo_guia?: string | null
           tipo_guia_confidence?: number | null
           tipo_guia_normalized?: Database["public"]["Enums"]["tipo_guia"] | null
           updated_at?: string
-          validation_issues_json?: Json
           valor?: number | null
           valor_extraido_raw?: string | null
           vencimento?: string | null
@@ -1906,32 +1880,21 @@ export type Database = {
           competencia?: string | null
           confidence_score?: number | null
           created_at?: string
-          critical_fields_json?: Json
           dedup_hash?: string | null
-          decision_reason?: string | null
-          decision_reasons?: Json
-          decision_status?: string | null
-          dispatch_blocked_reason?: string | null
           drive_file_id?: string
-          drive_organization_pending?: boolean
-          duplicate_level?: string | null
-          duplicate_of?: string | null
           empresa_id?: string | null
           extraction_method?: string | null
           file_name?: string
           has_text_layer?: boolean | null
           id?: string
           identificador_guia?: string | null
-          manual_review_level?: string | null
           match_source?: Database["public"]["Enums"]["guia_match_source"] | null
           mime_type?: string
           modo?: string
-          operation_batch_id?: string | null
           pagina_count?: number | null
           pasta_atual?: string
           processed_at?: string | null
           provider_error?: string | null
-          quarantined_at?: string | null
           razao_social_detectada?: string | null
           received_at?: string
           revisao_correcoes?: Json | null
@@ -1940,13 +1903,11 @@ export type Database = {
           sha256?: string | null
           source_folder_id?: string | null
           status?: Database["public"]["Enums"]["guia_status"]
-          test_preview_json?: Json
           texto_extraido_preview?: string | null
           tipo_guia?: string | null
           tipo_guia_confidence?: number | null
           tipo_guia_normalized?: Database["public"]["Enums"]["tipo_guia"] | null
           updated_at?: string
-          validation_issues_json?: Json
           valor?: number | null
           valor_extraido_raw?: string | null
           vencimento?: string | null
@@ -2010,12 +1971,6 @@ export type Database = {
           modo: string
           nao_identificadas: number
           notes: string | null
-          operation_level: string
-          pause_reason: string | null
-          paused: boolean
-          preview_json: Json
-          prontas_envio: number
-          quarentena: number
           revisao: number
           started_at: string
           total: number
@@ -2031,12 +1986,6 @@ export type Database = {
           modo?: string
           nao_identificadas?: number
           notes?: string | null
-          operation_level?: string
-          pause_reason?: string | null
-          paused?: boolean
-          preview_json?: Json
-          prontas_envio?: number
-          quarentena?: number
           revisao?: number
           started_at?: string
           total?: number
@@ -2052,12 +2001,6 @@ export type Database = {
           modo?: string
           nao_identificadas?: number
           notes?: string | null
-          operation_level?: string
-          pause_reason?: string | null
-          paused?: boolean
-          preview_json?: Json
-          prontas_envio?: number
-          quarentena?: number
           revisao?: number
           started_at?: string
           total?: number
@@ -2073,7 +2016,6 @@ export type Database = {
           corpo: string
           created_at: string
           id: string
-          required_placeholders: string[]
           tipo_guia: Database["public"]["Enums"]["tipo_guia"]
           twilio_content_sid: string | null
           updated_at: string
@@ -2086,7 +2028,6 @@ export type Database = {
           corpo: string
           created_at?: string
           id?: string
-          required_placeholders?: string[]
           tipo_guia: Database["public"]["Enums"]["tipo_guia"]
           twilio_content_sid?: string | null
           updated_at?: string
@@ -2099,7 +2040,6 @@ export type Database = {
           corpo?: string
           created_at?: string
           id?: string
-          required_placeholders?: string[]
           tipo_guia?: Database["public"]["Enums"]["tipo_guia"]
           twilio_content_sid?: string | null
           updated_at?: string
@@ -2109,43 +2049,25 @@ export type Database = {
       }
       guide_test_config: {
         Row: {
-          auto_dispatch_enabled: boolean
           email_teste: string | null
-          high_value_threshold: number | null
           id: number
           modo_global: string
-          operation_level: string
-          require_batch_approval: boolean
-          require_first_month_batch_approval: boolean
-          require_new_client_approval: boolean
           updated_at: string
           updated_by: string | null
           whatsapp_teste: string | null
         }
         Insert: {
-          auto_dispatch_enabled?: boolean
           email_teste?: string | null
-          high_value_threshold?: number | null
           id?: number
           modo_global?: string
-          operation_level?: string
-          require_batch_approval?: boolean
-          require_first_month_batch_approval?: boolean
-          require_new_client_approval?: boolean
           updated_at?: string
           updated_by?: string | null
           whatsapp_teste?: string | null
         }
         Update: {
-          auto_dispatch_enabled?: boolean
           email_teste?: string | null
-          high_value_threshold?: number | null
           id?: number
           modo_global?: string
-          operation_level?: string
-          require_batch_approval?: boolean
-          require_first_month_batch_approval?: boolean
-          require_new_client_approval?: boolean
           updated_at?: string
           updated_by?: string | null
           whatsapp_teste?: string | null
@@ -2818,17 +2740,12 @@ export type Database = {
       guia_match_source: "cnpj_pdf" | "filename" | "manual"
       guia_status:
         | "aguardando"
-        | "aguardando_processamento"
         | "lendo"
-        | "processando"
-        | "validando"
         | "ocr"
         | "identificada"
         | "enviando"
         | "enviada"
         | "revisao"
-        | "revisao_manual"
-        | "quarentena"
         | "erro"
         | "pronta_envio"
         | "nao_identificada"
@@ -3090,17 +3007,12 @@ export const Constants = {
       guia_match_source: ["cnpj_pdf", "filename", "manual"],
       guia_status: [
         "aguardando",
-        "aguardando_processamento",
         "lendo",
-        "processando",
-        "validando",
         "ocr",
         "identificada",
         "enviando",
         "enviada",
         "revisao",
-        "revisao_manual",
-        "quarentena",
         "erro",
         "pronta_envio",
         "nao_identificada",
