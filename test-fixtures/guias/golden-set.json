@@ -1,0 +1,57 @@
+[
+  {
+    "arquivo": "DAS_EMPRESA_EXEMPLO_04_2026.pdf",
+    "text": "Documento de Arrecadacao do Simples Nacional DAS. CNPJ do contribuinte: 11.444.777/0001-61. PA: 04/2026. Data de Vencimento: 20/05/2026. Valor Total do Documento: R$ 2.857,14.",
+    "expected": {
+      "cnpj": "11444777000161",
+      "tipo_guia": "das",
+      "competencia": "04/2026",
+      "vencimento": "2026-05-20",
+      "valor": 2857.14
+    }
+  },
+  {
+    "arquivo": "FGTS_DIGITAL_EMPRESA_EXEMPLO_04_2026.pdf",
+    "text": "Guia do FGTS Digital. Empregador CNPJ: 11.444.777/0001-61. Competencia: 04/2026. Vencimento: 07/05/2026. Valor a recolher: R$ 980,55.",
+    "expected": {
+      "cnpj": "11444777000161",
+      "tipo_guia": "fgts",
+      "competencia": "04/2026",
+      "vencimento": "2026-05-07",
+      "valor": 980.55
+    }
+  },
+  {
+    "arquivo": "DARF_EMPRESA_EXEMPLO_04_2026.pdf",
+    "text": "DARF Documento de Arrecadacao de Receitas Federais. CNPJ do contribuinte: 11.444.777/0001-61. Codigo da Receita 0561. Periodo de Apuracao: 04/2026. Vencimento: 20/05/2026. Valor Principal: R$ 1.100,00. Valor Total: R$ 1.100,00.",
+    "expected": {
+      "cnpj": "11444777000161",
+      "tipo_guia": "darf",
+      "competencia": "04/2026",
+      "vencimento": "2026-05-20",
+      "valor": 1100
+    }
+  },
+  {
+    "arquivo": "DAF_EMPRESA_EXEMPLO_04_2026.pdf",
+    "text": "DAF Documento de Arrecadacao Federal. CNPJ do contribuinte: 11.444.777/0001-61. Competencia: 04/2026. Vencimento: 25/05/2026. Valor Total: R$ 750,30.",
+    "expected": {
+      "cnpj": "11444777000161",
+      "tipo_guia": "daf",
+      "competencia": "04/2026",
+      "vencimento": "2026-05-25",
+      "valor": 750.3
+    }
+  },
+  {
+    "arquivo": "GPS_INSS_EMPRESA_EXEMPLO_04_2026.pdf",
+    "text": "GPS Guia da Previdencia Social INSS. Identificador CNPJ do contribuinte: 11.444.777/0001-61. Competencia: 04/2026. Vencimento: 20/05/2026. Valor Total: R$ 3.200,10.",
+    "expected": {
+      "cnpj": "11444777000161",
+      "tipo_guia": "gps_inss",
+      "competencia": "04/2026",
+      "vencimento": "2026-05-20",
+      "valor": 3200.1
+    }
+  }
+]

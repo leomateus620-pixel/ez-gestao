@@ -1,4 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Re-dispatch de UMA guia já identificada (usado pela tela de Revisão Manual).
 // Delegamos ao orquestrador run-guide-scan-now via guide_ids para reaproveitar toda
 // a lógica de envio (templates, idempotência, modo teste/produção, movimentação).
@@ -40,16 +41,26 @@ serve(async (req) => {
   // Aplica overrides manuais vindos da revisão antes do reprocesso
   if (body?.overrides && typeof body.overrides === 'object') {
     const allowed = ['empresa_id', 'tipo_guia', 'tipo_guia_normalized', 'competencia', 'vencimento', 'valor', 'cnpj_detectado'];
-    const payload: Record<string, unknown> = { revisao_correcoes: body.overrides };
+    const payload: Record<string, unknown> = {
+      revisao_correcoes: body.overrides,
+      authorized_reprocess: true,
+    };
     for (const k of allowed) if (k in body.overrides) payload[k] = body.overrides[k];
     await db.from('guias').update(payload).in('id', guideIds);
     await db.from('guide_audit').insert(guideIds.map((id) => ({
-      guia_id: id, action: 'review_override', actor: 'manual', after: body.overrides as any,
+      guia_id: id,
+      action: body?.force_dispatch === true ? 'manual_correction_and_send' : 'review_override',
+      actor: 'manual',
+      after: body.overrides as any,
     })));
   }
 
   // Reseta status para que o orquestrador reprocesse
-  await db.from('guias').update({ status: 'aguardando', provider_error: null }).in('id', guideIds);
+  await db.from('guias').update({
+    status: 'aguardando_processamento',
+    provider_error: null,
+    dispatch_blocked_reason: null,
+  }).in('id', guideIds);
 
   const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/run-guide-scan-now`, {
     method: 'POST',
@@ -57,7 +68,11 @@ serve(async (req) => {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
     },
-    body: JSON.stringify({ guide_ids: guideIds }),
+    body: JSON.stringify({
+      guide_ids: guideIds,
+      force_dispatch: body?.force_dispatch === true,
+      manual_approval: body?.manual_approval === true || body?.force_dispatch === true,
+    }),
   });
   const txt = await res.text();
   return new Response(txt, { status: res.status, headers: cors });

@@ -10,6 +10,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { formatCNPJ, formatDate, formatDateTime } from '@/lib/formatters';
 
+type FieldEvidenceView = {
+  status?: string;
+  confidence?: number;
+  justification?: string;
+  source?: string;
+};
+
 export default function GuiaDetalhe() {
   const { id } = useParams();
   const { guides, dispatches, exceptions, events, enableEvents } = useGuides();
@@ -45,6 +52,26 @@ export default function GuiaDetalhe() {
             <div><p className="text-xs text-foreground/68">Vencimento</p><p className="mt-1 text-sm">{formatDate(guide.vencimento)}</p></div>
             <div><p className="text-xs text-foreground/68">Valor</p><p className="mt-1 text-sm">{guide.valor == null ? 'Não extraído' : `R$ ${guide.valor.toFixed(2).replace('.', ',')}`}</p></div>
           </div>
+          <div className="mt-5 rounded-xl border border-border/50 bg-muted/20 p-4">
+            <p className="text-xs font-medium text-foreground/70">Decisao e confianca</p>
+            <p className="mt-2 text-xs text-foreground/76">
+              Score: {guide.confidenceScore == null ? '-' : `${Math.round(guide.confidenceScore * 100)}%`}
+              {guide.decisionReason ? ` | ${guide.decisionReason}` : ''}
+            </p>
+          </div>
+          {guide.criticalFieldsJson && Object.keys(guide.criticalFieldsJson).length > 0 && (
+            <div className="mt-5 grid gap-2 sm:grid-cols-2">
+              {Object.entries(guide.criticalFieldsJson as Record<string, FieldEvidenceView>).map(([name, evidence]) => (
+                <div key={name} className="rounded-lg border border-border/50 bg-muted/20 p-3 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">{name.replace(/_/g, ' ')}</span>
+                    <Badge variant="outline">{evidence?.status || '-'} {Math.round((Number(evidence?.confidence) || 0) * 100)}%</Badge>
+                  </div>
+                  <p className="mt-1 text-foreground/64">{evidence?.justification || evidence?.source || '-'}</p>
+                </div>
+              ))}
+            </div>
+          )}
           {guide.textoExtraidoPreview && (
             <div className="mt-5 rounded-xl border border-border/50 bg-muted/30 p-4">
               <p className="text-xs font-medium text-foreground/70">Trecho extraído para auditoria</p>

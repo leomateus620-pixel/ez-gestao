@@ -40,6 +40,17 @@ export async function moveFile(driveKey: string, fileId: string, addParent: stri
   return res.json();
 }
 
+export async function renameFile(driveKey: string, fileId: string, name: string) {
+  const url = `${DRIVE_GW}/files/${fileId}?fields=id,name`;
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: gwHeaders(driveKey),
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(`drive_rename_failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
+  return res.json();
+}
+
 export async function downloadFile(driveKey: string, fileId: string): Promise<Uint8Array> {
   const res = await fetch(`${DRIVE_GW}/files/${fileId}?alt=media`, { headers: gwHeaders(driveKey) });
   if (!res.ok) throw new Error(`drive_download_failed: ${res.status}`);

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, no-control-regex */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -26,25 +27,27 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return new Response(JSON.stringify({ error: "method_not_allowed" }), { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+  let body: any = {};
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData } = await supabase.auth.getUser(token);
-    if (!userData?.user) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const isServiceRole = token === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const { data: userData } = isServiceRole ? { data: { user: null } } : await supabase.auth.getUser(token);
+    if (!isServiceRole && !userData?.user) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const body = await req.json();
-    const phone = String(body.phone || "").trim();
-    const message = String(body.message || "").trim();
+    body = await req.json();
+    const phone = String(body.phone || body.to || "").trim();
+    const message = String(body.message || body.body || "").trim();
     if (!phone) return new Response(JSON.stringify({ error: "phone_required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     if (!message || message.length > 2000) return new Response(JSON.stringify({ error: "invalid_message" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const normalized = normalizePhone(phone);
     if (!normalized) return new Response(JSON.stringify({ error: "invalid_phone" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const messagePayload = {
-      user_id: userData.user.id,
+      user_id: userData?.user?.id ?? null,
       tenant_id: body.tenant_id ?? null,
       source_type: body.source_type ?? "manual",
       source_id: body.source_id ?? null,
@@ -52,7 +55,7 @@ serve(async (req) => {
       phone,
       normalized_phone: normalized,
       message: message.replace(/[\u0000-\u001F\u007F]/g, " "),
-      metadata: body.metadata ?? {},
+      metadata: { ...(body.metadata ?? {}), guia_id: body.guia_id ?? null, template_sid: body.template_sid ?? null },
       status: "queued",
     };
 
@@ -91,7 +94,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ ok: true, message_id: inserted.id, status: "sent" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (err) {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const messageId = (await req.clone().json().catch(() => ({})))?.message_id;
+    const messageId = body?.message_id;
     if (messageId) {
       const { data: msg } = await supabase.from("whatsapp_messages").select("attempts,max_attempts").eq("id", messageId).single();
       const attempts = (msg?.attempts ?? 0) + 1;

@@ -1,14 +1,33 @@
 // deno-lint-ignore-file no-explicit-any
+/* eslint-disable @typescript-eslint/no-explicit-any, no-control-regex */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
 import {
-  MIN_TEXT_LENGTH, MIN_CONFIDENCE_AUTO_DISPATCH,
-  normalizeCnpj, classifyGuideType, extractMetadata,
-  calculateConfidence, dedupHash, renderTemplate, buildTemplateData,
-  slugifyEmpresa, competenciaToFolder,
+  MAX_EMAIL_ATTACHMENT_BYTES,
+  MIN_CONFIDENCE_AUTO_DISPATCH,
+  MIN_TEXT_LENGTH,
+  analyzeGuideText,
+  buildGuideDriveFileName,
+  buildTemplateData,
+  calculateConfidence,
+  collectValidationIssues,
+  competenciaToFolder,
+  dedupHash,
+  formatCnpj,
+  guideReviewLevel,
+  normalizeCnpj,
+  normalizePhoneE164,
+  renderTemplate,
+  slugifyEmpresa,
+  validateEmailAddress,
+  validateTemplateRender,
+  type ClassifyResult,
+  type FieldEvidence,
+  type GuideMetadata,
+  type TipoGuia,
 } from "../_shared/guide-parser.ts";
-import { DRIVE_GW, gwHeaders, downloadFile, moveFile, findOrCreateFolder } from "../_shared/guide-drive.ts";
+import { DRIVE_GW, downloadFile, findOrCreateFolder, gwHeaders, moveFile, renameFile } from "../_shared/guide-drive.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -19,11 +38,48 @@ const cors = {
 
 const GMAIL_GW = "https://connector-gateway.lovable.dev/google_mail/gmail/v1";
 
+type Mode = "teste" | "producao";
+type OperationLevel =
+  | "automacao_desligada"
+  | "somente_classificacao"
+  | "leitura_revisao"
+  | "envio_automatico_seguro"
+  | "producao_total";
+
+type ProcessOptions = {
+  batchId: string | null;
+  forceDispatch: boolean;
+  manualApproval: boolean;
+};
+
+type RouteDecision = {
+  status: "nao_identificada" | "duplicada" | "revisao_manual" | "quarentena" | "pronta_envio" | "erro";
+  folder?: "not_identified" | "duplicates" | "review" | "errors";
+  exceptionType?: string;
+  reason: string;
+  action: string;
+  severity?: "warning" | "error";
+  reviewLevel?: "quick" | "full" | "none";
+  duplicateLevel?: "exact" | "operational" | "probable";
+  readyButAwaitingApproval?: boolean;
+};
+
+type DispatchPlan = {
+  channel: "email" | "whatsapp";
+  destination: string | null;
+  template: any | null;
+  subject: string | null;
+  body: string;
+  errors: string[];
+};
+
 async function extractPdf(bytes: Uint8Array) {
   const pdf = await getDocumentProxy(bytes);
   const { text, totalPages } = await extractText(pdf, { mergePages: true });
   const normalized = (Array.isArray(text) ? text.join("\n") : (text as string))
-    .replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim();
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   return {
     text: normalized.slice(0, 30000),
     pageCount: totalPages || 0,
@@ -37,113 +93,730 @@ function base64Url(bytes: Uint8Array) {
   for (let i = 0; i < bytes.length; i += 8192) raw += String.fromCharCode(...bytes.slice(i, i + 8192));
   return btoa(raw).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
+
 function base64(bytes: Uint8Array) {
   let raw = "";
   for (let i = 0; i < bytes.length; i += 8192) raw += String.fromCharCode(...bytes.slice(i, i + 8192));
   return btoa(raw);
 }
 
-async function logEvent(db: any, guideId: string, eventType: string, message: string, meta: any = {}, level: 'info'|'warning'|'error' = 'info') {
+function field<T>(
+  value: T,
+  confidence: number,
+  status: "valid" | "dubious" | "missing" | "invalid",
+  source: string,
+  method: string,
+  justification: string,
+): FieldEvidence<T> {
+  return { value, confidence, status, source, method, justification };
+}
+
+async function logEvent(
+  db: any,
+  guideId: string,
+  eventType: string,
+  message: string,
+  meta: any = {},
+  level: "info" | "warning" | "error" = "info",
+  batchId?: string | null,
+) {
   await db.from("guia_eventos").insert({
-    guia_id: guideId, event_type: eventType, level, message, metadata_json: meta,
+    guia_id: guideId,
+    event_type: eventType,
+    level,
+    message,
+    metadata_json: { batch_id: batchId ?? null, ...meta },
   });
 }
 
-async function logException(db: any, guideId: string, type: string, reason: string, action: string, meta: any = {}, severity: 'warning'|'error' = 'warning') {
+async function logException(
+  db: any,
+  guideId: string,
+  type: string,
+  reason: string,
+  action: string,
+  meta: any = {},
+  severity: "warning" | "error" = "warning",
+  batchId?: string | null,
+) {
   await db.from("guia_excecoes").insert({
-    guia_id: guideId, exception_type: type, severity,
-    reason, action_recommended: action,
+    guia_id: guideId,
+    exception_type: type,
+    severity,
+    reason,
+    action_recommended: action,
+    detected_data_json: meta,
   });
-  await logEvent(db, guideId, 'exception', reason, { type, ...meta }, severity === 'error' ? 'error' : 'warning');
+  await logEvent(db, guideId, "routed_to_review", reason, { type, ...meta }, severity, batchId);
 }
 
-async function moveToFolder(db: any, guide: any, driveKey: string, destFolderId: string, fromFolderId: string, pastaAtual: string) {
+function folderIdFor(folders: any, key?: RouteDecision["folder"]) {
+  if (key === "not_identified") return { id: folders.not_identified_folder_id, pasta: "nao_identificadas" };
+  if (key === "duplicates") return { id: folders.duplicates_folder_id, pasta: "duplicadas" };
+  if (key === "review") return { id: folders.review_folder_id, pasta: "revisao_manual" };
+  if (key === "errors") return { id: folders.errors_folder_id, pasta: "erros" };
+  return { id: null, pasta: "a_enviar" };
+}
+
+async function moveToFolder(
+  db: any,
+  guide: any,
+  driveKey: string,
+  folders: any,
+  folder: RouteDecision["folder"],
+  batchId?: string | null,
+) {
+  const target = folderIdFor(folders, folder);
+  if (!target.id) return;
   try {
-    await moveFile(driveKey, guide.drive_file_id, destFolderId, fromFolderId);
-    await db.from("guias").update({ pasta_atual: pastaAtual }).eq("id", guide.id);
+    await moveFile(driveKey, guide.drive_file_id, target.id, folders.source_folder_id);
+    await db.from("guias").update({ pasta_atual: target.pasta }).eq("id", guide.id);
+    await logEvent(db, guide.id, "drive_move_finished", `Arquivo movido para ${target.pasta}.`, { pasta_atual: target.pasta }, "info", batchId);
   } catch (err) {
-    await logEvent(db, guide.id, 'drive_move_failed', String(err).slice(0, 300), {}, 'warning');
+    await logEvent(db, guide.id, "drive_move_failed", String(err).slice(0, 300), { folder }, "warning", batchId);
   }
 }
 
-async function loadTemplate(db: any, tipo: string, canal: 'email' | 'whatsapp') {
-  const { data } = await db.from('guide_templates').select('*').eq('tipo_guia', tipo).eq('canal', canal).eq('ativo', true).maybeSingle();
+async function loadTemplate(db: any, tipo: TipoGuia, canal: "email" | "whatsapp") {
+  const { data } = await db.from("guide_templates")
+    .select("*")
+    .eq("tipo_guia", tipo)
+    .eq("canal", canal)
+    .eq("ativo", true)
+    .maybeSingle();
   if (data) return data;
-  const { data: fallback } = await db.from('guide_templates').select('*').eq('tipo_guia', 'outros').eq('canal', canal).maybeSingle();
+  const { data: fallback } = await db.from("guide_templates")
+    .select("*")
+    .eq("tipo_guia", "outros")
+    .eq("canal", canal)
+    .eq("ativo", true)
+    .maybeSingle();
   return fallback;
 }
 
 async function sendEmail(gmailKey: string, to: string, subject: string, body: string, pdfBytes: Uint8Array, filename: string) {
+  if (pdfBytes.byteLength > MAX_EMAIL_ATTACHMENT_BYTES) throw new Error("email_attachment_too_large");
   const prof = await fetch(`${GMAIL_GW}/users/me/profile`, { headers: gwHeaders(gmailKey) });
   const from = prof.ok ? (await prof.json()).emailAddress : "me";
   const boundary = `lovable-${crypto.randomUUID()}`;
   const mime = [
-    `From: ${from}`, `To: ${to}`, `Subject: ${subject}`,
-    "MIME-Version: 1.0", `Content-Type: multipart/mixed; boundary="${boundary}"`, "",
-    `--${boundary}`, "Content-Type: text/plain; charset=UTF-8", "", body,
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    "MIME-Version: 1.0",
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=UTF-8",
+    "",
+    body,
     `--${boundary}`,
     `Content-Type: application/pdf; name="${filename}"`,
     "Content-Transfer-Encoding: base64",
-    `Content-Disposition: attachment; filename="${filename}"`, "",
-    base64(pdfBytes), `--${boundary}--`,
+    `Content-Disposition: attachment; filename="${filename}"`,
+    "",
+    base64(pdfBytes),
+    `--${boundary}--`,
   ].join("\r\n");
   const send = await fetch(`${GMAIL_GW}/users/me/messages/send`, {
-    method: "POST", headers: gwHeaders(gmailKey),
+    method: "POST",
+    headers: gwHeaders(gmailKey),
     body: JSON.stringify({ raw: base64Url(new TextEncoder().encode(mime)) }),
   });
-  if (!send.ok) throw new Error(`gmail_send_failed_${send.status}:${(await send.text()).slice(0,200)}`);
+  if (!send.ok) throw new Error(`gmail_send_failed_${send.status}:${(await send.text()).slice(0, 200)}`);
   return { messageId: (await send.json()).id as string, from };
 }
 
-async function processOneGuide(db: any, guide: any, driveKey: string, gmailKey: string, folders: any, testConfig: any) {
-  const modo = testConfig.modo_global as 'teste' | 'producao';
-  await db.from("guias").update({ status: "lendo", modo }).eq("id", guide.id);
+function companyName(row: any) {
+  return row?.razao_social || row?.nome_fantasia || row?.nome || "Empresa";
+}
 
-  // 1. Download
+function normalizeName(value: string | null | undefined) {
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function companyNameCompatible(detected: string | null, company: any) {
+  if (!detected || !company) return true;
+  const left = normalizeName(detected);
+  const right = normalizeName(companyName(company));
+  if (!left || !right) return true;
+  if (left.includes(right) || right.includes(left)) return true;
+  const rightTokens = new Set(right.split(" ").filter((token) => token.length > 3));
+  const leftTokens = left.split(" ").filter((token) => token.length > 3);
+  if (rightTokens.size === 0 || leftTokens.length === 0) return true;
+  const overlap = leftTokens.filter((token) => rightTokens.has(token)).length;
+  return overlap / Math.max(1, Math.min(leftTokens.length, rightTokens.size)) >= 0.45;
+}
+
+function channelsFor(canal: string | null): ("email" | "whatsapp")[] {
+  if (canal === "ambos") return ["whatsapp", "email"];
+  if (canal === "email" || canal === "whatsapp") return [canal];
+  return [];
+}
+
+function channelDestination(company: any, channel: "email" | "whatsapp", mode: Mode, config: any) {
+  if (mode === "teste") {
+    return channel === "email" ? (config.email_teste || null) : (config.whatsapp_teste || null);
+  }
+  return channel === "email" ? (company?.email_principal || null) : (company?.whatsapp_principal || null);
+}
+
+async function buildDispatchPlans(
+  db: any,
+  company: any,
+  classification: ClassifyResult,
+  metadata: GuideMetadata,
+  mode: Mode,
+  config: any,
+) {
+  const canal = company?.canal_preferido as "email" | "whatsapp" | "ambos" | null;
+  const templateData = buildTemplateData({
+    empresa: companyName(company),
+    cnpj: company?.cnpj || metadata.primaryCnpj || "",
+    tipoGuia: classification.label,
+    competencia: metadata.competencia,
+    vencimento: metadata.vencimento,
+    valor: metadata.valor,
+  });
+  const plans: DispatchPlan[] = [];
+  for (const channel of channelsFor(canal)) {
+    const template = await loadTemplate(db, classification.tipo, channel);
+    const rawSubject = template?.assunto ? renderTemplate(template.assunto, templateData) : null;
+    const rawBody = template?.corpo ? renderTemplate(template.corpo, templateData) : "";
+    const subject = mode === "teste" && rawSubject ? `[TESTE] ${rawSubject}` : rawSubject;
+    const body = mode === "teste"
+      ? `[TESTE - destinatario real bloqueado]\n\n${rawBody}`
+      : rawBody;
+    const destination = channelDestination(company, channel, mode, config);
+    const errors = validateTemplateRender({ template, canal: channel, tipo: classification.tipo, renderedSubject: subject, renderedBody: body });
+    if (!destination) errors.push("destination_missing");
+    if (channel === "email" && destination && !validateEmailAddress(destination)) errors.push("invalid_email");
+    if (channel === "whatsapp" && destination && !normalizePhoneE164(destination)) errors.push("invalid_whatsapp_number");
+    plans.push({ channel, destination, template, subject, body, errors });
+  }
+  return plans;
+}
+
+function integrationByProvider(integrations: any[], provider: string) {
+  return integrations.find((entry) => entry.provider === provider);
+}
+
+function dispatchConnectorErrors(plans: DispatchPlan[], integrations: any[], gmailKey: string) {
+  const errors: string[] = [];
+  for (const plan of plans) {
+    if (plan.channel === "email") {
+      const gmail = integrationByProvider(integrations, "gmail");
+      if (!gmailKey || gmail?.status !== "ativo") errors.push("gmail_inactive");
+    }
+    if (plan.channel === "whatsapp") {
+      const whatsapp = integrationByProvider(integrations, "twilio_whatsapp");
+      if (whatsapp?.status !== "ativo") errors.push("whatsapp_inactive");
+    }
+  }
+  return [...new Set(errors)];
+}
+
+async function detectDuplicates(db: any, guide: any, metadata: GuideMetadata, classification: ClassifyResult, matched: any) {
+  if (guide.sha256) {
+    const { data: exact } = await db.from("guias")
+      .select("id,status,file_name")
+      .eq("sha256", guide.sha256)
+      .neq("id", guide.id)
+      .not("status", "in", '("duplicada","erro")')
+      .limit(1)
+      .maybeSingle();
+    if (exact) return { level: "exact" as const, duplicate: exact, hash: null };
+  }
+
+  if (!matched || !metadata.competencia || !classification.tipo || metadata.valor == null) {
+    return { level: null, duplicate: null, hash: null };
+  }
+
+  const operationalHash = await dedupHash({
+    cnpj: matched.cnpj,
+    tipo: classification.tipo,
+    competencia: metadata.competencia,
+    vencimento: metadata.vencimento,
+    valor: metadata.valor,
+  });
+  const { data: operational } = await db.from("guias")
+    .select("id,status,file_name")
+    .eq("dedup_hash", operationalHash)
+    .neq("id", guide.id)
+    .not("status", "in", '("duplicada","erro")')
+    .limit(1)
+    .maybeSingle();
+  if (operational) return { level: "operational" as const, duplicate: operational, hash: operationalHash };
+
+  const { data: probableRows } = await db.from("guias")
+    .select("id,status,file_name,valor,vencimento")
+    .eq("cnpj_detectado", normalizeCnpj(matched.cnpj))
+    .eq("tipo_guia_normalized", classification.tipo)
+    .eq("competencia", metadata.competencia)
+    .neq("id", guide.id)
+    .not("status", "in", '("duplicada","erro")')
+    .limit(5);
+  const probable = (probableRows || []).find((row: any) =>
+    row.valor == null || metadata.valor == null || Math.abs(Number(row.valor) - metadata.valor) <= Math.max(5, metadata.valor * 0.05)
+  );
+  if (probable) return { level: "probable" as const, duplicate: probable, hash: operationalHash };
+
+  return { level: null, duplicate: null, hash: operationalHash };
+}
+
+function routeGuide(args: {
+  metadata: GuideMetadata;
+  classification: ClassifyResult;
+  confidence: number;
+  issues: any[];
+  matched: any | null;
+  inactiveCompany: any | null;
+  duplicate: { level: "exact" | "operational" | "probable" | null; duplicate: any | null };
+  dispatchPlans: DispatchPlan[];
+  connectorErrors: string[];
+  mode: Mode;
+  config: any;
+  manualApproval: boolean;
+  forceDispatch: boolean;
+}) : RouteDecision {
+  const { metadata, classification, confidence, matched, inactiveCompany, duplicate, dispatchPlans, connectorErrors, mode, config } = args;
+
+  if (duplicate.level === "exact") {
+    return {
+      status: "duplicada",
+      folder: "duplicates",
+      exceptionType: "duplicate_exact",
+      duplicateLevel: "exact",
+      reason: `Duplicidade exata do arquivo ${duplicate.duplicate?.id}.`,
+      action: "Bloquear envio e revisar historico.",
+      severity: "warning",
+      reviewLevel: "full",
+    };
+  }
+  if (metadata.fields.cnpj.status === "invalid") {
+    return { status: "nao_identificada", folder: "not_identified", exceptionType: "cnpj_invalid", reason: "CNPJ invalido no PDF.", action: "Corrigir documento ou revisar manualmente.", severity: "error", reviewLevel: "full" };
+  }
+  if (metadata.fields.cnpj.status === "missing") {
+    return { status: "nao_identificada", folder: "not_identified", exceptionType: "cnpj_missing", reason: "CNPJ ausente no PDF.", action: "Revisar manualmente.", severity: "warning", reviewLevel: "full" };
+  }
+  if (metadata.cnpjCandidates.length > 1) {
+    return { status: "revisao_manual", folder: "review", exceptionType: "multiple_cnpj", reason: "Multiplos CNPJs validos encontrados no PDF.", action: "Escolher empresa/contribuinte manualmente.", severity: "warning", reviewLevel: "full" };
+  }
+  if (inactiveCompany) {
+    return { status: "revisao_manual", folder: "review", exceptionType: "company_inactive", reason: "CNPJ pertence a empresa inativa.", action: "Ativar empresa ou bloquear envio.", severity: "warning", reviewLevel: "full" };
+  }
+  if (!matched) {
+    return { status: "revisao_manual", folder: "review", exceptionType: "company_not_found", reason: "CNPJ valido, mas empresa nao cadastrada.", action: "Vincular empresa manualmente.", severity: "warning", reviewLevel: "full" };
+  }
+  if (duplicate.level === "operational") {
+    return {
+      status: "duplicada",
+      folder: "duplicates",
+      exceptionType: "duplicate_operational",
+      duplicateLevel: "operational",
+      reason: `Duplicidade operacional da guia ${duplicate.duplicate?.id}.`,
+      action: "Bloquear reenvio automatico.",
+      severity: "warning",
+      reviewLevel: "full",
+    };
+  }
+  if (duplicate.level === "probable") {
+    return {
+      status: "revisao_manual",
+      folder: "review",
+      exceptionType: "duplicate_probable",
+      duplicateLevel: "probable",
+      reason: `Possivel guia substituida, retificada ou reenviada (${duplicate.duplicate?.id}).`,
+      action: "Comparar com guia anterior antes de qualquer envio.",
+      severity: "warning",
+      reviewLevel: "full",
+    };
+  }
+
+  const criticalFields = Object.values(metadata.fields);
+  const missingOrInvalid = criticalFields.find((entry) => entry.status === "missing" || entry.status === "invalid");
+  if (missingOrInvalid) {
+    return { status: "revisao_manual", folder: "review", exceptionType: `${missingOrInvalid.source}_blocked`, reason: missingOrInvalid.justification, action: "Preencher e confirmar campo manualmente.", severity: "warning", reviewLevel: "full" };
+  }
+  const dubious = criticalFields.find((entry) => entry.status === "dubious");
+  if (dubious) {
+    return { status: "revisao_manual", folder: "review", exceptionType: `${dubious.source}_dubious`, reason: dubious.justification, action: "Confirmar campo duvidoso manualmente.", severity: "warning", reviewLevel: guideReviewLevel(confidence) === "quick" ? "quick" : "full" };
+  }
+  const relevantIssue = args.issues.find((issue) => issue.severity === "error" || ["competencia_due_inconsistent", "barcode_amount_mismatch", "company_name_mismatch"].includes(issue.code));
+  if (relevantIssue) {
+    return { status: "quarentena", folder: "review", exceptionType: relevantIssue.code, reason: relevantIssue.message, action: "Quarentena tecnica: validar inconsistencia antes de liberar.", severity: relevantIssue.severity === "error" ? "error" : "warning", reviewLevel: "full" };
+  }
+  if (classification.confidence < MIN_CONFIDENCE_AUTO_DISPATCH || confidence < MIN_CONFIDENCE_AUTO_DISPATCH) {
+    const level = guideReviewLevel(Math.min(confidence, classification.confidence));
+    return {
+      status: "revisao_manual",
+      folder: "review",
+      exceptionType: level === "quick" ? "low_confidence_quick_review" : "low_confidence_full_review",
+      reason: `Confianca ${Math.round(confidence * 100)}% abaixo do limite automatico de ${Math.round(MIN_CONFIDENCE_AUTO_DISPATCH * 100)}%.`,
+      action: level === "quick" ? "Revisao rapida dos campos extraidos." : "Revisao manual completa.",
+      severity: "warning",
+      reviewLevel: level === "quick" ? "quick" : "full",
+    };
+  }
+  if (!matched.comunicacao_ativa || channelsFor(matched.canal_preferido).length === 0) {
+    return { status: "revisao_manual", folder: "review", exceptionType: "invalid_channel", reason: "Empresa sem canal de envio ativo.", action: "Configurar canal e comunicacao ativa.", severity: "warning", reviewLevel: "full" };
+  }
+  const planErrors = dispatchPlans.flatMap((plan) => plan.errors.map((error) => `${plan.channel}:${error}`));
+  if (planErrors.length > 0) {
+    return { status: "quarentena", folder: "review", exceptionType: "dispatch_precondition_failed", reason: `Pre-condicoes de envio falharam: ${planErrors.join(", ")}.`, action: "Corrigir destinatario/template antes do envio.", severity: "error", reviewLevel: "full" };
+  }
+  if (mode === "producao" && connectorErrors.length > 0) {
+    return { status: "erro", folder: "errors", exceptionType: "connector_inactive", reason: `Conector necessario inativo: ${connectorErrors.join(", ")}.`, action: "Pausar lote e reativar conectores.", severity: "error", reviewLevel: "full" };
+  }
+
+  const operationLevel = (config.operation_level || "somente_classificacao") as OperationLevel;
+  const highValueThreshold = Number(config.high_value_threshold ?? 0);
+  const requiresApproval =
+    (!args.forceDispatch && (
+      operationLevel === "automacao_desligada" ||
+      operationLevel === "somente_classificacao" ||
+      operationLevel === "leitura_revisao"
+    )) ||
+    (!args.forceDispatch && config.require_batch_approval === true) ||
+    (!args.manualApproval && highValueThreshold > 0 && metadata.valor != null && metadata.valor >= highValueThreshold);
+
+  if (mode === "teste" || requiresApproval || (!config.auto_dispatch_enabled && !args.forceDispatch)) {
+    return {
+      status: "pronta_envio",
+      reason: mode === "teste" ? "Preview de teste gerado sem envio real." : "Guia segura, aguardando aprovacao de lote/operador.",
+      action: "Aprovar lote ou selecionar guia para envio.",
+      reviewLevel: "none",
+      readyButAwaitingApproval: true,
+    };
+  }
+
+  return { status: "pronta_envio", reason: "Todos os campos criticos estao validos e consistentes.", action: "Enviar automaticamente.", reviewLevel: "none" };
+}
+
+function buildCriticalFields(metadata: GuideMetadata, matched: any, dispatchPlans: DispatchPlan[]) {
+  const empresa = matched
+    ? field(matched.id, 1, "valid", "empresas.cnpj", "exact_cnpj_match", "Empresa ativa encontrada por CNPJ cadastrado.")
+    : field(null, 0, "missing", "empresas.cnpj", "exact_cnpj_match", "Empresa nao vinculada.");
+  const canal = matched?.canal_preferido
+    ? field(matched.canal_preferido, 1, "valid", "empresas.canal_preferido", "channel_config", "Canal de envio configurado.")
+    : field(null, 0, "missing", "empresas.canal_preferido", "channel_config", "Canal de envio ausente.");
+  const destinatarioStatus = dispatchPlans.length > 0 && dispatchPlans.every((plan) => plan.destination && !plan.errors.includes("destination_missing") && !plan.errors.includes("invalid_email") && !plan.errors.includes("invalid_whatsapp_number"));
+  const destinatario = destinatarioStatus
+    ? field(dispatchPlans.map((plan) => `${plan.channel}:${plan.destination}`).join(", "), 1, "valid", "empresa.contato", "destination_validation", "Destinatario validado para todos os canais.")
+    : field(null, 0, "missing", "empresa.contato", "destination_validation", "Destinatario ausente ou invalido.");
+  return {
+    ...metadata.fields,
+    empresa,
+    canal,
+    destinatario,
+  };
+}
+
+async function dispatchGuide(
+  db: any,
+  guide: any,
+  matched: any,
+  metadata: GuideMetadata,
+  classification: ClassifyResult,
+  bytes: Uint8Array,
+  plans: DispatchPlan[],
+  gmailKey: string,
+  mode: Mode,
+  batchId: string | null,
+) {
+  const results: any[] = [];
+  await db.from("guias").update({ status: "enviando" }).eq("id", guide.id);
+  await logEvent(db, guide.id, "dispatch_started", "Envio iniciado.", { channels: plans.map((plan) => plan.channel) }, "info", batchId);
+
+  for (const plan of plans) {
+    const idemKey = `${guide.id}:${plan.channel}:${mode}`;
+    const { data: prior } = await db.from("guia_envios").select("id,status").eq("idempotency_key", idemKey).maybeSingle();
+    if (prior && ["aceito", "entregue", "simulado"].includes(prior.status)) {
+      results.push({ canal: plan.channel, skipped: "already_sent", status: prior.status });
+      continue;
+    }
+    try {
+      if (plan.channel === "email") {
+        const { messageId, from } = await sendEmail(gmailKey, plan.destination!, plan.subject || `Guia ${classification.label}`, plan.body, bytes, guide.file_name);
+        await db.from("guia_envios").insert({
+          guia_id: guide.id,
+          empresa_id: matched.id,
+          canal: "email",
+          destinatario: plan.destination,
+          assunto: plan.subject,
+          mensagem_preview: plan.body.slice(0, 400),
+          provider_message_id: messageId,
+          idempotency_key: idemKey,
+          status: "aceito",
+          submitted_at: new Date().toISOString(),
+          sanitized_payload: { mode, message_id: messageId, sender: from, template_id: plan.template?.id ?? null },
+        });
+        await logEvent(db, guide.id, "email_sent", "Email aceito pelo Gmail.", { message_id: messageId, to: plan.destination }, "info", batchId);
+        results.push({ canal: "email", status: "aceito", messageId });
+      } else {
+        const normalized = normalizePhoneE164(plan.destination)!;
+        const wpRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-whatsapp-message`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          },
+          body: JSON.stringify({
+            phone: normalized,
+            message: plan.body,
+            guia_id: guide.id,
+            source_type: "guia",
+            source_id: guide.id,
+            template_sid: plan.template?.twilio_content_sid ?? null,
+            metadata: { tipo_guia: classification.tipo, competencia: metadata.competencia, batch_id: batchId },
+          }),
+        });
+        const payload = await wpRes.json().catch(() => ({}));
+        if (!wpRes.ok || payload?.ok === false) throw new Error(payload?.error || `whatsapp_failed_${wpRes.status}`);
+        await db.from("guia_envios").insert({
+          guia_id: guide.id,
+          empresa_id: matched.id,
+          canal: "whatsapp",
+          destinatario: normalized,
+          mensagem_preview: plan.body.slice(0, 400),
+          template_sid: plan.template?.twilio_content_sid ?? null,
+          provider_message_id: payload?.message_id ?? null,
+          idempotency_key: idemKey,
+          status: "aceito",
+          submitted_at: new Date().toISOString(),
+          sanitized_payload: { mode, ok: true, template_sid: plan.template?.twilio_content_sid ?? null },
+        });
+        await logEvent(db, guide.id, "whatsapp_sent", "WhatsApp aceito pelo provedor.", { message_id: payload?.message_id, to: normalized }, "info", batchId);
+        results.push({ canal: "whatsapp", status: "aceito", messageId: payload?.message_id ?? null });
+      }
+    } catch (err) {
+      await db.from("guia_envios").insert({
+        guia_id: guide.id,
+        empresa_id: matched.id,
+        canal: plan.channel,
+        destinatario: plan.destination,
+        assunto: plan.subject,
+        mensagem_preview: plan.body.slice(0, 400),
+        template_sid: plan.template?.twilio_content_sid ?? null,
+        idempotency_key: idemKey,
+        status: "falhou",
+        failed_at: new Date().toISOString(),
+        provider_error: String(err).slice(0, 300),
+        sanitized_payload: { mode, error: String(err).slice(0, 300) },
+      });
+      await logException(db, guide.id, "dispatch_failed", `Falha no envio via ${plan.channel}.`, "Verifique conector e tente reenviar.", { error: String(err).slice(0, 200) }, "error", batchId);
+      results.push({ canal: plan.channel, status: "falhou", error: String(err).slice(0, 200) });
+    }
+  }
+  return results;
+}
+
+async function organizeSentFile(db: any, guide: any, driveKey: string, folders: any, matched: any, metadata: GuideMetadata, classification: ClassifyResult, batchId: string | null) {
+  try {
+    await logEvent(db, guide.id, "drive_move_started", "Organizando PDF enviado no Drive.", {}, "info", batchId);
+    const empresaFolderName = slugifyEmpresa(companyName(matched), matched.cnpj);
+    const compFolderName = competenciaToFolder(metadata.competencia, metadata.vencimento);
+    const finalName = buildGuideDriveFileName({
+      tipo: classification.label,
+      competencia: metadata.competencia,
+      valor: metadata.valor,
+      originalName: guide.file_name,
+    });
+    const empresaFolderId = await findOrCreateFolder(driveKey, empresaFolderName, folders.sent_folder_id);
+    const compFolderId = await findOrCreateFolder(driveKey, compFolderName, empresaFolderId);
+    await renameFile(driveKey, guide.drive_file_id, finalName);
+    await moveFile(driveKey, guide.drive_file_id, compFolderId, folders.source_folder_id);
+    await db.from("guias").update({
+      status: "enviada",
+      pasta_atual: "enviadas",
+      sent_at: new Date().toISOString(),
+      drive_organization_pending: false,
+    }).eq("id", guide.id);
+    await logEvent(db, guide.id, "drive_move_finished", "PDF movido para Enviadas com nome seguro.", { finalName, compFolderName }, "info", batchId);
+  } catch (err) {
+    await logException(db, guide.id, "drive_move_failed", "Envio OK, mas falha ao organizar PDF no Drive.", "Tentar mover novamente pelo painel.", { error: String(err).slice(0, 200) }, "warning", batchId);
+    await db.from("guias").update({
+      status: "enviada",
+      sent_at: new Date().toISOString(),
+      drive_organization_pending: true,
+    }).eq("id", guide.id);
+  }
+}
+
+function manualMetadataOverlay(guide: any, metadata: GuideMetadata, classification: ClassifyResult, manualApproval: boolean) {
+  if (!manualApproval) return { metadata, classification };
+  const cnpj = normalizeCnpj(guide.cnpj_detectado || metadata.primaryCnpj || "");
+  const nextMetadata: GuideMetadata = {
+    ...metadata,
+    cnpjCandidates: cnpj ? [cnpj] : metadata.cnpjCandidates,
+    primaryCnpj: cnpj || metadata.primaryCnpj,
+    cnpjAmbiguous: false,
+    competencia: guide.competencia || metadata.competencia,
+    vencimento: guide.vencimento || metadata.vencimento,
+    valor: guide.valor != null ? Number(guide.valor) : metadata.valor,
+    fields: {
+      ...metadata.fields,
+      cnpj: cnpj ? field(cnpj, 0.99, "valid", "manual_override", "manual_review", "CNPJ confirmado por operador.") : metadata.fields.cnpj,
+      tipo_guia: guide.tipo_guia_normalized ? field(guide.tipo_guia_normalized, 0.99, "valid", "manual_override", "manual_review", "Tipo confirmado por operador.") : metadata.fields.tipo_guia,
+      competencia: guide.competencia ? field(guide.competencia, 0.99, "valid", "manual_override", "manual_review", "Competencia confirmada por operador.") : metadata.fields.competencia,
+      vencimento: guide.vencimento ? field(guide.vencimento, 0.99, "valid", "manual_override", "manual_review", "Vencimento confirmado por operador.") : metadata.fields.vencimento,
+      valor: guide.valor != null ? field(Number(guide.valor), 0.99, "valid", "manual_override", "manual_review", "Valor confirmado por operador.") : metadata.fields.valor,
+    },
+  };
+  const nextClassification: ClassifyResult = guide.tipo_guia_normalized
+    ? {
+      tipo: guide.tipo_guia_normalized as TipoGuia,
+      label: guide.tipo_guia || String(guide.tipo_guia_normalized).toUpperCase(),
+      confidence: 0.99,
+      matchedKeywords: ["manual_override"],
+    }
+    : classification;
+  return { metadata: nextMetadata, classification: nextClassification };
+}
+
+async function processOneGuide(
+  db: any,
+  guide: any,
+  driveKey: string,
+  gmailKey: string,
+  folders: any,
+  config: any,
+  integrations: any[],
+  options: ProcessOptions,
+) {
+  const mode = (config.modo_global || "teste") as Mode;
+  await db.from("guias").update({ status: "processando", modo: mode, operation_batch_id: options.batchId }).eq("id", guide.id);
+  await logEvent(db, guide.id, "scan_started", "Processamento da guia iniciado.", { mode }, "info", options.batchId);
+
+  const exactBeforeDownload = guide.sha256
+    ? await db.from("guias")
+      .select("id,status,file_name")
+      .eq("sha256", guide.sha256)
+      .neq("id", guide.id)
+      .not("status", "in", '("duplicada","erro")')
+      .limit(1)
+      .maybeSingle()
+    : { data: null };
+  if (exactBeforeDownload.data) {
+    const patch = {
+      status: "duplicada",
+      pasta_atual: "duplicadas",
+      duplicate_level: "exact",
+      duplicate_of: exactBeforeDownload.data.id,
+      decision_status: "duplicada",
+      decision_reason: "Duplicidade exata por hash de arquivo.",
+      processed_at: new Date().toISOString(),
+    };
+    await db.from("guias").update(patch).eq("id", guide.id);
+    await moveToFolder(db, guide, driveKey, folders, "duplicates", options.batchId);
+    await logException(db, guide.id, "duplicate_exact", "Mesmo arquivo ja registrado.", "Bloquear envio.", { duplicate_of: exactBeforeDownload.data.id }, "warning", options.batchId);
+    return { status: "duplicada", reason: "duplicate_exact", preview: patch };
+  }
+
   let bytes: Uint8Array;
-  try { bytes = await downloadFile(driveKey, guide.drive_file_id); }
-  catch (err) {
-    await db.from("guias").update({ status: "erro", provider_error: String(err).slice(0,300), pasta_atual: 'erros' }).eq("id", guide.id);
-    await moveToFolder(db, guide, driveKey, folders.errors_folder_id, folders.source_folder_id, 'erros');
-    await logException(db, guide.id, 'drive_download_failed', 'Falha ao baixar PDF.', 'Verifique a conexão Drive.', {}, 'error');
-    return { status: 'erro', reason: 'drive_download_failed' };
+  try {
+    bytes = await downloadFile(driveKey, guide.drive_file_id);
+    await logEvent(db, guide.id, "file_found", "Arquivo baixado do Drive.", { bytes: bytes.byteLength }, "info", options.batchId);
+  } catch (err) {
+    await db.from("guias").update({ status: "erro", provider_error: String(err).slice(0, 300), pasta_atual: "erros" }).eq("id", guide.id);
+    await moveToFolder(db, guide, driveKey, folders, "errors", options.batchId);
+    await logException(db, guide.id, "drive_download_failed", "Falha ao baixar PDF.", "Verifique o conector Drive.", { error: String(err).slice(0, 200) }, "error", options.batchId);
+    return { status: "erro", reason: "drive_download_failed" };
   }
 
-  // 2. Extract
   let extraction;
-  try { extraction = await extractPdf(bytes); }
-  catch (err) {
-    await db.from("guias").update({ status: "erro", provider_error: 'pdf_text_extraction_failed', pasta_atual: 'erros' }).eq("id", guide.id);
-    await moveToFolder(db, guide, driveKey, folders.errors_folder_id, folders.source_folder_id, 'erros');
-    await logException(db, guide.id, 'pdf_text_extraction_failed', 'Falha ao ler o PDF.', 'Reenvie ou processe manualmente.', { error: String(err).slice(0,200) }, 'error');
-    return { status: 'erro', reason: 'pdf_text_extraction_failed' };
+  try {
+    extraction = await extractPdf(bytes);
+  } catch (err) {
+    await db.from("guias").update({ status: "erro", provider_error: "pdf_text_extraction_failed", pasta_atual: "erros" }).eq("id", guide.id);
+    await moveToFolder(db, guide, driveKey, folders, "errors", options.batchId);
+    await logException(db, guide.id, "pdf_text_extraction_failed", "Falha ao ler o PDF.", "Reenvie ou processe manualmente.", { error: String(err).slice(0, 200) }, "error", options.batchId);
+    return { status: "erro", reason: "pdf_text_extraction_failed" };
   }
+  await logEvent(db, guide.id, "pdf_text_extracted", "Texto extraido do PDF.", {
+    page_count: extraction.pageCount,
+    text_length: extraction.text.length,
+    method: extraction.extractionMethod,
+  }, "info", options.batchId);
+
   if (!extraction.hasTextLayer) {
     await db.from("guias").update({
-      status: 'erro', provider_error: 'pdf_without_text_layer', pasta_atual: 'erros',
-      pagina_count: extraction.pageCount, extraction_method: extraction.extractionMethod, has_text_layer: false,
-    }).eq('id', guide.id);
-    await moveToFolder(db, guide, driveKey, folders.errors_folder_id, folders.source_folder_id, 'erros');
-    await logException(db, guide.id, 'pdf_without_text_layer', 'PDF escaneado/sem texto.', 'Envie versão digital.', {}, 'error');
-    return { status: 'erro', reason: 'pdf_without_text_layer' };
+      status: "erro",
+      provider_error: "pdf_without_text_layer",
+      pasta_atual: "erros",
+      pagina_count: extraction.pageCount,
+      extraction_method: extraction.extractionMethod,
+      has_text_layer: false,
+      processed_at: new Date().toISOString(),
+    }).eq("id", guide.id);
+    await moveToFolder(db, guide, driveKey, folders, "errors", options.batchId);
+    await logException(db, guide.id, "pdf_without_text_layer", "PDF sem camada de texto.", "Enviar PDF digital ou revisar manualmente.", {}, "error", options.batchId);
+    return { status: "erro", reason: "pdf_without_text_layer" };
   }
 
-  // 3. Parse metadata + classify
-  const metadata = extractMetadata(extraction.text);
-  const classification = classifyGuideType(extraction.text);
+  await db.from("guias").update({ status: "validando" }).eq("id", guide.id);
+  const initial = analyzeGuideText(extraction.text);
 
-  // 4. CNPJ → empresa
   const { data: companies } = await db.from("empresas").select("*");
   let matched: any = null;
-  for (const c of metadata.cnpjCandidates) {
-    const m = companies?.find((co: any) => normalizeCnpj(co.cnpj) === c && co.status === 'ativa');
-    if (m) { matched = m; break; }
+  let inactiveCompany: any = null;
+  if (initial.metadata.primaryCnpj) {
+    const byCnpj = (companies || []).find((company: any) => normalizeCnpj(company.cnpj) === initial.metadata.primaryCnpj);
+    if (byCnpj?.status === "ativa") matched = byCnpj;
+    else if (byCnpj) inactiveCompany = byCnpj;
   }
 
-  const conf = calculateConfidence(metadata, classification, !!matched);
+  const overlaid = manualMetadataOverlay(guide, initial.metadata, initial.classification, options.manualApproval);
+  const metadata = overlaid.metadata;
+  const classification = overlaid.classification;
+  if (options.manualApproval && guide.empresa_id) {
+    matched = (companies || []).find((company: any) => company.id === guide.empresa_id && company.status === "ativa") || matched;
+  }
+
+  const confidence = calculateConfidence(metadata, classification, !!matched);
+  const issues = collectValidationIssues(metadata, classification);
+  if (!companyNameCompatible(metadata.razaoSocial, matched)) {
+    issues.push({ code: "company_name_mismatch", severity: "warning", message: "Razao social detectada diverge da empresa cadastrada.", field: "empresa" });
+  }
+
+  await logEvent(db, guide.id, "cnpj_extracted", "CNPJs extraidos e validados.", {
+    valid: metadata.cnpjCandidates.map(formatCnpj),
+    invalid: metadata.invalidCnpjCandidates,
+  }, "info", options.batchId);
+  await logEvent(db, guide.id, "guide_type_classified", "Tipo de guia classificado.", {
+    tipo: classification.tipo,
+    confidence: classification.confidence,
+    matched_keywords: classification.matchedKeywords,
+  }, "info", options.batchId);
+
+  const duplicate = await detectDuplicates(db, guide, metadata, classification, matched);
+  const dispatchPlans = matched ? await buildDispatchPlans(db, matched, classification, metadata, mode, config) : [];
+  const connectorErrors = dispatchConnectorErrors(dispatchPlans, integrations, gmailKey);
+  const criticalFields = buildCriticalFields(metadata, matched, dispatchPlans);
+  const route = routeGuide({
+    metadata,
+    classification,
+    confidence: confidence.overallConfidence,
+    issues,
+    matched,
+    inactiveCompany,
+    duplicate,
+    dispatchPlans,
+    connectorErrors,
+    mode,
+    config,
+    manualApproval: options.manualApproval,
+    forceDispatch: options.forceDispatch,
+  });
 
   const baseUpdate: any = {
-    cnpj_detectado: metadata.cnpjCandidates[0] || null,
+    cnpj_detectado: metadata.primaryCnpj || metadata.cnpjCandidates[0] || null,
     empresa_id: matched?.id || null,
     tipo_guia: classification.label,
     tipo_guia_normalized: classification.tipo,
@@ -159,154 +832,96 @@ async function processOneGuide(db: any, guide: any, driveKey: string, gmailKey: 
     pagina_count: extraction.pageCount,
     extraction_method: extraction.extractionMethod,
     has_text_layer: true,
-    confidence_score: conf.overallConfidence,
+    confidence_score: confidence.overallConfidence,
+    critical_fields_json: criticalFields,
+    validation_issues_json: issues,
+    decision_status: route.status,
+    decision_reason: route.reason,
+    decision_reasons: [{ reason: route.reason, action: route.action, status: route.status }],
+    manual_review_level: route.reviewLevel || null,
+    duplicate_level: route.duplicateLevel || duplicate.level || null,
+    duplicate_of: duplicate.duplicate?.id || null,
+    dispatch_blocked_reason: route.status !== "pronta_envio" || route.readyButAwaitingApproval ? route.reason : null,
     processed_at: new Date().toISOString(),
-    match_source: metadata.cnpjCandidates.length ? 'cnpj_pdf' : 'filename',
+    match_source: metadata.primaryCnpj ? "cnpj_pdf" : (options.manualApproval ? "manual" : "filename"),
   };
+  if (duplicate.hash) baseUpdate.dedup_hash = duplicate.hash;
 
-  // 5. Routing
-  if (metadata.cnpjCandidates.length === 0) {
-    await db.from('guias').update({ ...baseUpdate, status: 'nao_identificada', pasta_atual: 'nao_identificadas' }).eq('id', guide.id);
-    await moveToFolder(db, guide, driveKey, folders.not_identified_folder_id, folders.source_folder_id, 'nao_identificadas');
-    await logException(db, guide.id, 'cnpj_not_found', 'Nenhum CNPJ identificado no PDF.', 'Revise manualmente.');
-    return { status: 'nao_identificada' };
+  await logEvent(db, guide.id, "fields_validated", "Campos criticos validados.", { critical_fields: criticalFields, issues }, "info", options.batchId);
+  await logEvent(db, guide.id, "confidence_calculated", "Confianca calculada.", { confidence, threshold: MIN_CONFIDENCE_AUTO_DISPATCH }, "info", options.batchId);
+  if (matched) await logEvent(db, guide.id, "company_matched", "Empresa vinculada por CNPJ.", { empresa_id: matched.id, razao_social: companyName(matched) }, "info", options.batchId);
+
+  if (route.status !== "pronta_envio") {
+    await db.from("guias").update({
+      ...baseUpdate,
+      status: route.status,
+      pasta_atual: folderIdFor(folders, route.folder).pasta,
+      quarantined_at: route.status === "quarentena" ? new Date().toISOString() : null,
+    }).eq("id", guide.id);
+    await moveToFolder(db, guide, driveKey, folders, route.folder, options.batchId);
+    await logException(db, guide.id, route.exceptionType || route.status, route.reason, route.action, {
+      confidence,
+      cnpj_candidates: metadata.cnpjCandidates,
+      duplicate_of: duplicate.duplicate?.id || null,
+      dispatch_errors: dispatchPlans.map((plan) => ({ channel: plan.channel, errors: plan.errors })),
+    }, route.severity || "warning", options.batchId);
+    return {
+      status: route.status,
+      reason: route.exceptionType || route.status,
+      confidence: confidence.overallConfidence,
+      preview: {
+        empresa: matched ? companyName(matched) : null,
+        cnpj: metadata.primaryCnpj,
+        tipo: classification.tipo,
+        competencia: metadata.competencia,
+        vencimento: metadata.vencimento,
+        valor: metadata.valor,
+        canais: dispatchPlans.map((plan) => plan.channel),
+        destinatarios: dispatchPlans.map((plan) => plan.destination),
+        score: confidence.overallConfidence,
+        motivo: route.reason,
+      },
+    };
   }
 
-  // Dedup
-  if (matched) {
-    const hash = await dedupHash({
-      cnpj: normalizeCnpj(matched.cnpj),
-      tipo: classification.tipo,
-      competencia: metadata.competencia,
-      vencimento: metadata.vencimento,
-      valor: metadata.valor,
-    });
-    baseUpdate.dedup_hash = hash;
-    const { data: dup } = await db.from('guias').select('id, status')
-      .eq('dedup_hash', hash).neq('id', guide.id).limit(1).maybeSingle();
-    if (dup && !['duplicada', 'erro'].includes(dup.status)) {
-      await db.from('guias').update({ ...baseUpdate, status: 'duplicada', pasta_atual: 'duplicadas' }).eq('id', guide.id);
-      await moveToFolder(db, guide, driveKey, folders.duplicates_folder_id, folders.source_folder_id, 'duplicadas');
-      await logException(db, guide.id, 'duplicate', `Duplicata de guia ${dup.id}.`, 'Revise se realmente é repetida.', { duplicate_of: dup.id });
-      return { status: 'duplicada' };
-    }
+  await db.from("guias").update({ ...baseUpdate, status: "pronta_envio", pasta_atual: "a_enviar" }).eq("id", guide.id);
+  await logEvent(db, guide.id, "ready_to_dispatch", route.reason, {
+    mode,
+    awaiting_approval: route.readyButAwaitingApproval === true,
+    channels: dispatchPlans.map((plan) => plan.channel),
+  }, "info", options.batchId);
+
+  if (mode === "teste" || route.readyButAwaitingApproval) {
+    return {
+      status: "pronta_envio",
+      reason: mode === "teste" ? "test_preview_only" : "awaiting_approval",
+      would_send: true,
+      confidence: confidence.overallConfidence,
+      preview: {
+        empresa: matched ? companyName(matched) : null,
+        cnpj: metadata.primaryCnpj,
+        tipo: classification.tipo,
+        competencia: metadata.competencia,
+        vencimento: metadata.vencimento,
+        valor: metadata.valor,
+        canais: dispatchPlans.map((plan) => plan.channel),
+        destinatarios_teste: dispatchPlans.map((plan) => plan.destination),
+        score: confidence.overallConfidence,
+        motivo: route.reason,
+      },
+    };
   }
 
-  if (!matched || conf.overallConfidence < MIN_CONFIDENCE_AUTO_DISPATCH) {
-    await db.from('guias').update({ ...baseUpdate, status: 'revisao', pasta_atual: 'revisao_manual' }).eq('id', guide.id);
-    await moveToFolder(db, guide, driveKey, folders.review_folder_id, folders.source_folder_id, 'revisao_manual');
-    await logException(db, guide.id, matched ? 'low_confidence' : 'company_not_found',
-      matched ? `Confiança ${conf.overallConfidence} abaixo de ${MIN_CONFIDENCE_AUTO_DISPATCH}.` : 'CNPJ encontrado mas empresa não cadastrada.',
-      'Revise dados e aprove manualmente.', { confidence: conf, cnpj_candidates: metadata.cnpjCandidates });
-    return { status: 'revisao', confidence: conf.overallConfidence };
+  const results = await dispatchGuide(db, guide, matched, metadata, classification, bytes, dispatchPlans, gmailKey, mode, options.batchId);
+  const allOk = results.every((result) => result.status === "aceito" || result.status === "entregue" || result.skipped === "already_sent");
+  if (!allOk) {
+    await db.from("guias").update({ status: "erro", provider_error: "dispatch_failed" }).eq("id", guide.id);
+    await logEvent(db, guide.id, "dispatch_failed", "Um ou mais canais falharam.", { results }, "error", options.batchId);
+    return { status: "erro", reason: "dispatch_failed", results, confidence: confidence.overallConfidence };
   }
 
-  // Tudo OK
-  await db.from('guias').update({ ...baseUpdate, status: 'pronta_envio' }).eq('id', guide.id);
-  await logEvent(db, guide.id, 'identified', 'Guia identificada com sucesso.', { confidence: conf, tipo: classification.tipo, empresa: matched.razao_social });
-
-  // 6. Validate dispatch preconditions
-  const canal = matched.canal_preferido as 'email' | 'whatsapp' | 'ambos' | null;
-  if (!matched.comunicacao_ativa || !canal) {
-    await db.from('guias').update({ status: 'revisao', pasta_atual: 'revisao_manual' }).eq('id', guide.id);
-    await moveToFolder(db, guide, driveKey, folders.review_folder_id, folders.source_folder_id, 'revisao_manual');
-    await logException(db, guide.id, 'invalid_channel', 'Empresa sem canal de envio configurado.', 'Configure canal_preferido e comunicacao_ativa.');
-    return { status: 'revisao', reason: 'invalid_channel' };
-  }
-
-  // 7. Dispatch
-  const canais: ('email'|'whatsapp')[] = canal === 'ambos' ? ['email', 'whatsapp'] : [canal];
-  const tplData = buildTemplateData({
-    empresa: matched.razao_social, cnpj: matched.cnpj, tipoGuia: classification.label,
-    competencia: metadata.competencia, vencimento: metadata.vencimento, valor: metadata.valor,
-  });
-  const results: any[] = [];
-
-  for (const ch of canais) {
-    const tpl = await loadTemplate(db, classification.tipo, ch);
-    if (!tpl) { results.push({ canal: ch, skipped: 'no_template' }); continue; }
-    const subject = tpl.assunto ? renderTemplate(tpl.assunto, tplData) : null;
-    const body = renderTemplate(tpl.corpo, tplData);
-    const isTest = modo === 'teste';
-    const destinatario = isTest
-      ? (ch === 'email' ? (testConfig.email_teste || matched.email_principal) : (testConfig.whatsapp_teste || matched.whatsapp_principal))
-      : (ch === 'email' ? matched.email_principal : matched.whatsapp_principal);
-    const finalBody = isTest ? `[TESTE - destinatário real: ${ch === 'email' ? matched.email_principal : matched.whatsapp_principal}]\n\n${body}` : body;
-    const finalSubject = isTest && subject ? `[TESTE] ${subject}` : subject;
-    const idemKey = `${guide.id}:${ch}:${modo}`;
-
-    const { data: prior } = await db.from('guia_envios').select('id,status').eq('idempotency_key', idemKey).maybeSingle();
-    if (prior && ['aceito','entregue'].includes(prior.status)) {
-      results.push({ canal: ch, skipped: 'already_sent' }); continue;
-    }
-
-    if (!destinatario) {
-      await logException(db, guide.id, 'missing_destination', `Destinatário ${ch} não configurado.`, 'Preencha contato no cadastro da empresa.');
-      results.push({ canal: ch, error: 'no_destinatario' }); continue;
-    }
-
-    try {
-      if (ch === 'email') {
-        const { messageId, from } = await sendEmail(gmailKey, destinatario, finalSubject || `Guia ${classification.label}`, finalBody, bytes, guide.file_name);
-        await db.from('guia_envios').insert({
-          guia_id: guide.id, empresa_id: matched.id, canal: 'email',
-          destinatario, assunto: finalSubject, mensagem_preview: finalBody.slice(0, 400),
-          provider_message_id: messageId, idempotency_key: idemKey,
-          status: isTest ? 'simulado' : 'aceito',
-          sanitized_payload: { mode: modo, message_id: messageId, sender: from },
-        });
-        results.push({ canal: 'email', status: isTest ? 'simulado' : 'aceito', messageId });
-      } else {
-        // WhatsApp via Twilio: invoca send-whatsapp-message existente
-        const wpRes = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-whatsapp-message`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
-          body: JSON.stringify({ to: destinatario, body: finalBody, guia_id: guide.id }),
-        });
-        const ok = wpRes.ok;
-        await db.from('guia_envios').insert({
-          guia_id: guide.id, empresa_id: matched.id, canal: 'whatsapp',
-          destinatario, mensagem_preview: finalBody.slice(0, 400),
-          idempotency_key: idemKey,
-          status: ok ? (isTest ? 'simulado' : 'aceito') : 'falhou',
-          sanitized_payload: { mode: modo, ok },
-        });
-        results.push({ canal: 'whatsapp', status: ok ? 'aceito' : 'falhou' });
-      }
-    } catch (err) {
-      await db.from('guia_envios').insert({
-        guia_id: guide.id, empresa_id: matched.id, canal: ch,
-        destinatario, mensagem_preview: finalBody.slice(0, 400),
-        idempotency_key: idemKey, status: 'falhou',
-        sanitized_payload: { mode: modo, error: String(err).slice(0, 300) },
-      });
-      await logException(db, guide.id, 'dispatch_failed', `Falha no envio via ${ch}.`, 'Verifique conector e tente reenviar.', { error: String(err).slice(0,200) }, 'error');
-      results.push({ canal: ch, error: String(err).slice(0,200) });
-    }
-  }
-
-  const allOk = results.every((r) => r.status === 'aceito' || r.status === 'simulado');
-  if (allOk && modo === 'producao') {
-    // Move para Enviadas/[Empresa]/[YYYY-MM]/
-    const empresaFolderName = slugifyEmpresa(matched.razao_social, matched.cnpj);
-    const compFolderName = competenciaToFolder(metadata.competencia, metadata.vencimento);
-    try {
-      const empresaFolderId = await findOrCreateFolder(driveKey, empresaFolderName, folders.sent_folder_id);
-      const compFolderId = await findOrCreateFolder(driveKey, compFolderName, empresaFolderId);
-      await moveFile(driveKey, guide.drive_file_id, compFolderId, folders.source_folder_id);
-      await db.from('guias').update({ status: 'enviada', pasta_atual: 'enviadas', sent_at: new Date().toISOString() }).eq('id', guide.id);
-    } catch (err) {
-      await logException(db, guide.id, 'drive_move_failed', 'Envio OK mas falha ao mover PDF.', 'Mova manualmente para Enviadas.', { error: String(err).slice(0,200) }, 'warning');
-      await db.from('guias').update({ status: 'enviada', sent_at: new Date().toISOString() }).eq('id', guide.id);
-    }
-  } else if (allOk && modo === 'teste') {
-    await db.from('guias').update({ status: 'enviada', sent_at: new Date().toISOString() }).eq('id', guide.id);
-    // Não move em modo teste
-  } else {
-    await db.from('guias').update({ status: 'erro' }).eq('id', guide.id);
-  }
-
-  return { status: allOk ? 'enviada' : 'erro', modo, results, confidence: conf.overallConfidence };
+  await organizeSentFile(db, guide, driveKey, folders, matched, metadata, classification, options.batchId);
+  return { status: "enviada", reason: "sent", results, confidence: confidence.overallConfidence };
 }
 
 async function isAuthorized(req: Request) {
@@ -324,50 +939,84 @@ serve(async (req) => {
   if (!(await isAuthorized(req))) return new Response(JSON.stringify({ error: "authentication_required" }), { status: 401, headers: cors });
 
   const driveKey = Deno.env.get("GOOGLE_DRIVE_API_KEY");
-  const gmailKey = Deno.env.get("GOOGLE_MAIL_API_KEY");
-  if (!driveKey || !gmailKey || !Deno.env.get("LOVABLE_API_KEY")) {
-    return new Response(JSON.stringify({ error: "connectors_missing" }), { status: 409, headers: cors });
+  const gmailKey = Deno.env.get("GOOGLE_MAIL_API_KEY") || "";
+  if (!driveKey || !Deno.env.get("LOVABLE_API_KEY")) {
+    return new Response(JSON.stringify({ error: "connectors_missing", message: "Drive/Lovable connector ausente." }), { status: 409, headers: cors });
   }
 
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: drive } = await db.from("integracoes_guias").select("*").eq("provider", "google_drive").single();
+  const { data: integrations = [] } = await db.from("integracoes_guias").select("*");
+  const drive = integrationByProvider(integrations, "google_drive");
   if (!drive?.source_folder_id || drive.status !== "ativo") {
-    return new Response(JSON.stringify({ error: "drive_integration_inactive", message: "Execute bootstrap-test-folder para configurar pastas." }), { status: 409, headers: cors });
+    return new Response(JSON.stringify({ error: "drive_integration_inactive", message: "Configure a pasta Guias/A Enviar pelo conector Lovable." }), { status: 409, headers: cors });
   }
 
-  const { data: testConfig } = await db.from('guide_test_config').select('*').eq('id', 1).maybeSingle();
-  const config = testConfig || { modo_global: 'teste', email_teste: null, whatsapp_teste: null };
+  const { data: testConfig } = await db.from("guide_test_config").select("*").eq("id", 1).maybeSingle();
+  const config = {
+    modo_global: "teste",
+    operation_level: "somente_classificacao",
+    auto_dispatch_enabled: false,
+    require_batch_approval: true,
+    ...testConfig,
+  };
 
-  // Optional reprocess targeting
   let reprocessIds: string[] = [];
+  let forceDispatch = false;
+  let manualApproval = false;
   try {
     const body = await req.json();
-    if (Array.isArray(body?.guide_ids)) reprocessIds = body.guide_ids.filter((x: unknown) => typeof x === 'string');
-  } catch { /* no body is fine */ }
+    if (Array.isArray(body?.guide_ids)) reprocessIds = body.guide_ids.filter((value: unknown) => typeof value === "string");
+    forceDispatch = body?.force_dispatch === true;
+    manualApproval = body?.manual_approval === true;
+  } catch {
+    // Empty body is valid.
+  }
 
-  // Criar batch
-  const { data: batch } = await db.from('guide_batch_runs').insert({ modo: config.modo_global }).select().single();
+  const { data: batch } = await db.from("guide_batch_runs").insert({
+    modo: config.modo_global,
+    operation_level: config.operation_level,
+    notes: forceDispatch ? "manual_force_dispatch" : null,
+  }).select().single();
 
   let files: any[] = [];
   if (reprocessIds.length > 0) {
-    const { data: targets } = await db.from('guias').select('drive_file_id, file_name, mime_type, sha256').in('id', reprocessIds);
-    files = (targets || []).map((t: any) => ({ id: t.drive_file_id, name: t.file_name, mimeType: t.mime_type, md5Checksum: t.sha256 }));
+    const { data: targets } = await db.from("guias").select("drive_file_id, file_name, mime_type, sha256").in("id", reprocessIds);
+    files = (targets || []).map((target: any) => ({ id: target.drive_file_id, name: target.file_name, mimeType: target.mime_type, md5Checksum: target.sha256 }));
   } else {
-  // List files
-  const params = new URLSearchParams({
-    q: `'${drive.source_folder_id}' in parents and trashed = false`,
-    fields: "files(id,name,mimeType,md5Checksum,modifiedTime)",
-    pageSize: "100",
-  });
-  const list = await fetch(`${DRIVE_GW}/files?${params}`, { headers: gwHeaders(driveKey) });
-  if (!list.ok) {
-    return new Response(JSON.stringify({ error: "drive_list_failed", status: list.status }), { status: 502, headers: cors });
-  }
+    const params = new URLSearchParams({
+      q: `'${drive.source_folder_id}' in parents and trashed = false`,
+      fields: "files(id,name,mimeType,md5Checksum,modifiedTime)",
+      pageSize: "100",
+    });
+    const list = await fetch(`${DRIVE_GW}/files?${params}`, { headers: gwHeaders(driveKey) });
+    if (!list.ok) {
+      await db.from("guide_batch_runs").update({
+        finished_at: new Date().toISOString(),
+        paused: true,
+        pause_reason: `drive_list_failed_${list.status}`,
+      }).eq("id", batch?.id);
+      await db.from("integracoes_guias").update({
+        status: "erro",
+        last_error: `drive_list_failed_${list.status}`,
+        last_check_at: new Date().toISOString(),
+      }).eq("provider", "google_drive");
+      return new Response(JSON.stringify({ error: "drive_list_failed", status: list.status }), { status: 502, headers: cors });
+    }
     files = ((await list.json()).files || []) as any[];
   }
 
   const results: any[] = [];
-  const counters = { total: 0, enviadas: 0, revisao: 0, erros: 0, duplicadas: 0, nao_identificadas: 0, identificadas: 0 };
+  const counters = {
+    total: 0,
+    enviadas: 0,
+    revisao: 0,
+    erros: 0,
+    duplicadas: 0,
+    nao_identificadas: 0,
+    identificadas: 0,
+    prontas_envio: 0,
+    quarentena: 0,
+  };
 
   for (const file of files) {
     counters.total++;
@@ -375,48 +1024,73 @@ serve(async (req) => {
     let guide = existing;
     if (!guide) {
       const { data: inserted } = await db.from("guias").insert({
-        drive_file_id: file.id, file_name: file.name, mime_type: file.mimeType,
-        sha256: file.md5Checksum || null, source_folder_id: drive.source_folder_id,
-        sent_folder_id: drive.sent_folder_id, modo: config.modo_global,
+        drive_file_id: file.id,
+        file_name: file.name,
+        mime_type: file.mimeType,
+        sha256: file.md5Checksum || null,
+        source_folder_id: drive.source_folder_id,
+        sent_folder_id: drive.sent_folder_id,
+        modo: config.modo_global,
+        status: "aguardando_processamento",
       }).select().single();
       guide = inserted;
     }
     if (!guide) continue;
-    if (reprocessIds.length === 0 && ['enviada','enviando'].includes(guide.status)) {
-      results.push({ file: file.name, skipped: true, status: guide.status }); continue;
+    await logEvent(db, guide.id, "file_registered", "Arquivo registrado para processamento.", { file_name: file.name, batch_id: batch?.id }, "info", batch?.id);
+    if (reprocessIds.length === 0 && ["enviada", "enviando"].includes(guide.status)) {
+      results.push({ file: file.name, skipped: true, status: guide.status });
+      continue;
     }
-    if (file.mimeType !== 'application/pdf') {
-      await db.from('guias').update({ status: 'erro', provider_error: 'Formato não suportado.', pasta_atual: 'erros' }).eq('id', guide.id);
-      await logException(db, guide.id, 'unsupported_file', 'Somente PDFs são processados.', 'Envie em PDF.', {}, 'error');
+    if (file.mimeType !== "application/pdf") {
+      await db.from("guias").update({ status: "erro", provider_error: "Formato nao suportado.", pasta_atual: "erros" }).eq("id", guide.id);
+      await moveToFolder(db, guide, driveKey, drive, "errors", batch?.id);
+      await logException(db, guide.id, "unsupported_file", "Somente PDFs sao processados.", "Envie em PDF.", {}, "error", batch?.id);
       counters.erros++;
-      results.push({ file: file.name, skipped: true, reason: 'not_pdf' }); continue;
+      results.push({ file: file.name, skipped: true, reason: "not_pdf" });
+      continue;
     }
     try {
-      const r = await processOneGuide(db, guide, driveKey, gmailKey, drive, config);
-      if (r.status === 'enviada') counters.enviadas++;
-      else if (r.status === 'revisao') counters.revisao++;
-      else if (r.status === 'erro') counters.erros++;
-      else if (r.status === 'duplicada') counters.duplicadas++;
-      else if (r.status === 'nao_identificada') counters.nao_identificadas++;
-      if (['enviada','revisao','duplicada'].includes(r.status)) counters.identificadas++;
-      results.push({ file: file.name, guia_id: guide.id, ...r });
+      const result = await processOneGuide(db, guide, driveKey, gmailKey, drive, config, integrations, {
+        batchId: batch?.id ?? null,
+        forceDispatch,
+        manualApproval,
+      });
+      if (result.status === "enviada") counters.enviadas++;
+      else if (result.status === "revisao_manual") counters.revisao++;
+      else if (result.status === "quarentena") counters.quarentena++;
+      else if (result.status === "erro") counters.erros++;
+      else if (result.status === "duplicada") counters.duplicadas++;
+      else if (result.status === "nao_identificada") counters.nao_identificadas++;
+      else if (result.status === "pronta_envio") counters.prontas_envio++;
+      if (["enviada", "revisao_manual", "duplicada", "pronta_envio", "quarentena"].includes(result.status)) counters.identificadas++;
+      results.push({ file: file.name, guia_id: guide.id, ...result });
     } catch (err) {
       counters.erros++;
-      results.push({ file: file.name, error: String(err).slice(0,500) });
+      await db.from("guias").update({ status: "erro", provider_error: String(err).slice(0, 300) }).eq("id", guide.id);
+      await logEvent(db, guide.id, "dispatch_failed", "Falha tecnica inesperada no processamento.", { error: String(err).slice(0, 500) }, "error", batch?.id);
+      results.push({ file: file.name, guia_id: guide.id, status: "erro", error: String(err).slice(0, 500) });
     }
   }
 
   if (batch) {
-    await db.from('guide_batch_runs').update({
-      finished_at: new Date().toISOString(), ...counters,
-    }).eq('id', batch.id);
+    await db.from("guide_batch_runs").update({
+      finished_at: new Date().toISOString(),
+      ...counters,
+      preview_json: results,
+    }).eq("id", batch.id);
   }
 
-  await db.from('integracoes_guias').update({
-    last_check_at: new Date().toISOString(), last_error: null,
-  }).eq('provider', 'google_drive');
+  await db.from("integracoes_guias").update({
+    last_check_at: new Date().toISOString(),
+    last_error: null,
+  }).eq("provider", "google_drive");
 
   return new Response(JSON.stringify({
-    modo: config.modo_global, scanned: files.length, batch_id: batch?.id, counters, results,
+    modo: config.modo_global,
+    operation_level: config.operation_level,
+    scanned: files.length,
+    batch_id: batch?.id,
+    counters,
+    results,
   }), { headers: cors });
 });

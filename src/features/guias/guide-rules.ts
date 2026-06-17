@@ -15,8 +15,8 @@ export function extractCnpjCandidates(value: string) {
 
 export function hasPdfSignals(text: string) {
   if (!text) return false;
-  const due = /(?:vencimento|venc\.)\s*[:\-]?\s*\d{2}\/\d{2}\/\d{4}/i.test(text);
-  const amount = /(?:valor(?:\s+total)?|total)\s*[:\-]?\s*R?\$?\s*[\d.]+,\d{2}/i.test(text);
+  const due = /(?:vencimento|venc\.)\s*[:-]?\s*\d{2}\/\d{2}\/\d{4}/i.test(text);
+  const amount = /(?:valor(?:\s+total)?|total)\s*[:-]?\s*R?\$?\s*[\d.]+,\d{2}/i.test(text);
   const kind = /\b(DAS|DARF|FGTS|INSS|ICMS|ISS|GPS|DAE)\b/i.test(text);
   // any two of: due/amount/kind are enough to trust the document
   return [due, amount, kind].filter(Boolean).length >= 2;
