@@ -276,16 +276,20 @@ async function buildDispatchPlans(
   config: any,
 ) {
   const canal = company?.canal_preferido as "email" | "whatsapp" | "ambos" | null;
-  const templateData = buildTemplateData({
-    empresa: companyName(company),
-    cnpj: company?.cnpj || metadata.primaryCnpj || "",
-    tipoGuia: classification.label,
-    competencia: metadata.competencia,
-    vencimento: metadata.vencimento,
-    valor: metadata.valor,
-  });
   const plans: DispatchPlan[] = [];
   for (const channel of channelsFor(canal)) {
+    // Para WhatsApp, [LINK_GUIA] só é gerado no dispatch (link assinado
+    // temporário). Usamos um marcador estável para passar pela validação
+    // de placeholders; o dispatch substitui pelo URL real antes de enviar.
+    const templateData = buildTemplateData({
+      empresa: companyName(company),
+      cnpj: company?.cnpj || metadata.primaryCnpj || "",
+      tipoGuia: classification.label,
+      competencia: metadata.competencia,
+      vencimento: metadata.vencimento,
+      valor: metadata.valor,
+      linkGuia: channel === 'whatsapp' ? '__LINK_GUIA_PENDING__' : '',
+    });
     const template = await loadTemplate(db, classification.tipo, channel);
     const rawSubject = template?.assunto ? renderTemplate(template.assunto, templateData) : null;
     const rawBody = template?.corpo ? renderTemplate(template.corpo, templateData) : "";
@@ -584,7 +588,12 @@ async function dispatchGuide(
         } catch (linkErr) {
           await logEvent(db, guide.id, 'whatsapp_link_failed', 'Falha ao gerar link assinado.', { error: String(linkErr).slice(0, 200) }, 'warn', batchId);
         }
-        const wpBody = linkGuia ? plan.body.replaceAll('[LINK_GUIA]', linkGuia) : plan.body;
+        // O placeholder [LINK_GUIA] foi pré-resolvido para o marcador
+        // __LINK_GUIA_PENDING__ na fase de validação. Substituímos agora
+        // pelo link assinado real antes de enviar.
+        const wpBody = linkGuia
+          ? plan.body.replaceAll('__LINK_GUIA_PENDING__', linkGuia).replaceAll('[LINK_GUIA]', linkGuia)
+          : plan.body.replaceAll('__LINK_GUIA_PENDING__', '');
         const wpRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-whatsapp-message`, {
           method: "POST",
           headers: {
