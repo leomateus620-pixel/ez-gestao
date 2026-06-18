@@ -130,7 +130,7 @@ export function useBootstrapFolders() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('bootstrap-test-folder', {});
+      const { data, error } = await supabase.functions.invoke('bootstrap-guide-folders', {});
       if (error) throw error;
       return data;
     },
