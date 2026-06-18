@@ -276,16 +276,20 @@ async function buildDispatchPlans(
   config: any,
 ) {
   const canal = company?.canal_preferido as "email" | "whatsapp" | "ambos" | null;
-  const templateData = buildTemplateData({
-    empresa: companyName(company),
-    cnpj: company?.cnpj || metadata.primaryCnpj || "",
-    tipoGuia: classification.label,
-    competencia: metadata.competencia,
-    vencimento: metadata.vencimento,
-    valor: metadata.valor,
-  });
   const plans: DispatchPlan[] = [];
   for (const channel of channelsFor(canal)) {
+    // Para WhatsApp, [LINK_GUIA] só é gerado no dispatch (link assinado
+    // temporário). Usamos um marcador estável para passar pela validação
+    // de placeholders; o dispatch substitui pelo URL real antes de enviar.
+    const templateData = buildTemplateData({
+      empresa: companyName(company),
+      cnpj: company?.cnpj || metadata.primaryCnpj || "",
+      tipoGuia: classification.label,
+      competencia: metadata.competencia,
+      vencimento: metadata.vencimento,
+      valor: metadata.valor,
+      linkGuia: channel === 'whatsapp' ? '__LINK_GUIA_PENDING__' : '',
+    });
     const template = await loadTemplate(db, classification.tipo, channel);
     const rawSubject = template?.assunto ? renderTemplate(template.assunto, templateData) : null;
     const rawBody = template?.corpo ? renderTemplate(template.corpo, templateData) : "";
@@ -561,6 +565,35 @@ async function dispatchGuide(
         results.push({ canal: "email", status: "aceito", messageId });
       } else {
         const normalized = normalizePhoneE164(plan.destination)!;
+        // Para WhatsApp não há anexo: gera link assinado temporário no
+        // bucket privado guia-pdf-links e injeta no placeholder [LINK_GUIA].
+        let linkGuia: string | null = null;
+        let linkExpiresAt: string | null = null;
+        try {
+          const storagePath = `${batchId || 'manual'}/${guide.id}.pdf`;
+          const { error: upErr } = await db.storage
+            .from('guia-pdf-links')
+            .upload(storagePath, bytes, { contentType: 'application/pdf', upsert: true });
+          if (upErr && !String(upErr.message || '').includes('exists')) throw upErr;
+          const { data: signed, error: signErr } = await db.storage
+            .from('guia-pdf-links')
+            .createSignedUrl(storagePath, 60 * 60 * 24 * 7); // 7 dias
+          if (signErr) throw signErr;
+          linkGuia = signed?.signedUrl || null;
+          if (linkGuia) {
+            linkExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+            await db.from('guias').update({ pdf_link_signed_url: linkGuia, pdf_link_expires_at: linkExpiresAt }).eq('id', guide.id);
+            await logEvent(db, guide.id, 'whatsapp_link_generated', 'Link assinado gerado para WhatsApp.', { expires_at: linkExpiresAt }, 'info', batchId);
+          }
+        } catch (linkErr) {
+          await logEvent(db, guide.id, 'whatsapp_link_failed', 'Falha ao gerar link assinado.', { error: String(linkErr).slice(0, 200) }, 'warn', batchId);
+        }
+        // O placeholder [LINK_GUIA] foi pré-resolvido para o marcador
+        // __LINK_GUIA_PENDING__ na fase de validação. Substituímos agora
+        // pelo link assinado real antes de enviar.
+        const wpBody = linkGuia
+          ? plan.body.replaceAll('__LINK_GUIA_PENDING__', linkGuia).replaceAll('[LINK_GUIA]', linkGuia)
+          : plan.body.replaceAll('__LINK_GUIA_PENDING__', '');
         const wpRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-whatsapp-message`, {
           method: "POST",
           headers: {
@@ -569,12 +602,12 @@ async function dispatchGuide(
           },
           body: JSON.stringify({
             phone: normalized,
-            message: plan.body,
+            message: wpBody,
             guia_id: guide.id,
             source_type: "guia",
             source_id: guide.id,
             template_sid: plan.template?.twilio_content_sid ?? null,
-            metadata: { tipo_guia: classification.tipo, competencia: metadata.competencia, batch_id: batchId },
+            metadata: { tipo_guia: classification.tipo, competencia: metadata.competencia, batch_id: batchId, link_guia: linkGuia, link_expires_at: linkExpiresAt },
           }),
         });
         const payload = await wpRes.json().catch(() => ({}));
@@ -584,13 +617,13 @@ async function dispatchGuide(
           empresa_id: matched.id,
           canal: "whatsapp",
           destinatario: normalized,
-          mensagem_preview: plan.body.slice(0, 400),
+          mensagem_preview: wpBody.slice(0, 400),
           template_sid: plan.template?.twilio_content_sid ?? null,
           provider_message_id: payload?.message_id ?? null,
           idempotency_key: idemKey,
           status: "aceito",
           submitted_at: new Date().toISOString(),
-          sanitized_payload: { mode, ok: true, template_sid: plan.template?.twilio_content_sid ?? null },
+          sanitized_payload: { mode, ok: true, template_sid: plan.template?.twilio_content_sid ?? null, link_guia: linkGuia ? '<assinado>' : null },
         });
         await logEvent(db, guide.id, "whatsapp_sent", "WhatsApp aceito pelo provedor.", { message_id: payload?.message_id, to: normalized }, "info", batchId);
         results.push({ canal: "whatsapp", status: "aceito", messageId: payload?.message_id ?? null });

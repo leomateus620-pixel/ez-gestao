@@ -9,6 +9,24 @@ verify_jwt = false
 [functions.bootstrap-test-folder]
 verify_jwt = true
 
+[functions.bootstrap-guide-folders]
+verify_jwt = true
+
+[functions.dispatch-guide]
+verify_jwt = true
+
+[functions.get-guide-pdf]
+verify_jwt = true
+
+[functions.test-guide-connection]
+verify_jwt = true
+
+[functions.send-whatsapp-message]
+verify_jwt = true
+
+[functions.whatsapp-status-callback]
+verify_jwt = false
+
 [functions.create-empresa-folder]
 verify_jwt = false
 

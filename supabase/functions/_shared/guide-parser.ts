@@ -765,6 +765,7 @@ export function buildTemplateData(args: {
   competencia: string | null;
   vencimento: string | null;
   valor: number | null;
+  linkGuia?: string | null;
 }): Record<string, string> {
   const fmtDate = (iso: string | null) => iso ? iso.split('-').reverse().join('/') : '';
   const fmtVal = (value: number | null) => value != null ? `R$ ${value.toFixed(2).replace('.', ',')}` : '';
@@ -775,6 +776,7 @@ export function buildTemplateData(args: {
     COMPETENCIA: args.competencia || '',
     VENCIMENTO: fmtDate(args.vencimento),
     VALOR: fmtVal(args.valor),
+    LINK_GUIA: args.linkGuia || '',
   };
 }
 
