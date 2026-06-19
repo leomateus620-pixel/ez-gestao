@@ -1659,8 +1659,13 @@ export type Database = {
           id: string
           idempotency_key: string
           mensagem_preview: string | null
+          provider: string | null
+          provider_error: string | null
           provider_message_id: string | null
+          provider_payload: Json | null
+          provider_status: string | null
           sanitized_payload: Json
+          sent_at: string | null
           status: Database["public"]["Enums"]["guia_envio_status"]
           submitted_at: string
           template_sid: string | null
@@ -1677,8 +1682,13 @@ export type Database = {
           id?: string
           idempotency_key: string
           mensagem_preview?: string | null
+          provider?: string | null
+          provider_error?: string | null
           provider_message_id?: string | null
+          provider_payload?: Json | null
+          provider_status?: string | null
           sanitized_payload?: Json
+          sent_at?: string | null
           status?: Database["public"]["Enums"]["guia_envio_status"]
           submitted_at?: string
           template_sid?: string | null
@@ -1695,8 +1705,13 @@ export type Database = {
           id?: string
           idempotency_key?: string
           mensagem_preview?: string | null
+          provider?: string | null
+          provider_error?: string | null
           provider_message_id?: string | null
+          provider_payload?: Json | null
+          provider_status?: string | null
           sanitized_payload?: Json
+          sent_at?: string | null
           status?: Database["public"]["Enums"]["guia_envio_status"]
           submitted_at?: string
           template_sid?: string | null
@@ -2074,6 +2089,11 @@ export type Database = {
           corpo: string
           created_at: string
           id: string
+          meta_template_category: string | null
+          meta_template_has_document_header: boolean | null
+          meta_template_language: string | null
+          meta_template_name: string | null
+          meta_template_status: string | null
           tipo_guia: Database["public"]["Enums"]["tipo_guia"]
           twilio_content_sid: string | null
           updated_at: string
@@ -2086,6 +2106,11 @@ export type Database = {
           corpo: string
           created_at?: string
           id?: string
+          meta_template_category?: string | null
+          meta_template_has_document_header?: boolean | null
+          meta_template_language?: string | null
+          meta_template_name?: string | null
+          meta_template_status?: string | null
           tipo_guia: Database["public"]["Enums"]["tipo_guia"]
           twilio_content_sid?: string | null
           updated_at?: string
@@ -2098,6 +2123,11 @@ export type Database = {
           corpo?: string
           created_at?: string
           id?: string
+          meta_template_category?: string | null
+          meta_template_has_document_header?: boolean | null
+          meta_template_language?: string | null
+          meta_template_name?: string | null
+          meta_template_status?: string | null
           tipo_guia?: Database["public"]["Enums"]["tipo_guia"]
           twilio_content_sid?: string | null
           updated_at?: string
