@@ -36,7 +36,10 @@ serve(async (req) => {
 
   const { data: guide, error: fetchErr } = await db.from("guias").select("id,file_name,status,tipo_guia").eq("id", guideId).maybeSingle();
   if (fetchErr) return new Response(JSON.stringify({ error: "fetch_failed", detail: fetchErr.message }), { status: 500, headers: cors });
-  if (!guide) return new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: cors });
+  if (!guide) {
+    // Idempotent: guide already gone — return success so the client can drop it from caches/UI.
+    return new Response(JSON.stringify({ ok: true, already_deleted: true, guia_id: guideId }), { status: 200, headers: cors });
+  }
 
   // Audit before deletion
   try {
