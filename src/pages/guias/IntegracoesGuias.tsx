@@ -166,8 +166,8 @@ export default function IntegracoesGuias() {
   const buildIntegration = (provider: IntegrationProvider): IntegracaoGuia => {
     const existing = integrations.find((i) => i.provider === provider);
     // Native PDF reader is internal — always active and never depends on a secret.
-    const connected = provider === 'pdf_native_reader' ? true : liveStatus[provider];
-    return {
+    const connected = provider === 'pdf_native_reader' ? true : Boolean((liveStatus as Record<string, unknown>)[provider]);
+    const base: IntegracaoGuia = {
       provider,
       displayName: providerLabels[provider],
       status: connected ? 'ativo' : existing?.status ?? 'desconectado',
@@ -178,9 +178,18 @@ export default function IntegracoesGuias() {
       lastCheckAt: existing?.lastCheckAt ?? null,
       lastError: existing?.lastError ?? null,
     };
+    if (provider === 'whatsapp') {
+      const s = liveStatus as Record<string, unknown>;
+      Object.assign(base, {
+        apiVersion: s.whatsapp_api_version ?? null,
+        webhookConfigured: Boolean(s.whatsapp_webhook_configured),
+        testToConfigured: Boolean(s.whatsapp_test_to_configured),
+      });
+    }
+    return base;
   };
 
-  const providers: IntegrationProvider[] = ['google_drive', 'gmail', 'twilio_whatsapp', 'pdf_native_reader'];
+  const providers: IntegrationProvider[] = ['google_drive', 'gmail', 'whatsapp', 'pdf_native_reader'];
 
   return (
     <div className="space-y-6">
@@ -195,8 +204,8 @@ export default function IntegracoesGuias() {
             <div>
               <p className="text-sm font-semibold">Segredos protegidos no servidor</p>
               <p className="mt-1 max-w-2xl text-xs leading-relaxed text-foreground/72">
-                OAuth refresh token, credenciais Vision e token Twilio nunca são enviados ao frontend.
-                URLs de documento para WhatsApp expiram e o webhook exige assinatura Twilio válida.
+                OAuth do Drive/Gmail, access token da Meta WhatsApp e app secret ficam apenas no servidor.
+                Links de PDF para WhatsApp são assinados temporariamente e o webhook valida assinatura HMAC.
               </p>
             </div>
           </div>
@@ -215,7 +224,7 @@ export default function IntegracoesGuias() {
             folders={provider === 'google_drive' ? folders : null}
             onBootstrap={provider === 'google_drive' ? () => bootstrap.mutate() : undefined}
             bootstrapping={bootstrap.isPending}
-            onTest={provider === 'gmail' || provider === 'twilio_whatsapp'
+            onTest={provider === 'gmail' || provider === 'whatsapp'
               ? (canal, dest) => testConn.mutate({ canal, destinatario: dest })
               : undefined}
           />
