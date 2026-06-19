@@ -490,9 +490,16 @@ interface GuideFlowRowProps {
 
 function GuideFlowRow({ guideId, fileName, companyLabel, statusLabel, statusClassName, receivedAt, tipoGuia, competencia }: GuideFlowRowProps) {
   const deleteGuide = useDeleteGuide();
+  const navigate = useNavigate();
   return (
-    <div className="guide-flow-row guide-tilt-card group relative">
-      <Link to={`/guias/${guideId}`} className="absolute inset-0 z-0" aria-label={`Abrir ${fileName}`} />
+    <div
+      className="guide-flow-row guide-tilt-card group relative cursor-pointer"
+      role="button"
+      tabIndex={0}
+      onClick={() => navigate(`/guias/${guideId}`)}
+      onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/guias/${guideId}`); }}
+      aria-label={`Abrir ${fileName}`}
+    >
       <div className="guide-flow-marker pointer-events-none relative z-10" aria-hidden>
         <span />
       </div>
@@ -510,7 +517,7 @@ function GuideFlowRow({ guideId, fileName, companyLabel, statusLabel, statusClas
           {competencia && <span>Competência {competencia}</span>}
         </div>
       </div>
-      <div className="relative z-10 flex items-center gap-1">
+      <div className="relative z-10 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button
@@ -518,7 +525,7 @@ function GuideFlowRow({ guideId, fileName, companyLabel, statusLabel, statusClas
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-[hsl(var(--text-tertiary))] hover:text-destructive"
-              onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              onClick={(e) => e.stopPropagation()}
               aria-label="Excluir guia"
               disabled={deleteGuide.isPending}
             >
