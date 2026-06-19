@@ -142,13 +142,15 @@ async function logException(
   severity: "warning" | "error" = "warning",
   batchId?: string | null,
 ) {
+  // guia_excecoes só tem (id, guia_id, exception_type, severity, status, reason,
+  // action_recommended, created_at, resolved_at). Metadados detalhados vão
+  // para guia_eventos.metadata_json.
   await db.from("guia_excecoes").insert({
     guia_id: guideId,
     exception_type: type,
     severity,
     reason,
     action_recommended: action,
-    detected_data_json: meta,
   });
   await logEvent(db, guideId, "routed_to_review", reason, { type, ...meta }, severity, batchId);
 }
@@ -332,7 +334,9 @@ function dispatchConnectorErrors(plans: DispatchPlan[], integrations: any[], gma
 }
 
 async function detectDuplicates(db: any, guide: any, metadata: GuideMetadata, classification: ClassifyResult, matched: any) {
-  if (guide.sha256) {
+  // Quando o operador clica em "Processar agora" (force_dispatch), a guia é
+  // reprocessada propositalmente — não a tratamos como duplicada interna.
+  if (guide.sha256 && !(guide as any).__forceDispatch) {
     const { data: exact } = await db.from("guias")
       .select("id,status,file_name")
       .eq("sha256", guide.sha256)
@@ -354,13 +358,14 @@ async function detectDuplicates(db: any, guide: any, metadata: GuideMetadata, cl
     vencimento: metadata.vencimento,
     valor: metadata.valor,
   });
-  const { data: operational } = await db.from("guias")
+  const operationalQuery = db.from("guias")
     .select("id,status,file_name")
     .eq("dedup_hash", operationalHash)
     .neq("id", guide.id)
     .not("status", "in", '("duplicada","erro")')
     .limit(1)
     .maybeSingle();
+  const { data: operational } = (guide as any).__forceDispatch ? { data: null } : await operationalQuery;
   if (operational) return { level: "operational" as const, duplicate: operational, hash: operationalHash };
 
   const { data: probableRows } = await db.from("guias")
@@ -376,6 +381,7 @@ async function detectDuplicates(db: any, guide: any, metadata: GuideMetadata, cl
   );
   if (probable) return { level: "probable" as const, duplicate: probable, hash: operationalHash };
 
+  if ((guide as any).__forceDispatch) return { level: null, duplicate: null, hash: operationalHash };
   return { level: null, duplicate: null, hash: operationalHash };
 }
 
@@ -763,6 +769,8 @@ async function processOneGuide(
   options: ProcessOptions,
 ) {
   const mode = (config.modo_global || "teste") as Mode;
+  // Propaga a flag de reprocesso forçado para o detector de duplicidade.
+  (guide as any).__forceDispatch = options.forceDispatch === true;
   await db.from("guias").update({ status: "processando", modo: mode, operation_batch_id: options.batchId }).eq("id", guide.id);
   await logEvent(db, guide.id, "scan_started", "Processamento da guia iniciado.", { mode }, "info", options.batchId);
 

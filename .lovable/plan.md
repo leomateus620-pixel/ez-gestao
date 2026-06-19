@@ -1,41 +1,70 @@
-## Diagnóstico
+## Diagnóstico encontrado
 
-### 1) "Processar agora" não envia nada
-O botão chama `run-guide-scan-now` **sem `guide_ids`**, então ele só varre a pasta do Drive em busca de arquivos novos. As duas guias que aparecem como `duplicada` e `nao_identificada` (TARIFA ZERO) já estão em subpastas (`duplicadas/`, `nao_identificadas/`) e têm `dedup_hash` salvo — a varredura as ignora. Resultado: clicar em "Processar agora" não reprocessa as guias paradas. Só novos PDFs disparariam o envio.
+1. **O envio não chegou ao WhatsApp porque o pipeline bloqueia antes de chamar o provedor.**
+   - A guia FGTS Digital foi identificada com empresa, valor, vencimento e destinatário corretos.
+   - Porém o validador ainda exige campos legados de WhatsApp/Twilio (`twilio_content_sid`) e placeholders obrigatórios como `[CNPJ]` e `[TIPO_GUIA]`.
+   - Os templates atuais de WhatsApp não têm esses campos, então a guia é enviada para `duplicada`/revisão antes de qualquer chamada real ao WhatsApp.
+   - Resultado: não existe registro em `guia_envios` para essas guias e a função de WhatsApp nem aparece nos logs.
 
-Além disso, a guia "nao_identificada" da TARIFA ZERO já tem `revisao_correcoes` aplicada (empresa correta, valor, vencimento, competência), mas ficou bloqueada por `dispatch_blocked_reason = "CNPJ invalido no PDF."` — o early-return de CNPJ inválido em `routeGuide` impediu o fallback FGTS por razão social na primeira passada. Hoje não há nada na UI que force o reprocesso individual dessas guias travadas.
+2. **A duplicidade continua bloqueando o reprocessamento forçado.**
+   - Existem duas guias com o mesmo PDF/hash (`0126060842429268-9.pdf`).
+   - Mesmo com `force_dispatch`, o código ainda roda a detecção de duplicidade dentro do pipeline e transforma a guia em `duplicada` antes do envio.
+   - Uma delas ficou em estado inconsistente: `status = processando`, mas `decision_reason = duplicidade`.
 
-### 2) Não consegue excluir guias com erro
-- O botão "Excluir" só existe no card **Fluxo recente do Dashboard** (`GuideFlowRow`). Não existe na lista `/guias`, nem em `/guias/:id`, nem em Revisão Manual. Se o usuário está em `/guias` ou no detalhe, simplesmente não há botão.
-- O Dashboard registrou no console (build anterior) `ReferenceError: GuideFlowRow is not defined`. Pode ser HMR antigo, mas vou validar com Playwright para garantir que o botão renderiza hoje.
-- A função `delete-guia` tenta gravar em `guide_audit` colunas que não existem (`actor_user_id`, `payload`). A tabela tem `actor`, `action`, `before`, `after`. A insert falha mas está em try/catch, então a exclusão ainda funciona — porém o log de auditoria nunca é registrado.
+3. **A exclusão no “Fluxo recente” provavelmente não abre a confirmação.**
+   - O card inteiro é um link absoluto.
+   - O botão de lixeira chama `preventDefault()` dentro do próprio `AlertDialogTrigger`, o que pode impedir o Radix de abrir o modal de confirmação.
+   - Como não houve log da função `delete-guia`, o clique não chegou ao backend.
+
+4. **Há um problema adicional de schema/log.**
+   - O código tenta gravar `detected_data_json` em `guia_excecoes`, mas essa coluna não existe na tabela atual.
+   - Isso pode quebrar o fluxo em trechos onde uma exceção é registrada.
 
 ## Plano de correção
 
-### A. Reprocessar guias paradas a partir da UI
-1. Em `GuideProvider.scan`: quando houver guias em status terminal mas reprocessáveis (`nao_identificada`, `duplicada`, `erro`, `revisao_manual` com `revisao_correcoes`), enviar `guide_ids` dessas guias junto com `run_full_pipeline: true` e `force_dispatch: true` para o `run-guide-scan-now`. Assim "Processar agora" passa a também reprocessar o que está travado.
-2. Em `run-guide-scan-now`: quando `guide_ids` for fornecido com `force_dispatch`, ignorar `dedup_hash` e o bloqueio "duplicada por hash exato" para esses IDs (releitura autorizada), e reaplicar `revisao_correcoes` antes de rotear.
-3. Confirmar que o fallback FGTS por razão social roda mesmo com `cnpj.status === 'invalid'` (já está no código, mas a guia em questão ficou com `decision_reason = "CNPJ invalido no PDF."` — validar com curl no edge function após o ajuste e ler logs).
-4. Botão individual "Processar agora" no detalhe da guia (`GuiaDetalhe.tsx`) e na lista `/guias` — invoca `dispatch-guide` com `{ guide_id, force_dispatch: true, manual_approval: true }` para reprocessar apenas aquela guia.
+### 1. Corrigir o envio WhatsApp Meta Cloud API
+- Atualizar `validateTemplateRender` para WhatsApp não exigir mais `twilio_content_sid`.
+- Ajustar a validação de placeholders para aceitar templates Meta atuais e não bloquear FGTS Digital sem CNPJ completo quando a empresa foi identificada por razão social/alias seguro.
+- Usar `meta_template_name` quando configurado e manter fallback controlado (`envio_guia_fiscal`) apenas se não houver nome definido.
+- Registrar claramente no evento da guia se o envio foi chamado, aceito ou recusado pelo provedor.
 
-### B. Excluir guias em todos os lugares
-1. Adicionar botão "Excluir" (ícone lixeira + `AlertDialog`) em:
-   - `src/pages/guias/Guias.tsx` — em cada linha/card da lista.
-   - `src/pages/guias/GuiaDetalhe.tsx` — no header de ações, redirecionando para `/guias` após sucesso.
-2. Garantir que o `GuideFlowRow` do Dashboard renderize sem erro (validar com Playwright e screenshot).
-3. Corrigir `supabase/functions/delete-guia/index.ts` para gravar auditoria com as colunas reais (`actor`, `action`, `after` com `{motivo, file_name, status, tipo_guia}`), removendo `actor_user_id`/`payload`. Manter try/catch defensivo, mas dessa vez a inserção vai funcionar.
+### 2. Fazer `Processar agora` realmente reprocessar e enviar
+- Quando `force_dispatch = true`, ignorar bloqueio de duplicidade para a guia selecionada/reprocessada.
+- Se houver várias cópias do mesmo PDF, escolher uma guia “canônica” para envio e marcar as outras como excluídas/duplicadas sem bloquear a guia válida.
+- Reaplicar as correções manuais já salvas (`revisao_correcoes`) antes da rota final.
+- Garantir que FGTS Digital identificado por razão social exata/alias exato vá para envio quando os demais campos estiverem válidos.
 
-### C. Validação
-- `bunx vitest run src/features/guias` para não regredir os testes do parser FGTS.
-- Playwright: navegar `/`, `/guias`, `/guias/:id`, capturar screenshots dos botões de excluir/processar; clicar "Processar agora" e confirmar via `supabase--read_query` que a guia TARIFA ZERO mudou de `nao_identificada` → `pronta_envio` ou `enviada` e que `guia_envios` recebeu uma linha WhatsApp.
-- `supabase--edge_function_logs run-guide-scan-now` para confirmar caminho do envio.
+### 3. Corrigir exclusão das guias no Dashboard e na fila
+- Remover a sobreposição de link que compete com o botão de lixeira no `Fluxo recente`.
+- Fazer o botão de excluir abrir o modal de confirmação corretamente.
+- Após confirmar, chamar `delete-guia`, invalidar caches e remover visualmente a guia sem depender de reload manual.
+- Manter os botões de excluir também em `/guias/fila` e no detalhe.
 
-## Critérios de aceitação
-- Em `/`, `/guias` e `/guias/:id` é possível excluir uma guia, com confirmação e auditoria gravada.
-- Clicar em "Processar agora" reprocessa as guias paradas (`nao_identificada`, `duplicada`, `erro`) — a guia TARIFA ZERO atual deve sair de `nao_identificada` e gerar um envio WhatsApp para `+5555999699631`.
-- Botão individual "Processar agora" funciona no detalhe e na lista.
-- Build e testes existentes passam.
+### 4. Corrigir a função `delete-guia`
+- Garantir que ela apague em ordem segura:
+  - envios
+  - eventos
+  - exceções
+  - auditoria relacionada quando necessário ou auditoria final compatível
+  - guia
+- Ajustar qualquer escrita de auditoria para usar somente colunas reais.
+- Retornar mensagens de erro mais claras para a UI caso algo bloqueie a exclusão.
 
-## Fora de escopo
-- Mudanças no parser do PDF (CNJ parcial já é tratado pelo fallback de razão social).
-- Mudanças no serviço WhatsApp em si.
+### 5. Corrigir gravação de exceções
+- Remover o campo inexistente `detected_data_json` das inserções em `guia_excecoes`, ou criar campo via migração se ele for necessário para auditoria.
+- Para menor risco, vou manter os metadados detalhados em `guia_eventos.metadata_json`, que já existe.
+
+### 6. Limpeza dos dois registros atuais
+- Após aplicar a correção, remover os dois registros travados/duplicados mostrados no print ou deixar apenas um registro canônico para reprocessamento.
+- Reprocessar a guia válida ponta a ponta.
+- Confirmar no banco:
+  - `guias.status = enviada` ou erro real do provedor registrado
+  - `guia_envios` com canal `whatsapp`
+  - destinatário `+5555999699631`
+  - evento `whatsapp_sent` ou motivo exato da falha
+
+### 7. Validação end to end
+- Testar o clique de excluir no Dashboard e na fila.
+- Testar `Processar agora` em guia travada.
+- Conferir logs das funções `run-guide-scan-now`, `dispatch-guide`, `delete-guia` e `send-whatsapp-message`.
+- Só considerar concluído quando houver envio registrado ou erro real do provedor WhatsApp visível na auditoria.
