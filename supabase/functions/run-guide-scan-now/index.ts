@@ -494,20 +494,30 @@ function routeGuide(args: {
 
   const operationLevel = (config.operation_level || "somente_classificacao") as OperationLevel;
   const highValueThreshold = Number(config.high_value_threshold ?? 0);
-  const requiresApproval =
-    (!args.forceDispatch && (
-      operationLevel === "automacao_desligada" ||
-      operationLevel === "somente_classificacao" ||
-      operationLevel === "leitura_revisao"
-    )) ||
-    (!args.forceDispatch && config.require_batch_approval === true) ||
-    (!args.manualApproval && highValueThreshold > 0 && metadata.valor != null && metadata.valor >= highValueThreshold);
+  const blockedReasons: string[] = [];
+  if (!args.forceDispatch) {
+    if (["automacao_desligada", "somente_classificacao", "leitura_revisao"].includes(operationLevel)) {
+      blockedReasons.push(`operation_level_blocks:${operationLevel}`);
+    }
+    if (config.require_batch_approval === true) blockedReasons.push("requires_batch_approval");
+    if (!config.auto_dispatch_enabled) blockedReasons.push("auto_dispatch_disabled");
+  }
+  if (!args.manualApproval && highValueThreshold > 0 && metadata.valor != null && metadata.valor >= highValueThreshold) {
+    blockedReasons.push(`high_value_requires_approval:>=${highValueThreshold}`);
+  }
+  // In test mode without explicit force/full-pipeline, never dispatch — keep preview only.
+  if (mode === "teste" && !args.forceDispatch) {
+    blockedReasons.push("mode_test_preview_only");
+  }
 
-  if (mode === "teste" || requiresApproval || (!config.auto_dispatch_enabled && !args.forceDispatch)) {
+  if (blockedReasons.length > 0) {
+    const reason = mode === "teste" && !args.forceDispatch
+      ? "Preview de teste gerado sem envio real."
+      : `Identificada, envio automatico bloqueado por: ${blockedReasons.join(", ")}.`;
     return {
       status: "pronta_envio",
-      reason: mode === "teste" ? "Preview de teste gerado sem envio real." : "Guia segura, aguardando aprovacao de lote/operador.",
-      action: "Aprovar lote ou selecionar guia para envio.",
+      reason,
+      action: "Ajustar Configuracoes -> Pipeline, aprovar lote ou selecionar guia para envio.",
       reviewLevel: "none",
       readyButAwaitingApproval: true,
     };
@@ -1029,7 +1039,14 @@ async function processOneGuide(
     channels: dispatchPlans.map((plan) => plan.channel),
   }, "info", options.batchId);
 
-  if (mode === "teste" || route.readyButAwaitingApproval) {
+  if ((mode === "teste" && !options.forceDispatch) || route.readyButAwaitingApproval) {
+    await logEvent(db, guide.id, "auto_dispatch_blocked", route.reason, {
+      mode,
+      reason: route.reason,
+      operation_level: config.operation_level,
+      auto_dispatch_enabled: config.auto_dispatch_enabled,
+      require_batch_approval: config.require_batch_approval,
+    }, "info", options.batchId);
     return {
       status: "pronta_envio",
       reason: mode === "teste" ? "test_preview_only" : "awaiting_approval",
@@ -1050,6 +1067,11 @@ async function processOneGuide(
     };
   }
 
+  await logEvent(db, guide.id, "auto_dispatch_approved", "Pipeline completo: dispatch automatico aprovado.", {
+    mode,
+    forced: options.forceDispatch,
+    channels: dispatchPlans.map((plan) => plan.channel),
+  }, "info", options.batchId);
   const results = await dispatchGuide(db, guide, matched, metadata, classification, bytes, dispatchPlans, gmailKey, mode, options.batchId);
   const allOk = results.every((result) => result.status === "aceito" || result.status === "entregue" || result.skipped === "already_sent");
   if (!allOk) {
@@ -1058,6 +1080,11 @@ async function processOneGuide(
     return { status: "erro", reason: "dispatch_failed", results, confidence: confidence.overallConfidence };
   }
 
+  if (mode === "teste") {
+    // Test dispatch went to test recipients only — do NOT move Drive file to production "Enviadas".
+    await db.from("guias").update({ status: "enviada_teste", sent_at: new Date().toISOString() }).eq("id", guide.id);
+    return { status: "enviada_teste", reason: "sent_test", results, confidence: confidence.overallConfidence };
+  }
   await organizeSentFile(db, guide, driveKey, folders, matched, metadata, classification, options.batchId);
   return { status: "enviada", reason: "sent", results, confidence: confidence.overallConfidence };
 }
@@ -1104,7 +1131,7 @@ serve(async (req) => {
   try {
     const body = await req.json();
     if (Array.isArray(body?.guide_ids)) reprocessIds = body.guide_ids.filter((value: unknown) => typeof value === "string");
-    forceDispatch = body?.force_dispatch === true;
+    forceDispatch = body?.force_dispatch === true || body?.run_full_pipeline === true;
     manualApproval = body?.manual_approval === true;
   } catch {
     // Empty body is valid.

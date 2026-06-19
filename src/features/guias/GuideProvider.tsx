@@ -154,7 +154,9 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
   };
   const scan = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('run-guide-scan-now');
+      const { data, error } = await supabase.functions.invoke('run-guide-scan-now', {
+        body: { run_full_pipeline: true },
+      });
       if (error) throw error;
       return data;
     },

@@ -1,113 +1,61 @@
-# Plano: FGTS Digital com identificação por razão social
+## Objetivo
 
-Objetivo: permitir que guias FGTS Digital/GFD sem CNPJ completo no PDF sejam identificadas com segurança pela razão social do empregador (ou alias exato), mantendo o pipeline seguro — envio automático só com correspondência única e exata.
+Fazer com que "Processar agora" execute o pipeline completo e dispare o envio automaticamente quando a guia estiver segura, inclusive para FGTS Digital identificado por razão social/alias. Hoje a guia chega em `pronta_envio` mas fica parada porque a configuração padrão (`auto_dispatch_enabled=false`, `operation_level=somente_classificacao`, `require_batch_approval=true`) bloqueia o dispatch, e o frontend não mostra o motivo real.
 
-## 1. Schema (migration)
+## Diagnóstico rápido
 
-- `empresas`: adicionar
-  - `aliases text[] not null default '{}'` — nomes alternativos normalizados manualmente ou aprendidos via revisão.
-  - `cnpj_raiz text generated always as (substring(regexp_replace(cnpj,'\\D','','g') from 1 for 8)) stored` (ou coluna comum populada por trigger se generated não couber).
-- `guias`: adicionar
-  - `subtipo text` (ex.: `fgts_digital_gfd`)
-  - `empregador_documento_raw text`
-  - `empregador_documento_tipo text` (`cnpj_completo` | `cnpj_raiz` | `documento_parcial` | `cpf`)
-  - `empregador_nome_razao_social text`
-  - `identificador_guia text`
-  - `match_method text` (`cnpj_exact` | `exact_normalized_legal_name` | `alias_exact` | `similarity` | `none`)
-- Recalcular `dedup_hash` para FGTS sem CNPJ completo: `sha256(empresa_id|tipo_guia|competencia|vencimento|valor|identificador_guia?)`.
-- Manter RLS atual; sem novas tabelas.
+Em `supabase/functions/run-guide-scan-now/index.ts`:
 
-## 2. Parser (`supabase/functions/_shared/guide-parser.ts`)
+- `routeGuide` (linhas ~495-516) marca `readyButAwaitingApproval=true` sempre que `operation_level` é `somente_classificacao`/`leitura_revisao`, `require_batch_approval=true` ou `auto_dispatch_enabled=false`. O padrão atual de `guide_test_config` cai em todos esses casos, então toda guia vai para `pronta_envio` "aguardando aprovação".
+- `processOneGuide` (linhas ~1032-1051) também retorna sem dispatch quando `mode === "teste"`, sem distinguir teste com destinatário configurado vs. teste sem destinatário.
+- Quando o usuário clica "Processar agora" no card, não há um sinal explícito de "rodar pipeline completo" — só o `force_dispatch` opcional, que existe mas não é usado pelo botão.
+- O frontend (`Guias.tsx`, `GuiaDetalhe.tsx`) mostra `pronta_envio` como item de fila sem expor `dispatch_blocked_reason`.
 
-- Expandir `extractFGTSDigitalData`:
-  - Detectores: `GFD`, `Guia do FGTS Digital`, `FGTS Digital`, `CPF/CNPJ do Empregador`, `Nome/Razão Social do Empregador`, `Valor a recolher`, `Total da Guia`, `Pagar este documento até`, `Identificador`, `Competência`.
-  - Extrair: `tipo='fgts'`, `subtipo='fgts_digital_gfd'`, `empregador_documento_raw`, `empregador_documento_tipo`, `empregador_nome_razao_social`, `competencia`, `vencimento` (de "Pagar este documento até"), `valor` (preferir "Total da Guia"/"Valor a recolher"), `identificador_guia`, `codigo_pix`/`pix_copia_cola` (quando presentes), `data_geracao`.
-  - Classificar documento parcial: 14 dígitos = `cnpj_completo`; 8 dígitos = `cnpj_raiz`; outros = `documento_parcial`. NÃO completar CNPJ automaticamente.
-- `analyzeGuideText`: quando `tipo='fgts'` e CNPJ completo ausente, NÃO emitir erro `cnpj_invalid`; emitir issue informativa `fgts_partial_employer_document` e seguir com `razao_social` como campo crítico alternativo.
+## Mudanças (escopo focado, sem mexer no parser FGTS já aprovado)
 
-## 3. Identificação (`run-guide-scan-now` + `src/features/guias/guide-rules.ts`)
+### 1. Edge Function `run-guide-scan-now`
 
-Nova função `matchCompanyForFGTSGuide(extracted, empresas)`:
+- Aceitar nova flag `run_full_pipeline: true` no body. Quando o botão "Processar agora" enviar essa flag:
+  - Tratar como `forceDispatch = true` para fins de bypass de `auto_dispatch_enabled`, `operation_level` e `require_batch_approval` — desde que as validações de segurança (campos críticos, empresa ativa, sem duplicidade, template/destinatário/conector OK) passem.
+  - Não bypass de: `mode=teste` (continua redirecionando para destinatário de teste), duplicidade, ambiguidade, valor acima do `high_value_threshold`, conector inativo.
+- Em `routeGuide`, separar `awaiting_approval` em motivos discretos e gravar em `dispatch_blocked_reason` o motivo exato (`auto_dispatch_disabled`, `operation_level_blocks`, `requires_batch_approval`, `high_value_requires_approval`, `mode_test_preview_only`).
+- Em modo `teste`, se `email_teste`/`whatsapp_teste` estiverem configurados e `run_full_pipeline=true`, executar dispatch real para o destinatário de teste e marcar `guia_envios.status = 'aceito'` com `modo='teste'` e `guias.status = 'enviada_teste'` (sem mover para Enviadas/produção). Senão, manter preview.
+- Garantir que o caminho FGTS sem CNPJ completo já existente (com `matched` + `fgtsNameBased`) passa pela mesma porta de dispatch (já passa, é só não bloquear pelo flag).
 
-Normalização (compartilhada): remover acentos, uppercase, remover pontuação, colapsar espaços; gerar duas formas — completa e sem termos societários (`LTDA, EIRELI, ME, EPP, SA, S/A, SOCIEDADE, LIMITADA, MEI`).
+### 2. Confiança FGTS
 
-Ordem de matching para FGTS sem CNPJ completo:
-1. CNPJ completo → `cnpj_exact`.
-2. CNPJ raiz (8 dígitos) → só aceita se houver exatamente 1 empresa ativa com mesma raiz; múltiplas filiais → `revisao_manual`.
-3. Razão social normalizada exata (forma completa) → `exact_normalized_legal_name`.
-4. Alias exato (normalizado) → `alias_exact`.
-5. Razão social normalizada sem termos societários, exata e única → `exact_normalized_legal_name`.
-6. Similaridade (Jaro-Winkler ou Dice bigram) `>= 0.94` e única → `similarity` (NUNCA auto, sempre revisão rápida).
-7. Caso contrário → `revisao_manual`/`nao_identificada`.
+- Em `_shared/guide-parser.ts` (`calculateConfidence`), adicionar branch específico para `tipo='fgts'` quando `cnpj.status !== 'valid'` mas `match_method` está em {`exact_normalized_legal_name`, `alias_exact`, `exact_normalized_no_legal_terms`, `cnpj_raiz_unique`}: usar pesos solicitados (empresa 0.40, tipo 0.20, competência 0.15, vencimento 0.15, valor 0.10) — não penalizar pelo CNPJ ausente. Para `similarity` continua < 0.92.
 
-Bloqueios: múltiplas candidatas em qualquer etapa → `revisao_manual`; empresa inativa → `revisao_manual` com motivo `company_inactive`.
+### 3. Frontend
 
-## 4. Matriz de decisão e confidence score
+- `src/pages/guias/Guias.tsx` e `src/features/guias/useGuideOps.ts`: enviar `run_full_pipeline: true` quando o usuário clicar em "Processar agora" no card/dashboard. O botão "Scan rápido" existente continua sem a flag.
+- `src/pages/guias/GuiaDetalhe.tsx` e o card da fila: mostrar `dispatch_blocked_reason` com mensagem legível, ex.:
+  - `auto_dispatch_disabled` → "Identificada, envio automático desativado em Configurações"
+  - `requires_batch_approval` → "Identificada, aguardando aprovação de lote"
+  - `template_missing` / `destination_missing` → "Identificada, template/canal incompleto"
+  - `mode_test_preview_only` → "Modo teste, preview gerado sem envio real"
+- Em `Guias.tsx`, separar visualmente a fila operacional: `aguardando_processamento|processando|enviando` ficam em "Em processamento"; `pronta_envio` com `dispatch_blocked_reason` vai para "Identificadas aguardando configuração" com chamada para a página de Configurações; `revisao_manual|quarentena|erro|nao_identificada|duplicada` continuam em "Precisam de ação".
 
-Estender a matriz em `run-guide-scan-now`:
+### 4. Auditoria
 
-- FGTS + CNPJ completo válido + empresa única → fluxo padrão.
-- FGTS sem CNPJ completo + `exact_normalized_legal_name` única + demais campos válidos → `pronta_envio` (auto).
-- FGTS sem CNPJ completo + `alias_exact` única + demais campos válidos → `pronta_envio` (auto).
-- FGTS sem CNPJ completo + `similarity` → `revisao_manual` (rápida).
-- FGTS sem CNPJ completo + múltiplas → `revisao_manual`.
-- FGTS sem CNPJ completo + razão social ausente → `nao_identificada`.
-- FGTS + CNPJ raiz + múltiplas filiais → `revisao_manual`.
-- Campo crítico (valor/vencimento/competência) ausente → `revisao_manual`.
+- Adicionar eventos `auto_dispatch_approved` e `auto_dispatch_blocked` em `guia_eventos` no momento da decisão (com o motivo exato). Os eventos já existentes (`dispatch_started`, `email_sent`, `whatsapp_sent`, `drive_move_finished`) permanecem.
 
-Score alternativo (apenas quando `tipo='fgts'` e CNPJ completo ausente):
-- company_match exato/alias: 0.40
-- tipo FGTS confirmado: 0.20
-- competência: 0.15
-- vencimento: 0.15
-- valor: 0.10
-- Limite auto: `>= 0.92`. Similaridade reduz o peso do match para 0.25 (não atinge 0.92).
+### 5. Documentação
 
-## 5. Evidências e auditoria
-
-`critical_fields_json` ganha `razao_social` e `company_match` conforme exemplo do briefing; `cnpj` registrado como `status='partial'` quando aplicável, com `raw` e `method='fgts_employer_document_partial'`. `decision_reason` explica: "FGTS Digital identificado por razão social do empregador, pois CNPJ completo não estava disponível no PDF." Auditar em `guide_audit`.
-
-## 6. Deduplicação
-
-`dedup_hash` para FGTS sem CNPJ completo usa `empresa_id + tipo + competencia + vencimento + valor + identificador_guia` (se houver); fallback sem identificador. Recalcular no `run-guide-scan-now` antes do upsert.
-
-## 7. Revisão manual (UI)
-
-`src/pages/guias/RevisaoManual.tsx` e `GuiaDetalhe.tsx`:
-- Quando guia for FGTS sem CNPJ completo, mostrar banner: "Esta guia FGTS Digital não possui CNPJ completo…".
-- Exibir: razão social extraída, documento parcial, empresas sugeridas com score, método de match, motivo.
-- Ações: selecionar empresa, "Salvar como alias da empresa" (checkbox), aprovar e enviar, aprovar sem enviar, reprocessar.
-- Ao aprovar com nova empresa: append em `empresas.aliases` (se ainda não existir, valor normalizado), gravar `guia.revisao_correcoes` e `guide_audit`.
-
-## 8. Cadastro de empresas
-
-`src/pages/EmpresaDetalhe.tsx`: editor de `aliases` (tags), com dica para FGTS Digital (sem acento, sem LTDA, nome fantasia, etc.). Persistir o array.
-
-## 9. Testes
-
-- `guide-parser-safety.test.ts`: novo caso FGTS Digital com documento parcial `21.205.304` validando `tipo='fgts'`, `subtipo='fgts_digital_gfd'`, `empregador_documento_raw`, `cnpj=null`, `razao_social`, `competencia='05/2026'`, `vencimento='2026-06-19'`, `valor=370.58`, `identificador_guia='0126060842429268-9'`, sem issue de erro.
-- `guide-rules.test.ts`: cenários (a) razão social exata única → `automatic=true`, method `exact_normalized_legal_name`; (b) alias exato → `alias_exact`; (c) múltiplas similares → `revisao_manual`; (d) empresa não cadastrada → `revisao_manual`; (e) CNPJ raiz com múltiplas filiais → `revisao_manual`.
-- Fixture em `test-fixtures/guias/golden-set.json` adicionando o caso GFD.
-
-## 10. Documentação
-
-Atualizar `docs/guias-automation.md`:
-- DAS/DARF: identificação por CNPJ completo.
-- FGTS Digital: fallback por razão social do empregador, regras de auto vs. revisão, uso de aliases, deduplicação por `identificador_guia`.
-
-## Critérios de aceite
-
-- Guias FGTS Digital sem CNPJ completo NÃO vão automaticamente para erro.
-- Parser extrai razão social, competência, vencimento, valor e identificador.
-- Matching por razão social normalizada exata e por alias exato funciona.
-- Múltiplas candidatas ou similaridade nunca disparam envio automático.
-- Evidência registra método de match e motivo da decisão.
-- `dedup_hash` funciona sem CNPJ completo (usa identificador).
-- Revisão manual mostra contexto e permite salvar alias.
-- Build + testes verdes; nenhum envio para empresa errada.
+- Atualizar `docs/guias-automation.md` explicando o novo flag `run_full_pipeline`, os motivos discretos de bloqueio e o comportamento de modo teste com destinatário configurado.
 
 ## Fora de escopo
 
-- Drive/Gmail/WhatsApp (mantidos).
-- Tax Reform, Fator R, Classifica.
-- Mudanças no provedor WhatsApp Cloud API (recém finalizado).
+- Mudanças no parser FGTS (já entregues no turno anterior).
+- WhatsApp Cloud API / templates Meta.
+- Mudanças no schema do banco — usamos colunas já existentes (`dispatch_blocked_reason`, `decision_status`, `decision_reason`).
+- Drive/Gmail/Reforma Tributária/Fator R/Classifica.
+
+## Critérios de aceite
+
+- Clicar em "Processar agora" no dashboard envia guias seguras em produção sem aprovação manual.
+- FGTS Digital com razão social exata + demais campos válidos é enviado automaticamente.
+- Modo teste com destinatário configurado envia para o destinatário de teste e marca `enviada_teste`.
+- Guias bloqueadas mostram o motivo exato no card/detalhe.
+- Match aproximado, ambiguidade, duplicidade, conector inativo e campos faltantes continuam bloqueando.
+- Build/tests passam.
