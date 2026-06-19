@@ -339,46 +339,6 @@ export default function Dashboard() {
               const Icon = channel.icon;
               const share = channelTotal ? Math.round((channel.value / channelTotal) * 100) : 0;
               return (
-                  <div className="guide-flow-marker" aria-hidden>
-                    <span />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold text-[hsl(var(--text-primary))]">{guide.fileName}</p>
-                        <p className="mt-1 text-xs font-medium text-[hsl(var(--text-secondary))]">
-                          {company?.nomeFantasia || 'Identificando empresa'}
-                        </p>
-                      </div>
-                      <GuidePill label={status.label} className={status.className} />
-                    </div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-medium text-[hsl(var(--text-tertiary))]">
-                      <span>{formatDateTime(guide.receivedAt)}</span>
-                      {guide.tipoGuia && <span>{guide.tipoGuia}</span>}
-                      {guide.competencia && <span>Competência {guide.competencia}</span>}
-                    </div>
-                  </div>
-                  <ChevronIcon />
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="guide-section p-5">
-          <div className="guide-section-header">
-            <div>
-              <p className="guide-section-kicker">Distribuição</p>
-              <h2>Canais utilizados</h2>
-            </div>
-            <span className="guide-compact-total">{channelTotal}</span>
-          </div>
-
-          <div className="space-y-3">
-            {channelRows.map((channel) => {
-              const Icon = channel.icon;
-              const share = channelTotal ? Math.round((channel.value / channelTotal) * 100) : 0;
-              return (
                 <div key={channel.id} className={cn('guide-channel-row', channel.className)}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-3">
