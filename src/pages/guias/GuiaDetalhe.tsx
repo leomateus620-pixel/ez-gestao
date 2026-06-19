@@ -1,13 +1,25 @@
 import { useMemo, useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Building2, Clock, FileSearch, Mail, MessageCircle, ShieldAlert } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Building2, Clock, FileSearch, Mail, MessageCircle, RefreshCw, ShieldAlert, Trash2 } from 'lucide-react';
 import { useGuides } from '@/features/guias/GuideProvider';
 import { useDataStore } from '@/data/DataProvider';
+import { useDispatchGuide, useDeleteGuide } from '@/features/guias/useGuideOps';
 import { GlassCard } from '@/components/GlassCard';
 import { EmptyState } from '@/components/EmptyState';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { formatCNPJ, formatDate, formatDateTime } from '@/lib/formatters';
 
 type FieldEvidenceView = {
@@ -19,6 +31,7 @@ type FieldEvidenceView = {
 
 export default function GuiaDetalhe() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { guides, dispatches, exceptions, events, enableEvents } = useGuides();
   useEffect(() => { enableEvents(); }, [enableEvents]);
   const { state } = useDataStore();
@@ -27,6 +40,8 @@ export default function GuiaDetalhe() {
   const dispatch = dispatches.find((item) => item.guiaId === id);
   const guideExceptions = exceptions.filter((item) => item.guiaId === id);
   const timeline = useMemo(() => events.filter((item) => item.guiaId === id), [events, id]);
+  const dispatchGuide = useDispatchGuide();
+  const deleteGuide = useDeleteGuide();
 
   if (!guide) {
     return <EmptyState icon={FileSearch} title="Guia não encontrada" actionLabel="Voltar a fila" onAction={() => history.back()} />;
@@ -38,7 +53,47 @@ export default function GuiaDetalhe() {
         <Link to="/guias/fila"><ArrowLeft className="h-4 w-4" /> Voltar</Link>
       </Button>
       <PageHeader title={guide.fileName} subtitle={`Recebida em ${formatDateTime(guide.receivedAt)}`}>
-        <Badge variant="outline" className="capitalize">{guide.status}</Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="capitalize">{guide.status}</Badge>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            disabled={dispatchGuide.isPending || guide.status === 'enviada'}
+            onClick={() => dispatchGuide.mutate({ guide_id: guide.id, force_dispatch: true, manual_approval: true })}
+          >
+            <RefreshCw className={dispatchGuide.isPending ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
+            Processar agora
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button size="sm" variant="outline" className="gap-1.5 text-destructive hover:text-destructive" disabled={deleteGuide.isPending}>
+                <Trash2 className="h-4 w-4" />
+                Excluir
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Excluir esta guia?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  A guia <strong>{guide.fileName}</strong> será removida da fila junto com seus envios, eventos e exceções. Esta ação não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={async () => {
+                    await deleteGuide.mutateAsync({ guia_id: guide.id, motivo: 'Excluida pelo operador no detalhe da guia' });
+                    navigate('/guias/fila');
+                  }}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Excluir
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </PageHeader>
 
       <div className="grid gap-4 lg:grid-cols-3">
