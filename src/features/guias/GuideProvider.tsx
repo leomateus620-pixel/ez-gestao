@@ -154,8 +154,19 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
   };
   const scan = useMutation({
     mutationFn: async () => {
+      // Collect stuck guides that should be re-processed when the operator
+      // clicks "Processar agora". This allows the full pipeline to retry
+      // guias travadas (não identificada, duplicada, erro, revisão manual)
+      // and dispatch them when conditions are met.
+      const stuck = (guidesQuery.data || [])
+        .filter((guide) => ['nao_identificada', 'duplicada', 'erro', 'revisao_manual', 'revisao', 'quarentena', 'pronta_envio'].includes(guide.status))
+        .map((guide) => guide.id);
       const { data, error } = await supabase.functions.invoke('run-guide-scan-now', {
-        body: { run_full_pipeline: true },
+        body: {
+          run_full_pipeline: true,
+          force_dispatch: true,
+          ...(stuck.length > 0 ? { guide_ids: stuck } : {}),
+        },
       });
       if (error) throw error;
       return data;
