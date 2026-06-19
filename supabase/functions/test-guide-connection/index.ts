@@ -10,6 +10,7 @@ const cors = {
 };
 
 const GMAIL_GW = "https://connector-gateway.lovable.dev/google_mail/gmail/v1";
+const GRAPH_BASE = "https://graph.facebook.com";
 
 function b64url(s: string) {
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -68,14 +69,80 @@ serve(async (req) => {
     return new Response(JSON.stringify({ ok: true, canal: 'email', from, message_id: (await send.json()).id }), { headers: cors });
   }
 
-  // WhatsApp via função existente
-  const wpRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-whatsapp-message`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
-    body: JSON.stringify({ to: destinatario, body: '[EZ] Teste do conector WhatsApp — módulo Guias.' }),
-  });
-  if (!wpRes.ok) {
-    return new Response(JSON.stringify({ ok: false, status: wpRes.status, error: (await wpRes.text()).slice(0, 400) }), { status: 502, headers: cors });
+  // WhatsApp via Meta Cloud API
+  const accessToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
+  const phoneId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
+  const wabaId = Deno.env.get("WHATSAPP_BUSINESS_ACCOUNT_ID");
+  const apiVersion = Deno.env.get("WHATSAPP_API_VERSION") || "v25.0";
+  const verifyToken = Deno.env.get("WHATSAPP_VERIFY_TOKEN");
+  const testTo = Deno.env.get("WHATSAPP_TEST_TO");
+
+  const diagnostics: Record<string, unknown> = {
+    provider: "meta_cloud_api",
+    api_version: apiVersion,
+    access_token: accessToken ? "configured" : "missing",
+    phone_number_id: phoneId ? "configured" : "missing",
+    waba_id: wabaId ? "configured" : "missing",
+    verify_token: verifyToken ? "configured" : "missing",
+    test_to: testTo ? "configured" : "missing",
+    app_secret: Deno.env.get("WHATSAPP_APP_SECRET") ? "configured" : "missing",
+  };
+
+  if (!accessToken || !phoneId) {
+    return new Response(JSON.stringify({ ok: false, error: "whatsapp_not_configured", diagnostics }), { status: 409, headers: cors });
   }
-  return new Response(JSON.stringify({ ok: true, canal: 'whatsapp' }), { headers: cors });
+
+  // 1) Valida token + phone_number_id
+  const phoneResp = await fetch(`${GRAPH_BASE}/${apiVersion}/${phoneId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const phoneBody = await phoneResp.text();
+  diagnostics.phone_check = phoneResp.ok ? "ok" : `error_${phoneResp.status}`;
+  if (!phoneResp.ok) {
+    return new Response(JSON.stringify({ ok: false, error: "invalid_phone_or_token", detail: phoneBody.slice(0, 300), diagnostics }), { status: 502, headers: cors });
+  }
+
+  // 2) Lista templates da WABA (opcional)
+  if (wabaId) {
+    const tplResp = await fetch(`${GRAPH_BASE}/${apiVersion}/${wabaId}/message_templates?limit=50`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (tplResp.ok) {
+      const tplJson = await tplResp.json();
+      diagnostics.templates_count = Array.isArray(tplJson?.data) ? tplJson.data.length : 0;
+      diagnostics.templates_active = Array.isArray(tplJson?.data)
+        ? tplJson.data.filter((t: any) => t?.status === "APPROVED").map((t: any) => t.name)
+        : [];
+    } else {
+      diagnostics.templates_count = `error_${tplResp.status}`;
+    }
+  }
+
+  // 3) Envia mensagem de teste para WHATSAPP_TEST_TO (sempre, ignora destinatario do form)
+  const sendTo = testTo || destinatario;
+  if (!sendTo) {
+    return new Response(JSON.stringify({ ok: false, error: "no_test_recipient", diagnostics }), { status: 400, headers: cors });
+  }
+  const sendResp = await fetch(`${GRAPH_BASE}/${apiVersion}/${phoneId}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: sendTo,
+      type: "template",
+      template: { name: "hello_world", language: { code: "en_US" } },
+    }),
+  });
+  const sendBody = await sendResp.text();
+  let sendJson: any = null;
+  try { sendJson = JSON.parse(sendBody); } catch { /* */ }
+  diagnostics.last_test_status = sendResp.ok ? "sent" : `error_${sendResp.status}`;
+  diagnostics.last_test_message_id = sendJson?.messages?.[0]?.id ?? null;
+  diagnostics.last_test_error = sendResp.ok ? null : (sendJson?.error?.message || sendBody.slice(0, 300));
+
+  return new Response(JSON.stringify({
+    ok: sendResp.ok,
+    canal: "whatsapp",
+    whatsapp: diagnostics,
+  }), { status: sendResp.ok ? 200 : 502, headers: cors });
 });

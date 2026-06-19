@@ -37,6 +37,7 @@ Google Drive e Gmail continuam usando exclusivamente os gateways Lovable:
 
 - Drive: `https://connector-gateway.lovable.dev/google_drive/drive/v3`
 - Gmail: `https://connector-gateway.lovable.dev/google_mail/gmail/v1`
+- WhatsApp: API oficial Meta Cloud (`https://graph.facebook.com/{API_VERSION}/{PHONE_NUMBER_ID}/messages`)
 
 1. `scan-guide-folder` lista arquivos da pasta Google Drive `a enviar`.
 2. PDFs novos são registrados em `guias`; formatos diferentes geram exceção.
@@ -47,9 +48,13 @@ Google Drive e Gmail continuam usando exclusivamente os gateways Lovable:
 4. Somente uma correspondência segura com empresa ativa avança para
    `dispatch-guide`.
 5. O canal vem exclusivamente de `empresas.canal_preferido`.
-6. Gmail anexa o PDF; Twilio envia template aprovado com URL assinada temporária.
+6. Gmail anexa o PDF; WhatsApp Cloud API envia template aprovado (Meta), com header
+   document quando aplicável usando link assinado temporário gerado no bucket
+   privado `guia-pdf-links`.
 7. Depois da aceitação do provedor, o Drive move a guia para `enviados`.
-8. `twilio-status-webhook` registra entrega ou falha posterior sem reenvio automático.
+8. `whatsapp-webhook` recebe os eventos `sent | delivered | read | failed` e
+   atualiza `guia_envios.provider_status`, `delivered_at` e `failed_at`. Não
+   reenvia automaticamente em falhas.
 
 ## Deploy Supabase
 
@@ -76,29 +81,35 @@ GOOGLE_TOKEN_ENCRYPTION_KEY
 # (OCR externo desativado — leitura nativa de PDF)
 GOOGLE_CLOUD_ACCESS_TOKEN
 GMAIL_SENDER
-TWILIO_ACCOUNT_SID
-TWILIO_AUTH_TOKEN
-TWILIO_WHATSAPP_SENDER
-TWILIO_GUIDE_CONTENT_SID
-TWILIO_STATUS_CALLBACK_URL
+WHATSAPP_ACCESS_TOKEN
+WHATSAPP_PHONE_NUMBER_ID
+WHATSAPP_BUSINESS_ACCOUNT_ID
+WHATSAPP_APP_ID
+WHATSAPP_APP_SECRET
+WHATSAPP_VERIFY_TOKEN
+WHATSAPP_API_VERSION
+WHATSAPP_TEST_TO
 ```
 
 `GOOGLE_ACCESS_TOKEN` e aceito somente para testes operacionais temporários.
 Em produção, usar `connect-google-oauth`, que persiste somente o refresh token
 criptografado em uma tabela sem política de leitura para clientes.
 
-## Google e Twilio
+## Google e WhatsApp Cloud API
 
-- Autorizar Google Drive para ler e mover arquivos e Gmail somente com
-  `gmail.send`; documentar a verificação OAuth antes do uso em produção.
+- Autorizar Google Drive para ler/mover arquivos e Gmail somente com
+  `gmail.send`. Documentar a verificação OAuth antes do uso em produção.
 - Configurar as pastas em `integracoes_guias` e mudar Drive/Gmail para `ativo`
   apenas após teste de conexão.
-- Configurar no bucket GCS privado uma regra de lifecycle para remover entradas
-  `pending/` e `results/` automaticamente, conforme a retenção aprovada.
-- Criar template utilitário Twilio aprovado para documento e descrição prévia;
-  registrar opt-in e telefone E.164 no cadastro da empresa.
-- Apontar callback Twilio para `twilio-status-webhook`; a função rejeita
-  requisições sem assinatura válida.
+- Criar templates Meta aprovados (categoria `utility`) com placeholders
+  `{{1}}..{{5}}` na ordem **tipo_guia, empresa, competencia, vencimento, valor**.
+  Marcar `meta_template_has_document_header = true` para templates que recebem
+  o PDF no header.
+- Registrar opt-in WhatsApp (`empresas.whatsapp_opt_in_at`) e telefone em E.164.
+- Configurar webhook na Meta apontando para
+  `/functions/v1/whatsapp-webhook` com o mesmo `WHATSAPP_VERIFY_TOKEN`. A
+  função valida `X-Hub-Signature-256` usando `WHATSAPP_APP_SECRET`.
+- Em modo teste, todo envio WhatsApp é redirecionado para `WHATSAPP_TEST_TO`.
 
 ## Garantias
 
@@ -109,4 +120,6 @@ criptografado em uma tabela sem política de leitura para clientes.
   `insufficient_pdf_signals`.
 - `guia_envios.idempotency_key` evita envio duplicado.
 - Segredos não são expostos ao frontend; logs guardam somente payload sanitizado.
+- `WHATSAPP_ACCESS_TOKEN` e `WHATSAPP_APP_SECRET` ficam apenas em `Deno.env`;
+  jamais no banco, frontend ou logs.
 - O legado de consultas fiscais foi removido; este documento cobre apenas o fluxo de guias.

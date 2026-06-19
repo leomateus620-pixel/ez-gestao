@@ -12,12 +12,12 @@ import { formatDateTime } from '@/lib/formatters';
 import { supabase } from '@/integrations/supabase/client';
 import googleDriveLogo from '@/assets/connectors/google-drive.svg';
 import gmailLogo from '@/assets/connectors/gmail.svg';
-import twilioLogo from '@/assets/connectors/twilio.svg';
 import { toast } from 'sonner';
 
 const icons: Record<IntegrationProvider, typeof FileText> = {
   google_drive: FolderInput,
   gmail: Mail,
+  whatsapp: MessageCircle,
   twilio_whatsapp: MessageCircle,
   pdf_native_reader: FileText,
 };
@@ -25,20 +25,24 @@ const icons: Record<IntegrationProvider, typeof FileText> = {
 const logos: Record<IntegrationProvider, string | null> = {
   google_drive: googleDriveLogo,
   gmail: gmailLogo,
-  twilio_whatsapp: twilioLogo,
+  whatsapp: null,
+  twilio_whatsapp: null,
   pdf_native_reader: null,
 };
 
 const providerLabels: Record<IntegrationProvider, string> = {
   google_drive: 'Google Drive',
   gmail: 'Gmail',
-  twilio_whatsapp: 'Twilio WhatsApp',
+  whatsapp: 'WhatsApp Cloud API (Meta)',
+  twilio_whatsapp: 'Twilio WhatsApp (legado)',
   pdf_native_reader: 'Leitura PDF nativa',
 };
 
 const providerDescriptions: Partial<Record<IntegrationProvider, string>> = {
   pdf_native_reader:
     'Extração direta de texto em PDFs digitais, sem OCR externo. PDFs escaneados são enviados para Exceções.',
+  whatsapp:
+    'Envio oficial via Meta Cloud API (Graph). Templates aprovados, header document quando aplicável, webhook de status.',
 };
 
 type Folders = {
@@ -63,7 +67,7 @@ function ConnectorCard({ integration, folders, onTest, onBootstrap, bootstrappin
   const isConnected = integration.status === 'ativo' || integration.status === 'configurado';
   const [testDest, setTestDest] = useState('');
   const testCanal: 'email' | 'whatsapp' | null = integration.provider === 'gmail' ? 'email'
-    : integration.provider === 'twilio_whatsapp' ? 'whatsapp' : null;
+    : integration.provider === 'whatsapp' ? 'whatsapp' : null;
   return (
     <GlassCard variant="elevated" className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
@@ -111,6 +115,17 @@ function ConnectorCard({ integration, folders, onTest, onBootstrap, bootstrappin
           )}
         </div>
       )}
+      {integration.provider === 'whatsapp' && (
+        <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-[11px] text-foreground/76 space-y-1">
+          <p>Provedor: <span className="font-mono">meta_cloud_api</span></p>
+          <p>API: <span className="font-mono">{(integration as unknown as { apiVersion?: string }).apiVersion || '—'}</span></p>
+          <p>Webhook: <span className="font-mono">{(integration as unknown as { webhookConfigured?: boolean }).webhookConfigured ? 'configurado' : 'pendente'}</span></p>
+          <p>WHATSAPP_TEST_TO: <span className="font-mono">{(integration as unknown as { testToConfigured?: boolean }).testToConfigured ? 'configurado' : 'ausente'}</span></p>
+          {!(integration as unknown as { testToConfigured?: boolean }).testToConfigured && (
+            <p className="text-warning">Configure WHATSAPP_TEST_TO antes de testar.</p>
+          )}
+        </div>
+      )}
       {testCanal && onTest && (
         <div className="flex gap-2">
           <Input
@@ -151,8 +166,8 @@ export default function IntegracoesGuias() {
   const buildIntegration = (provider: IntegrationProvider): IntegracaoGuia => {
     const existing = integrations.find((i) => i.provider === provider);
     // Native PDF reader is internal — always active and never depends on a secret.
-    const connected = provider === 'pdf_native_reader' ? true : liveStatus[provider];
-    return {
+    const connected = provider === 'pdf_native_reader' ? true : Boolean((liveStatus as Record<string, unknown>)[provider]);
+    const base: IntegracaoGuia = {
       provider,
       displayName: providerLabels[provider],
       status: connected ? 'ativo' : existing?.status ?? 'desconectado',
@@ -163,9 +178,18 @@ export default function IntegracoesGuias() {
       lastCheckAt: existing?.lastCheckAt ?? null,
       lastError: existing?.lastError ?? null,
     };
+    if (provider === 'whatsapp') {
+      const s = liveStatus as Record<string, unknown>;
+      Object.assign(base, {
+        apiVersion: s.whatsapp_api_version ?? null,
+        webhookConfigured: Boolean(s.whatsapp_webhook_configured),
+        testToConfigured: Boolean(s.whatsapp_test_to_configured),
+      });
+    }
+    return base;
   };
 
-  const providers: IntegrationProvider[] = ['google_drive', 'gmail', 'twilio_whatsapp', 'pdf_native_reader'];
+  const providers: IntegrationProvider[] = ['google_drive', 'gmail', 'whatsapp', 'pdf_native_reader'];
 
   return (
     <div className="space-y-6">
@@ -180,8 +204,8 @@ export default function IntegracoesGuias() {
             <div>
               <p className="text-sm font-semibold">Segredos protegidos no servidor</p>
               <p className="mt-1 max-w-2xl text-xs leading-relaxed text-foreground/72">
-                OAuth refresh token, credenciais Vision e token Twilio nunca são enviados ao frontend.
-                URLs de documento para WhatsApp expiram e o webhook exige assinatura Twilio válida.
+                OAuth do Drive/Gmail, access token da Meta WhatsApp e app secret ficam apenas no servidor.
+                Links de PDF para WhatsApp são assinados temporariamente e o webhook valida assinatura HMAC.
               </p>
             </div>
           </div>
@@ -200,7 +224,7 @@ export default function IntegracoesGuias() {
             folders={provider === 'google_drive' ? folders : null}
             onBootstrap={provider === 'google_drive' ? () => bootstrap.mutate() : undefined}
             bootstrapping={bootstrap.isPending}
-            onTest={provider === 'gmail' || provider === 'twilio_whatsapp'
+            onTest={provider === 'gmail' || provider === 'whatsapp'
               ? (canal, dest) => testConn.mutate({ canal, destinatario: dest })
               : undefined}
           />

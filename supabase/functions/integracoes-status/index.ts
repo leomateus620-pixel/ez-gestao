@@ -13,7 +13,15 @@ serve((req) => {
   const status = {
     google_drive: Boolean(Deno.env.get("GOOGLE_DRIVE_API_KEY")),
     gmail: Boolean(Deno.env.get("GOOGLE_MAIL_API_KEY")),
-    twilio_whatsapp: Boolean(Deno.env.get("TWILIO_API_KEY")),
+    whatsapp: Boolean(
+      Deno.env.get("WHATSAPP_ACCESS_TOKEN") &&
+      Deno.env.get("WHATSAPP_PHONE_NUMBER_ID") &&
+      Deno.env.get("WHATSAPP_API_VERSION"),
+    ),
+    whatsapp_provider: 'meta_cloud_api',
+    whatsapp_test_to_configured: Boolean(Deno.env.get("WHATSAPP_TEST_TO")),
+    whatsapp_webhook_configured: Boolean(Deno.env.get("WHATSAPP_VERIFY_TOKEN")),
+    whatsapp_api_version: Deno.env.get("WHATSAPP_API_VERSION") || null,
     // Leitura nativa de PDF: módulo interno, sempre disponível.
     pdf_native_reader: true,
   };

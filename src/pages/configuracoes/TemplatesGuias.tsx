@@ -30,26 +30,46 @@ export default function TemplatesGuias() {
   const [tipo, setTipo] = useState<string>('das');
   const [canal, setCanal] = useState<'email' | 'whatsapp'>('email');
   const current = useMemo(() => (data as any[]).find((t) => t.tipo_guia === tipo && t.canal === canal), [data, tipo, canal]);
-  const [draft, setDraft] = useState<any>({ assunto: '', corpo: '', twilio_content_sid: '', ativo: true });
+  const [draft, setDraft] = useState<any>({
+    assunto: '', corpo: '', ativo: true,
+    meta_template_name: '', meta_template_language: 'pt_BR',
+    meta_template_has_document_header: true,
+    meta_template_category: 'utility', meta_template_status: 'active',
+  });
 
   useEffect(() => {
     setDraft({
       assunto: current?.assunto ?? '',
       corpo: current?.corpo ?? '',
-      twilio_content_sid: current?.twilio_content_sid ?? '',
       ativo: current?.ativo ?? true,
+      meta_template_name: current?.meta_template_name ?? 'envio_guia_fiscal',
+      meta_template_language: current?.meta_template_language ?? 'pt_BR',
+      meta_template_has_document_header: current?.meta_template_has_document_header ?? true,
+      meta_template_category: current?.meta_template_category ?? 'utility',
+      meta_template_status: current?.meta_template_status ?? 'active',
     });
   }, [current?.id, tipo, canal]);
 
-  const save = () => upsert.mutate({
-    id: current?.id,
-    tipo_guia: tipo,
-    canal,
-    assunto: draft.assunto,
-    corpo: draft.corpo,
-    twilio_content_sid: draft.twilio_content_sid || null,
-    ativo: draft.ativo,
-  });
+  const save = () => {
+    if (canal === 'whatsapp' && !draft.meta_template_name?.trim()) {
+      // eslint-disable-next-line no-alert
+      alert('Nome do template Meta é obrigatório para WhatsApp.');
+      return;
+    }
+    upsert.mutate({
+      id: current?.id,
+      tipo_guia: tipo,
+      canal,
+      assunto: draft.assunto,
+      corpo: draft.corpo,
+      ativo: draft.ativo,
+      meta_template_name: canal === 'whatsapp' ? draft.meta_template_name : null,
+      meta_template_language: canal === 'whatsapp' ? draft.meta_template_language : null,
+      meta_template_has_document_header: canal === 'whatsapp' ? !!draft.meta_template_has_document_header : false,
+      meta_template_category: canal === 'whatsapp' ? draft.meta_template_category : null,
+      meta_template_status: canal === 'whatsapp' ? draft.meta_template_status : null,
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -92,9 +112,49 @@ export default function TemplatesGuias() {
             <Textarea value={draft.corpo} onChange={(e) => setDraft({ ...draft, corpo: e.target.value })} className="h-48 font-mono text-xs" />
           </div>
           {canal === 'whatsapp' && (
-            <div>
-              <Label className="text-xs">Twilio Content SID (template aprovado)</Label>
-              <Input value={draft.twilio_content_sid} placeholder="HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" onChange={(e) => setDraft({ ...draft, twilio_content_sid: e.target.value })} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <Label className="text-xs">Nome do template Meta</Label>
+                <Input
+                  value={draft.meta_template_name}
+                  placeholder="envio_guia_fiscal"
+                  onChange={(e) => setDraft({ ...draft, meta_template_name: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Idioma</Label>
+                <Input
+                  value={draft.meta_template_language}
+                  placeholder="pt_BR"
+                  onChange={(e) => setDraft({ ...draft, meta_template_language: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Categoria</Label>
+                <Input
+                  value={draft.meta_template_category}
+                  placeholder="utility"
+                  onChange={(e) => setDraft({ ...draft, meta_template_category: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Status na Meta</Label>
+                <Input
+                  value={draft.meta_template_status}
+                  placeholder="active | pending | rejected"
+                  onChange={(e) => setDraft({ ...draft, meta_template_status: e.target.value })}
+                />
+              </div>
+              <div className="flex items-end gap-2">
+                <Switch
+                  checked={!!draft.meta_template_has_document_header}
+                  onCheckedChange={(v) => setDraft({ ...draft, meta_template_has_document_header: v })}
+                />
+                <span className="text-xs">Header document (PDF)</span>
+              </div>
+              <p className="sm:col-span-2 text-[11px] text-foreground/60">
+                Variáveis enviadas na ordem: tipo_guia, empresa, competencia, vencimento, valor.
+              </p>
             </div>
           )}
           <div className="flex items-center justify-between pt-2">
