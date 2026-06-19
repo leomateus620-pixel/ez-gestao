@@ -38,7 +38,8 @@ describe('FGTS Digital parser', () => {
     expect(analysis.classification.tipo).toBe('fgts');
     expect(analysis.metadata.subtipo).toBe('fgts_digital_gfd');
     expect(analysis.metadata.empregadorDocumentoRaw).toBe('21.205.304');
-    expect(analysis.metadata.empregadorDocumentoTipo).toBe('documento_parcial');
+    // 8 digits is the CNPJ "raiz"; not enough to dispatch on its own.
+    expect(analysis.metadata.empregadorDocumentoTipo).toBe('cnpj_raiz');
     expect(analysis.metadata.empregadorNomeRazaoSocial).toBe('TARIFA ZERO SOLUCOES CORPORATIVAS LTDA');
     expect(analysis.metadata.primaryCnpj).toBeNull();
     expect(analysis.metadata.competencia).toBe('05/2026');
@@ -51,7 +52,8 @@ describe('FGTS Digital parser', () => {
   });
 
   it('classifyEmpregadorDocument tags partial / raiz / completo correctly', () => {
-    expect(classifyEmpregadorDocument('21.205.304').tipo).toBe('documento_parcial');
+    expect(classifyEmpregadorDocument('21.205.304').tipo).toBe('cnpj_raiz');
+    expect(classifyEmpregadorDocument('21.205').tipo).toBe('documento_parcial');
     expect(classifyEmpregadorDocument('21205304').tipo).toBe('cnpj_raiz');
     expect(classifyEmpregadorDocument('11.444.777/0001-61').tipo).toBe('cnpj_completo');
   });
