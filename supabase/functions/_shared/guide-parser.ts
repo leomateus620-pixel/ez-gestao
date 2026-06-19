@@ -1060,16 +1060,14 @@ export function validateTemplateRender(args: {
   if (args.template?.canal && args.template.canal !== args.canal) errors.push('template_channel_mismatch');
   if (!args.renderedBody?.trim()) errors.push('template_body_empty');
   if (args.canal === 'email' && !args.renderedSubject?.trim()) errors.push('template_subject_empty');
-  if (args.canal === 'whatsapp' && !args.template?.twilio_content_sid) errors.push('twilio_content_sid_missing');
-  for (const placeholder of REQUIRED_TEMPLATE_PLACEHOLDERS) {
-    const rawSubject = args.template?.assunto || '';
-    const rawBody = args.template?.corpo || '';
-    if (!rawSubject.includes(`[${placeholder}]`) && !rawBody.includes(`[${placeholder}]`)) {
-      errors.push(`placeholder_${placeholder.toLowerCase()}_missing`);
-    }
+  // WhatsApp via Meta Cloud API usa template approvado na Meta (meta_template_name)
+  // ou um fallback padrão pelo backend. Não exigimos mais Twilio nem placeholders
+  // legados [EMPRESA]/[CNPJ]/[TIPO_GUIA]/etc, pois as variáveis viajam fora do corpo
+  // (body_variable_order). Para e-mail mantemos a checagem do corpo renderizado.
+  if (args.canal === 'email') {
+    const unresolved = [...unresolvedPlaceholders(args.renderedSubject), ...unresolvedPlaceholders(args.renderedBody)];
+    if (unresolved.length > 0) errors.push(`unresolved_placeholders:${unresolved.join(',')}`);
   }
-  const unresolved = [...unresolvedPlaceholders(args.renderedSubject), ...unresolvedPlaceholders(args.renderedBody)];
-  if (unresolved.length > 0) errors.push(`unresolved_placeholders:${unresolved.join(',')}`);
   return errors;
 }
 
