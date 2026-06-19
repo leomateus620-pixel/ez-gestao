@@ -801,9 +801,13 @@ export function extractMetadata(text: string): GuideMetadata {
   const primaryCnpj = validCnpjs.length === 1 ? validCnpjs[0].value : null;
   const classification = classifyGuideType(normalized);
   const extractor = pickExtractor(normalized, classification);
-  const typeField: FieldEvidence<TipoGuia | null> = classification.confidence >= 0.92
-    ? validField(classification.tipo, classification.confidence, 'guide_type_classifier', 'specialized_keyword_classifier', 'Tipo de guia classificado por extrator especializado.', classification.matchedKeywords.join(', '))
-    : dubiousField(classification.tipo, classification.confidence, 'guide_type_classifier', 'specialized_keyword_classifier', 'Tipo de guia sem confianca suficiente para envio automatico.', classification.matchedKeywords.join(', '));
+  // Score nao bloqueia envio: o tipo de guia e tratado como valido sempre que houver
+  // qualquer sinal de classificacao. So fica dubious quando nenhum keyword bate E o
+  // tipo cai em "outros" (sem nenhuma evidencia).
+  const hasAnyClassificationSignal = classification.matchedKeywords.length > 0 || classification.tipo !== 'outros';
+  const typeField: FieldEvidence<TipoGuia | null> = hasAnyClassificationSignal
+    ? validField(classification.tipo, classification.confidence, 'guide_type_classifier', 'specialized_keyword_classifier', `Tipo de guia classificado (score ${classification.confidence.toFixed(2)}).`, classification.matchedKeywords.join(', '))
+    : dubiousField(classification.tipo, classification.confidence, 'guide_type_classifier', 'specialized_keyword_classifier', 'Tipo de guia sem nenhum sinal de classificacao.', classification.matchedKeywords.join(', '));
 
   const competencia = extractor.fields.competencia ?? extractCompetencia(normalized);
   const vencimento = extractor.fields.vencimento ?? extractVencimento(normalized);
@@ -904,9 +908,7 @@ export function collectValidationIssues(metadata: GuideMetadata, classification:
   if (metadata.cnpjCandidates.length > 1) {
     issues.push({ code: 'multiple_cnpj', severity: 'warning', message: 'Mais de um CNPJ valido encontrado no PDF.', field: 'cnpj' });
   }
-  if (classification.confidence < MIN_CONFIDENCE_AUTO_DISPATCH) {
-    issues.push({ code: 'guide_type_low_confidence', severity: 'warning', message: 'Tipo de guia abaixo do limite de automacao.', field: 'tipo_guia' });
-  }
+  // Score de classificacao nao gera mais issue bloqueante.
   for (const [field, evidence] of Object.entries(metadata.fields)) {
     // For FGTS sem CNPJ + razao_social presente, nao tratar o campo cnpj como bloqueio.
     if (field === 'cnpj' && isFgtsWithEmployerName) continue;

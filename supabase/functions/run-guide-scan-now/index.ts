@@ -475,18 +475,8 @@ function routeGuide(args: {
   if (relevantIssue) {
     return { status: "quarentena", folder: "review", exceptionType: relevantIssue.code, reason: relevantIssue.message, action: "Quarentena tecnica: validar inconsistencia antes de liberar.", severity: relevantIssue.severity === "error" ? "error" : "warning", reviewLevel: "full" };
   }
-  if (classification.confidence < MIN_CONFIDENCE_AUTO_DISPATCH || confidence < MIN_CONFIDENCE_AUTO_DISPATCH) {
-    const level = guideReviewLevel(Math.min(confidence, classification.confidence));
-    return {
-      status: "revisao_manual",
-      folder: "review",
-      exceptionType: level === "quick" ? "low_confidence_quick_review" : "low_confidence_full_review",
-      reason: `Confianca ${Math.round(confidence * 100)}% abaixo do limite automatico de ${Math.round(MIN_CONFIDENCE_AUTO_DISPATCH * 100)}%.`,
-      action: level === "quick" ? "Revisao rapida dos campos extraidos." : "Revisao manual completa.",
-      severity: "warning",
-      reviewLevel: level === "quick" ? "quick" : "full",
-    };
-  }
+  // Score de confianca nao bloqueia mais: identificacao da empresa (CNPJ ou razao social)
+  // ja foi validada acima; o envio segue pelo canal preferido da empresa.
   if (!matched.comunicacao_ativa || channelsFor(matched.canal_preferido).length === 0) {
     return { status: "revisao_manual", folder: "review", exceptionType: "invalid_channel", reason: "Empresa sem canal de envio ativo.", action: "Configurar canal e comunicacao ativa.", severity: "warning", reviewLevel: "full" };
   }
@@ -633,7 +623,7 @@ async function dispatchGuide(
           body: JSON.stringify({
             to: normalized,
             guide_id: guide.id,
-            modo,
+            modo: mode,
             template_name: tpl.meta_template_name || 'envio_guia_fiscal',
             language: tpl.meta_template_language || 'pt_BR',
             has_document_header: Boolean(tpl.meta_template_has_document_header && linkGuia),
@@ -660,7 +650,7 @@ async function dispatchGuide(
           template_sid: tpl.meta_template_name ?? null,
           provider: 'meta_whatsapp',
           provider_status: 'sent',
-          provider_payload: { template: tpl.meta_template_name, modo, has_document_header: Boolean(tpl.meta_template_has_document_header && linkGuia), document_present: Boolean(linkGuia) },
+          provider_payload: { template: tpl.meta_template_name, modo: mode, has_document_header: Boolean(tpl.meta_template_has_document_header && linkGuia), document_present: Boolean(linkGuia) },
           sent_at: new Date().toISOString(),
           provider_message_id: payload?.message_id ?? null,
           idempotency_key: idemKey,
