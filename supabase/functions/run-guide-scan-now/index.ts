@@ -1131,7 +1131,7 @@ serve(async (req) => {
   try {
     const body = await req.json();
     if (Array.isArray(body?.guide_ids)) reprocessIds = body.guide_ids.filter((value: unknown) => typeof value === "string");
-    forceDispatch = body?.force_dispatch === true;
+    forceDispatch = body?.force_dispatch === true || body?.run_full_pipeline === true;
     manualApproval = body?.manual_approval === true;
   } catch {
     // Empty body is valid.
