@@ -650,7 +650,7 @@ async function dispatchGuide(
           template_sid: tpl.meta_template_name ?? null,
           provider: 'meta_whatsapp',
           provider_status: 'sent',
-          provider_payload: { template: tpl.meta_template_name, modo, has_document_header: Boolean(tpl.meta_template_has_document_header && linkGuia), document_present: Boolean(linkGuia) },
+          provider_payload: { template: tpl.meta_template_name, modo: mode, has_document_header: Boolean(tpl.meta_template_has_document_header && linkGuia), document_present: Boolean(linkGuia) },
           sent_at: new Date().toISOString(),
           provider_message_id: payload?.message_id ?? null,
           idempotency_key: idemKey,
