@@ -146,3 +146,21 @@ export function pdfPreviewUrl(guideId: string): string {
   const projectId = (import.meta.env.VITE_SUPABASE_PROJECT_ID as string) || '';
   return `https://${projectId}.supabase.co/functions/v1/get-guide-pdf?guide_id=${encodeURIComponent(guideId)}`;
 }
+
+export function useDeleteGuide() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { guia_id: string; motivo?: string }) => {
+      const { data, error } = await supabase.functions.invoke('delete-guia', { body: params });
+      if (error) throw error;
+      if (data && (data as any).error) throw new Error((data as any).error);
+      return data;
+    },
+    onSuccess: () => {
+      ['guias', 'guia_envios', 'guia_excecoes', 'guia_eventos', 'guide_batch_runs'].forEach((k) =>
+        client.invalidateQueries({ queryKey: [k] }));
+      toast.success('Guia excluída');
+    },
+    onError: (e: any) => toast.error('Falha ao excluir guia', { description: e?.message }),
+  });
+}
