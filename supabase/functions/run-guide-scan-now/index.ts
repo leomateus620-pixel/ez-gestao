@@ -475,18 +475,8 @@ function routeGuide(args: {
   if (relevantIssue) {
     return { status: "quarentena", folder: "review", exceptionType: relevantIssue.code, reason: relevantIssue.message, action: "Quarentena tecnica: validar inconsistencia antes de liberar.", severity: relevantIssue.severity === "error" ? "error" : "warning", reviewLevel: "full" };
   }
-  if (classification.confidence < MIN_CONFIDENCE_AUTO_DISPATCH || confidence < MIN_CONFIDENCE_AUTO_DISPATCH) {
-    const level = guideReviewLevel(Math.min(confidence, classification.confidence));
-    return {
-      status: "revisao_manual",
-      folder: "review",
-      exceptionType: level === "quick" ? "low_confidence_quick_review" : "low_confidence_full_review",
-      reason: `Confianca ${Math.round(confidence * 100)}% abaixo do limite automatico de ${Math.round(MIN_CONFIDENCE_AUTO_DISPATCH * 100)}%.`,
-      action: level === "quick" ? "Revisao rapida dos campos extraidos." : "Revisao manual completa.",
-      severity: "warning",
-      reviewLevel: level === "quick" ? "quick" : "full",
-    };
-  }
+  // Score de confianca nao bloqueia mais: identificacao da empresa (CNPJ ou razao social)
+  // ja foi validada acima; o envio segue pelo canal preferido da empresa.
   if (!matched.comunicacao_ativa || channelsFor(matched.canal_preferido).length === 0) {
     return { status: "revisao_manual", folder: "review", exceptionType: "invalid_channel", reason: "Empresa sem canal de envio ativo.", action: "Configurar canal e comunicacao ativa.", severity: "warning", reviewLevel: "full" };
   }
