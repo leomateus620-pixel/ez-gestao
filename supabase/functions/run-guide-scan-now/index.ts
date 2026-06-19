@@ -319,8 +319,10 @@ function dispatchConnectorErrors(plans: DispatchPlan[], integrations: any[], gma
       if (!gmailKey || gmail?.status !== "ativo") errors.push("gmail_inactive");
     }
     if (plan.channel === "whatsapp") {
-      const whatsapp = integrationByProvider(integrations, "twilio_whatsapp");
-      if (whatsapp?.status !== "ativo") errors.push("whatsapp_inactive");
+      const whatsapp = integrationByProvider(integrations, "whatsapp")
+        || integrationByProvider(integrations, "twilio_whatsapp");
+      const tokenOk = Boolean(Deno.env.get("WHATSAPP_ACCESS_TOKEN") && Deno.env.get("WHATSAPP_PHONE_NUMBER_ID"));
+      if (!tokenOk && whatsapp?.status !== "ativo") errors.push("whatsapp_inactive");
     }
   }
   return [...new Set(errors)];
@@ -594,6 +596,7 @@ async function dispatchGuide(
         const wpBody = linkGuia
           ? plan.body.replaceAll('__LINK_GUIA_PENDING__', linkGuia).replaceAll('[LINK_GUIA]', linkGuia)
           : plan.body.replaceAll('__LINK_GUIA_PENDING__', '');
+        const tpl = plan.template || {};
         const wpRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-whatsapp-message`, {
           method: "POST",
           headers: {
@@ -601,13 +604,22 @@ async function dispatchGuide(
             Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
           },
           body: JSON.stringify({
-            phone: normalized,
-            message: wpBody,
-            guia_id: guide.id,
-            source_type: "guia",
-            source_id: guide.id,
-            template_sid: plan.template?.twilio_content_sid ?? null,
-            metadata: { tipo_guia: classification.tipo, competencia: metadata.competencia, batch_id: batchId, link_guia: linkGuia, link_expires_at: linkExpiresAt },
+            to: normalized,
+            guide_id: guide.id,
+            modo,
+            template_name: tpl.meta_template_name || 'envio_guia_fiscal',
+            language: tpl.meta_template_language || 'pt_BR',
+            has_document_header: Boolean(tpl.meta_template_has_document_header && linkGuia),
+            document: linkGuia ? { link: linkGuia, filename: guide.file_name } : undefined,
+            parameters: {
+              tipo_guia: classification.label,
+              empresa: companyName(matched),
+              cnpj: matched.cnpj || metadata.primaryCnpj || '',
+              competencia: metadata.competencia || '',
+              vencimento: metadata.vencimento || '',
+              valor: metadata.valor != null ? `R$ ${Number(metadata.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '',
+            },
+            body_variable_order: ['tipo_guia', 'empresa', 'competencia', 'vencimento', 'valor'],
           }),
         });
         const payload = await wpRes.json().catch(() => ({}));
@@ -618,12 +630,16 @@ async function dispatchGuide(
           canal: "whatsapp",
           destinatario: normalized,
           mensagem_preview: wpBody.slice(0, 400),
-          template_sid: plan.template?.twilio_content_sid ?? null,
+          template_sid: tpl.meta_template_name ?? null,
+          provider: 'meta_whatsapp',
+          provider_status: 'sent',
+          provider_payload: { template: tpl.meta_template_name, modo, has_document_header: Boolean(tpl.meta_template_has_document_header && linkGuia), document_present: Boolean(linkGuia) },
+          sent_at: new Date().toISOString(),
           provider_message_id: payload?.message_id ?? null,
           idempotency_key: idemKey,
           status: "aceito",
           submitted_at: new Date().toISOString(),
-          sanitized_payload: { mode, ok: true, template_sid: plan.template?.twilio_content_sid ?? null, link_guia: linkGuia ? '<assinado>' : null },
+          sanitized_payload: { mode, ok: true, template: tpl.meta_template_name ?? null, link_guia: linkGuia ? '<assinado>' : null },
         });
         await logEvent(db, guide.id, "whatsapp_sent", "WhatsApp aceito pelo provedor.", { message_id: payload?.message_id, to: normalized }, "info", batchId);
         results.push({ canal: "whatsapp", status: "aceito", messageId: payload?.message_id ?? null });
