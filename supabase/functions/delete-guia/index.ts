@@ -43,8 +43,8 @@ serve(async (req) => {
     await db.from("guide_audit").insert({
       guia_id: guideId,
       action: "manual_delete",
-      actor_user_id: authResult.user?.id ?? null,
-      payload: { motivo, file_name: guide.file_name, status: guide.status, tipo_guia: guide.tipo_guia },
+      actor: authResult.user?.email || authResult.user?.id || "service_role",
+      after: { motivo, file_name: guide.file_name, status: guide.status, tipo_guia: guide.tipo_guia },
     });
   } catch (_) { /* non-fatal */ }
 
