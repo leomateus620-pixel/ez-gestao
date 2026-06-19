@@ -14,8 +14,10 @@ import {
   collectValidationIssues,
   competenciaToFolder,
   dedupHash,
+  dedupHashFgts,
   formatCnpj,
   guideReviewLevel,
+  matchCompanyForFGTSGuide,
   normalizeCnpj,
   normalizePhoneE164,
   renderTemplate,
@@ -24,6 +26,7 @@ import {
   validateTemplateRender,
   type ClassifyResult,
   type FieldEvidence,
+  type FgtsMatchResult,
   type GuideMetadata,
   type TipoGuia,
 } from "../_shared/guide-parser.ts";
