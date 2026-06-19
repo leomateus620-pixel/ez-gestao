@@ -494,20 +494,30 @@ function routeGuide(args: {
 
   const operationLevel = (config.operation_level || "somente_classificacao") as OperationLevel;
   const highValueThreshold = Number(config.high_value_threshold ?? 0);
-  const requiresApproval =
-    (!args.forceDispatch && (
-      operationLevel === "automacao_desligada" ||
-      operationLevel === "somente_classificacao" ||
-      operationLevel === "leitura_revisao"
-    )) ||
-    (!args.forceDispatch && config.require_batch_approval === true) ||
-    (!args.manualApproval && highValueThreshold > 0 && metadata.valor != null && metadata.valor >= highValueThreshold);
+  const blockedReasons: string[] = [];
+  if (!args.forceDispatch) {
+    if (["automacao_desligada", "somente_classificacao", "leitura_revisao"].includes(operationLevel)) {
+      blockedReasons.push(`operation_level_blocks:${operationLevel}`);
+    }
+    if (config.require_batch_approval === true) blockedReasons.push("requires_batch_approval");
+    if (!config.auto_dispatch_enabled) blockedReasons.push("auto_dispatch_disabled");
+  }
+  if (!args.manualApproval && highValueThreshold > 0 && metadata.valor != null && metadata.valor >= highValueThreshold) {
+    blockedReasons.push(`high_value_requires_approval:>=${highValueThreshold}`);
+  }
+  // In test mode without explicit force/full-pipeline, never dispatch — keep preview only.
+  if (mode === "teste" && !args.forceDispatch) {
+    blockedReasons.push("mode_test_preview_only");
+  }
 
-  if (mode === "teste" || requiresApproval || (!config.auto_dispatch_enabled && !args.forceDispatch)) {
+  if (blockedReasons.length > 0) {
+    const reason = mode === "teste" && !args.forceDispatch
+      ? "Preview de teste gerado sem envio real."
+      : `Identificada, envio automatico bloqueado por: ${blockedReasons.join(", ")}.`;
     return {
       status: "pronta_envio",
-      reason: mode === "teste" ? "Preview de teste gerado sem envio real." : "Guia segura, aguardando aprovacao de lote/operador.",
-      action: "Aprovar lote ou selecionar guia para envio.",
+      reason,
+      action: "Ajustar Configuracoes -> Pipeline, aprovar lote ou selecionar guia para envio.",
       reviewLevel: "none",
       readyButAwaitingApproval: true,
     };
