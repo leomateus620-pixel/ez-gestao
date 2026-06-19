@@ -675,8 +675,8 @@ export function matchCompanyForFGTSGuide(
     return { empresa: null, method: 'none', confidence: 0, candidates: [], reason: 'razao_social_missing' };
   }
 
-  // Exact normalized legal name
-  const exactName = active.filter((e) => normalizeLegalName(e.razao_social || '') === wanted || normalizeLegalName(e.nome_fantasia || '') === wanted);
+  // Exact normalized legal name (razao social only — fantasia handled via aliases)
+  const exactName = active.filter((e) => normalizeLegalName(e.razao_social || '') === wanted);
   if (exactName.length === 1) return { empresa: exactName[0], method: 'exact_normalized_legal_name', confidence: 0.98, candidates: [], reason: null };
   if (exactName.length > 1) {
     return {
