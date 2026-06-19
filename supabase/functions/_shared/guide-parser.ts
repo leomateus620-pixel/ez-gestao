@@ -444,17 +444,24 @@ export function extractDASData(text: string): ExtractorResult {
 }
 
 export function extractFGTSDigitalData(text: string): ExtractorResult {
-  return buildExtractor('fgts', text, [
+  const base = buildExtractor('fgts', text, [
     /\bfgts\s+digital\b/i,
     /guia\s+do\s+fgts\s+digital/i,
     /fundo\s+de\s+garantia/i,
+    /\bgfd\b/i,
   ], [
     /\bfgts\b/i,
     /empregador/i,
     /valor\s+a\s+recolher/i,
+    /total\s+da\s+guia/i,
+    /pagar\s+este\s+documento\s+at[eé]/i,
+    /nome\/?\s*raz[aã]o\s+social\s+do\s+empregador/i,
+    /cpf\/?\s*cnpj\s+do\s+empregador/i,
   ], {
-    valor: [/valor\s+a\s+recolher/i, /total\s+a\s+recolher/i],
+    valor: [/total\s+da\s+guia/i, /valor\s+a\s+recolher/i, /total\s+a\s+recolher/i],
+    vencimento: [/pagar\s+este\s+documento\s+at[eé]/i],
   });
+  return base;
 }
 
 export function extractDAFData(text: string): ExtractorResult {
@@ -538,6 +545,192 @@ export function extractGenericGuideData(text: string): ExtractorResult {
   ], {
     valor: [/valor\s+total/i, /total\s+a\s+pagar/i],
   });
+}
+
+/** Classify the document found in the FGTS "CPF/CNPJ do Empregador" field. */
+export function classifyEmpregadorDocument(raw: string | null): {
+  raw: string | null;
+  digits: string;
+  tipo: 'cnpj_completo' | 'cnpj_raiz' | 'documento_parcial' | 'cpf' | null;
+} {
+  if (!raw) return { raw: null, digits: '', tipo: null };
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 14 && validCnpj(digits)) return { raw, digits, tipo: 'cnpj_completo' };
+  if (digits.length === 11) return { raw, digits, tipo: 'cpf' };
+  if (digits.length === 8) return { raw, digits, tipo: 'cnpj_raiz' };
+  return { raw, digits, tipo: 'documento_parcial' };
+}
+
+function extractEmpregadorDocumento(text: string): string | null {
+  const match = text.match(/cpf\s*\/?\s*cnpj\s+do\s+empregador\s*[:\-]?\s*([0-9./\-\s]{6,30})/i);
+  if (!match?.[1]) return null;
+  return match[1].trim().replace(/\s+/g, '');
+}
+
+function extractEmpregadorNome(text: string): string | null {
+  const match = text.match(/nome\s*\/?\s*raz[aã]o\s+social\s+do\s+empregador\s*[:\-]?\s*([^\n\r]{4,200})/i);
+  if (!match?.[1]) return null;
+  let value = match[1].trim();
+  // Cut at next labeled field if it bleeds into the same line.
+  value = value.split(/\s{2,}|(?:CPF|CNPJ|Identificador|Compet|Vencimento|Valor|Pagar|Endere)/i)[0]?.trim() || value;
+  return value.slice(0, 160) || null;
+}
+
+function extractFgtsIdentificador(text: string): string | null {
+  const match = text.match(/identificador\s*[:\-]?\s*([0-9A-Z\-\/.]{8,40})/i);
+  return match?.[1]?.trim() || null;
+}
+
+/** Normalize a legal name for safe matching (uppercase, ASCII, no punctuation). */
+export function normalizeLegalName(value: string | null | undefined): string {
+  if (!value) return '';
+  return value
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const LEGAL_TERMS = /\b(LTDA|EIRELI|ME|EPP|S\s*A|SA|S\/A|SOCIEDADE|LIMITADA|MEI|EI|EPP|FILIAL|MATRIZ)\b/g;
+
+/** Same as normalizeLegalName but also strips company-form terms. */
+export function stripLegalTerms(value: string | null | undefined): string {
+  return normalizeLegalName(value).replace(LEGAL_TERMS, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function diceBigram(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const bigrams = (s: string) => {
+    const out = new Map<string, number>();
+    for (let i = 0; i < s.length - 1; i++) {
+      const g = s.slice(i, i + 2);
+      out.set(g, (out.get(g) || 0) + 1);
+    }
+    return out;
+  };
+  const ag = bigrams(a);
+  const bg = bigrams(b);
+  let inter = 0;
+  for (const [g, c] of ag) {
+    const bc = bg.get(g);
+    if (bc) inter += Math.min(c, bc);
+  }
+  const total = (a.length - 1) + (b.length - 1);
+  return total > 0 ? (2 * inter) / total : 0;
+}
+
+export type FgtsMatchMethod =
+  | 'cnpj_exact'
+  | 'cnpj_raiz_unique'
+  | 'exact_normalized_legal_name'
+  | 'alias_exact'
+  | 'exact_normalized_no_legal_terms'
+  | 'similarity'
+  | 'none';
+
+export interface FgtsMatchResult {
+  empresa: any | null;
+  method: FgtsMatchMethod;
+  confidence: number;
+  candidates: Array<{ empresa_id: string; score: number; razao_social: string | null }>;
+  reason: string | null;
+}
+
+/**
+ * Match a FGTS Digital guide to a company when the CNPJ is partial.
+ * Order: full CNPJ -> CNPJ raiz (only if 1 active branch) -> exact normalized legal name
+ * -> alias exact -> exact normalized without legal terms -> similarity (review only).
+ */
+export function matchCompanyForFGTSGuide(
+  args: { cnpjCompleto?: string | null; documentoRaiz?: string | null; razaoSocial?: string | null },
+  empresas: Array<{ id: string; cnpj: string; razao_social?: string | null; nome_fantasia?: string | null; aliases?: string[] | null; status?: string | null; comunicacao_ativa?: boolean | null }>,
+): FgtsMatchResult {
+  const active = (empresas || []).filter((e) => e?.status === 'ativa');
+
+  if (args.cnpjCompleto) {
+    const hit = active.find((e) => normalizeCnpj(e.cnpj) === normalizeCnpj(args.cnpjCompleto!));
+    if (hit) return { empresa: hit, method: 'cnpj_exact', confidence: 0.99, candidates: [], reason: null };
+  }
+
+  if (args.documentoRaiz && args.documentoRaiz.length === 8) {
+    const matches = active.filter((e) => normalizeCnpj(e.cnpj).slice(0, 8) === args.documentoRaiz);
+    if (matches.length === 1) {
+      return { empresa: matches[0], method: 'cnpj_raiz_unique', confidence: 0.9, candidates: [], reason: null };
+    }
+    if (matches.length > 1) {
+      return {
+        empresa: null,
+        method: 'none',
+        confidence: 0,
+        candidates: matches.map((m) => ({ empresa_id: m.id, score: 0.9, razao_social: m.razao_social ?? null })),
+        reason: 'cnpj_raiz_multiple_branches',
+      };
+    }
+  }
+
+  const wanted = normalizeLegalName(args.razaoSocial || '');
+  if (!wanted) {
+    return { empresa: null, method: 'none', confidence: 0, candidates: [], reason: 'razao_social_missing' };
+  }
+
+  // Exact normalized legal name
+  const exactName = active.filter((e) => normalizeLegalName(e.razao_social || '') === wanted || normalizeLegalName(e.nome_fantasia || '') === wanted);
+  if (exactName.length === 1) return { empresa: exactName[0], method: 'exact_normalized_legal_name', confidence: 0.98, candidates: [], reason: null };
+  if (exactName.length > 1) {
+    return {
+      empresa: null, method: 'none', confidence: 0,
+      candidates: exactName.map((m) => ({ empresa_id: m.id, score: 0.98, razao_social: m.razao_social ?? null })),
+      reason: 'multiple_companies_exact_name',
+    };
+  }
+
+  // Alias exact
+  const aliasHit = active.filter((e) => (e.aliases || []).some((a) => normalizeLegalName(a) === wanted));
+  if (aliasHit.length === 1) return { empresa: aliasHit[0], method: 'alias_exact', confidence: 0.96, candidates: [], reason: null };
+  if (aliasHit.length > 1) {
+    return {
+      empresa: null, method: 'none', confidence: 0,
+      candidates: aliasHit.map((m) => ({ empresa_id: m.id, score: 0.96, razao_social: m.razao_social ?? null })),
+      reason: 'multiple_companies_alias',
+    };
+  }
+
+  // Exact normalized without legal terms
+  const wantedStripped = stripLegalTerms(args.razaoSocial || '');
+  if (wantedStripped) {
+    const noTerms = active.filter((e) => stripLegalTerms(e.razao_social || '') === wantedStripped);
+    if (noTerms.length === 1) return { empresa: noTerms[0], method: 'exact_normalized_no_legal_terms', confidence: 0.95, candidates: [], reason: null };
+    if (noTerms.length > 1) {
+      return {
+        empresa: null, method: 'none', confidence: 0,
+        candidates: noTerms.map((m) => ({ empresa_id: m.id, score: 0.95, razao_social: m.razao_social ?? null })),
+        reason: 'multiple_companies_no_legal_terms',
+      };
+    }
+  }
+
+  // Similarity (review-only)
+  const scored = active.map((e) => ({
+    empresa: e,
+    score: Math.max(
+      diceBigram(wanted, normalizeLegalName(e.razao_social || '')),
+      diceBigram(wantedStripped, stripLegalTerms(e.razao_social || '')),
+      ...(e.aliases || []).map((a) => diceBigram(wanted, normalizeLegalName(a))),
+    ),
+  })).filter((s) => s.score >= 0.94).sort((a, b) => b.score - a.score);
+
+  if (scored.length >= 1) {
+    return {
+      empresa: null, // never auto-dispatch on similarity
+      method: 'similarity', confidence: scored[0].score,
+      candidates: scored.slice(0, 5).map((s) => ({ empresa_id: s.empresa.id, score: s.score, razao_social: s.empresa.razao_social ?? null })),
+      reason: 'similarity_review_only',
+    };
+  }
+
+  return { empresa: null, method: 'none', confidence: 0, candidates: [], reason: 'company_not_found' };
 }
 
 function runExtractors(text: string): ExtractorResult[] {
