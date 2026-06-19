@@ -123,3 +123,43 @@ criptografado em uma tabela sem política de leitura para clientes.
 - `WHATSAPP_ACCESS_TOKEN` e `WHATSAPP_APP_SECRET` ficam apenas em `Deno.env`;
   jamais no banco, frontend ou logs.
 - O legado de consultas fiscais foi removido; este documento cobre apenas o fluxo de guias.
+
+## FGTS Digital / GFD: identificação por razão social
+
+DAS, DARF e demais guias federais costumam trazer o CNPJ completo do
+contribuinte e seguem o fluxo padrão de identificação por CNPJ. **FGTS
+Digital (GFD)** pode exibir apenas um documento parcial/raiz no campo
+`CPF/CNPJ do Empregador` (por exemplo `21.205.304`). Para essas guias o
+pipeline aplica um fallback seguro:
+
+1. Se houver CNPJ completo válido, segue por ele (`match_method = cnpj_exact`).
+2. Se o documento for de 8 dígitos (raiz) e existir **exatamente uma**
+   empresa ativa com aquela raiz, usa essa empresa (`cnpj_raiz_unique`).
+   Múltiplas filiais → revisão manual.
+3. Razão social normalizada exata (`exact_normalized_legal_name`).
+4. Alias normalizado exato (`alias_exact`).
+5. Razão social normalizada sem termos societários (LTDA, EIRELI, ME,
+   EPP, S/A, MEI, ...) → `exact_normalized_no_legal_terms`.
+6. Similaridade ≥ 0.94 → apenas revisão rápida; **nunca** envio automático.
+7. Caso contrário → revisão manual / não identificada.
+
+Regras de segurança:
+
+- Múltiplas empresas compatíveis em qualquer etapa → revisão manual.
+- Empresa inativa → revisão manual.
+- Similaridade nunca dispara envio automático.
+- O sistema **não** completa CNPJs parcialmente exibidos.
+- A evidência (`critical_fields_json`) registra `match_method`, razão
+  social extraída, documento parcial e o motivo da decisão.
+- `decision_reason` deixa explícito que a identificação foi feita pela
+  razão social do empregador.
+
+Deduplicação para FGTS sem CNPJ completo usa
+`sha256(empresa_id | tipo | competencia | vencimento | valor | identificador_guia)`.
+Quando o `Identificador` da GFD está disponível, ele entra na chave —
+evita reprocessar a mesma guia mesmo sem CNPJ no PDF.
+
+Cadastro de empresas: usar o campo `aliases` para registrar variações
+do nome que aparecem nas guias do FGTS (sem acento, sem LTDA, nome
+fantasia etc.). A revisão manual, quando o operador escolhe a empresa,
+sugere salvar a razão social extraída como novo alias.

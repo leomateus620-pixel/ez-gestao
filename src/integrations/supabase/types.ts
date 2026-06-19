@@ -1833,6 +1833,9 @@ export type Database = {
           drive_organization_pending: boolean | null
           duplicate_level: string | null
           duplicate_of: string | null
+          empregador_documento_raw: string | null
+          empregador_documento_tipo: string | null
+          empregador_nome_razao_social: string | null
           empresa_id: string | null
           extraction_method: string | null
           file_name: string
@@ -1840,6 +1843,7 @@ export type Database = {
           id: string
           identificador_guia: string | null
           manual_review_level: string | null
+          match_method: string | null
           match_source: Database["public"]["Enums"]["guia_match_source"] | null
           mime_type: string
           modo: string
@@ -1859,6 +1863,7 @@ export type Database = {
           sha256: string | null
           source_folder_id: string | null
           status: Database["public"]["Enums"]["guia_status"]
+          subtipo: string | null
           test_preview_json: Json | null
           texto_extraido_preview: string | null
           tipo_guia: string | null
@@ -1887,6 +1892,9 @@ export type Database = {
           drive_organization_pending?: boolean | null
           duplicate_level?: string | null
           duplicate_of?: string | null
+          empregador_documento_raw?: string | null
+          empregador_documento_tipo?: string | null
+          empregador_nome_razao_social?: string | null
           empresa_id?: string | null
           extraction_method?: string | null
           file_name: string
@@ -1894,6 +1902,7 @@ export type Database = {
           id?: string
           identificador_guia?: string | null
           manual_review_level?: string | null
+          match_method?: string | null
           match_source?: Database["public"]["Enums"]["guia_match_source"] | null
           mime_type?: string
           modo?: string
@@ -1913,6 +1922,7 @@ export type Database = {
           sha256?: string | null
           source_folder_id?: string | null
           status?: Database["public"]["Enums"]["guia_status"]
+          subtipo?: string | null
           test_preview_json?: Json | null
           texto_extraido_preview?: string | null
           tipo_guia?: string | null
@@ -1941,6 +1951,9 @@ export type Database = {
           drive_organization_pending?: boolean | null
           duplicate_level?: string | null
           duplicate_of?: string | null
+          empregador_documento_raw?: string | null
+          empregador_documento_tipo?: string | null
+          empregador_nome_razao_social?: string | null
           empresa_id?: string | null
           extraction_method?: string | null
           file_name?: string
@@ -1948,6 +1961,7 @@ export type Database = {
           id?: string
           identificador_guia?: string | null
           manual_review_level?: string | null
+          match_method?: string | null
           match_source?: Database["public"]["Enums"]["guia_match_source"] | null
           mime_type?: string
           modo?: string
@@ -1967,6 +1981,7 @@ export type Database = {
           sha256?: string | null
           source_folder_id?: string | null
           status?: Database["public"]["Enums"]["guia_status"]
+          subtipo?: string | null
           test_preview_json?: Json | null
           texto_extraido_preview?: string | null
           tipo_guia?: string | null

@@ -14,8 +14,10 @@ import {
   collectValidationIssues,
   competenciaToFolder,
   dedupHash,
+  dedupHashFgts,
   formatCnpj,
   guideReviewLevel,
+  matchCompanyForFGTSGuide,
   normalizeCnpj,
   normalizePhoneE164,
   renderTemplate,
@@ -24,6 +26,7 @@ import {
   validateTemplateRender,
   type ClassifyResult,
   type FieldEvidence,
+  type FgtsMatchResult,
   type GuideMetadata,
   type TipoGuia,
 } from "../_shared/guide-parser.ts";
@@ -408,7 +411,13 @@ function routeGuide(args: {
   if (metadata.fields.cnpj.status === "invalid") {
     return { status: "nao_identificada", folder: "not_identified", exceptionType: "cnpj_invalid", reason: "CNPJ invalido no PDF.", action: "Corrigir documento ou revisar manualmente.", severity: "error", reviewLevel: "full" };
   }
-  if (metadata.fields.cnpj.status === "missing") {
+  // FGTS Digital fallback: when there is no full CNPJ but the employer legal name
+  // already produced a unique match to an active company, do not block on cnpj.
+  const fgtsEmployerMatched = classification.tipo === "fgts"
+    && metadata.fields.cnpj.status !== "valid"
+    && !!matched
+    && !!metadata.fields.razao_social?.value;
+  if (metadata.fields.cnpj.status === "missing" && !fgtsEmployerMatched) {
     return { status: "nao_identificada", folder: "not_identified", exceptionType: "cnpj_missing", reason: "CNPJ ausente no PDF.", action: "Revisar manualmente.", severity: "warning", reviewLevel: "full" };
   }
   if (metadata.cnpjCandidates.length > 1) {
@@ -445,7 +454,9 @@ function routeGuide(args: {
     };
   }
 
-  const criticalFields = Object.values(metadata.fields);
+  const criticalFields = Object.entries(metadata.fields)
+    .filter(([name]) => !(fgtsEmployerMatched && name === 'cnpj'))
+    .map(([, evidence]) => evidence);
   const missingOrInvalid = criticalFields.find((entry) => entry.status === "missing" || entry.status === "invalid");
   if (missingOrInvalid) {
     return { status: "revisao_manual", folder: "review", exceptionType: `${missingOrInvalid.source}_blocked`, reason: missingOrInvalid.justification, action: "Preencher e confirmar campo manualmente.", severity: "warning", reviewLevel: "full" };
@@ -817,10 +828,32 @@ async function processOneGuide(
   const { data: companies } = await db.from("empresas").select("*");
   let matched: any = null;
   let inactiveCompany: any = null;
+  let fgtsMatch: FgtsMatchResult | null = null;
+  let matchMethod: string = 'none';
   if (initial.metadata.primaryCnpj) {
     const byCnpj = (companies || []).find((company: any) => normalizeCnpj(company.cnpj) === initial.metadata.primaryCnpj);
-    if (byCnpj?.status === "ativa") matched = byCnpj;
+    if (byCnpj?.status === "ativa") { matched = byCnpj; matchMethod = 'cnpj_exact'; }
     else if (byCnpj) inactiveCompany = byCnpj;
+  }
+
+  // FGTS Digital fallback by employer legal name when CNPJ completo is absent.
+  if (!matched && initial.classification.tipo === 'fgts' && (initial.metadata.empregadorNomeRazaoSocial || initial.metadata.empregadorDocumentoRaw)) {
+    fgtsMatch = matchCompanyForFGTSGuide(
+      {
+        cnpjCompleto: initial.metadata.primaryCnpj,
+        documentoRaiz: initial.metadata.empregadorDocumentoTipo === 'cnpj_raiz' ? initial.metadata.empregadorDocumentoRaw?.replace(/\D/g, '') ?? null : null,
+        razaoSocial: initial.metadata.empregadorNomeRazaoSocial,
+      },
+      companies || [],
+    );
+    if (fgtsMatch.empresa) {
+      matched = fgtsMatch.empresa;
+      matchMethod = fgtsMatch.method;
+      // Mark inactive resolution if any active was rejected (none here, but reset just in case)
+      inactiveCompany = null;
+    } else {
+      matchMethod = fgtsMatch.method;
+    }
   }
 
   const overlaid = manualMetadataOverlay(guide, initial.metadata, initial.classification, options.manualApproval);
@@ -828,12 +861,22 @@ async function processOneGuide(
   const classification = overlaid.classification;
   if (options.manualApproval && guide.empresa_id) {
     matched = (companies || []).find((company: any) => company.id === guide.empresa_id && company.status === "ativa") || matched;
+    if (matched) matchMethod = matchMethod === 'none' ? 'manual_override' : matchMethod;
   }
 
   const confidence = calculateConfidence(metadata, classification, !!matched);
   const issues = collectValidationIssues(metadata, classification);
-  if (!companyNameCompatible(metadata.razaoSocial, matched)) {
+  // Skip the legacy name-mismatch warning when matched via the FGTS legal-name fallback —
+  // that match already uses the normalized employer name as evidence.
+  const fgtsNameBased = ['exact_normalized_legal_name', 'alias_exact', 'exact_normalized_no_legal_terms'].includes(matchMethod);
+  if (!fgtsNameBased && !companyNameCompatible(metadata.razaoSocial, matched)) {
     issues.push({ code: "company_name_mismatch", severity: "warning", message: "Razao social detectada diverge da empresa cadastrada.", field: "empresa" });
+  }
+  if (fgtsMatch?.reason === 'cnpj_raiz_multiple_branches') {
+    issues.push({ code: 'fgts_cnpj_raiz_multiple_branches', severity: 'warning', message: 'CNPJ raiz pertence a multiplas filiais ativas.', field: 'empresa' });
+  }
+  if (fgtsMatch?.method === 'similarity') {
+    issues.push({ code: 'fgts_company_similarity_only', severity: 'warning', message: 'Empresa identificada apenas por similaridade aproximada.', field: 'empresa' });
   }
 
   await logEvent(db, guide.id, "cnpj_extracted", "CNPJs extraidos e validados.", {
@@ -846,7 +889,19 @@ async function processOneGuide(
     matched_keywords: classification.matchedKeywords,
   }, "info", options.batchId);
 
-  const duplicate = await detectDuplicates(db, guide, metadata, classification, matched);
+  let duplicate = await detectDuplicates(db, guide, metadata, classification, matched);
+  // For FGTS without a full CNPJ, use the FGTS-aware dedup hash instead.
+  if (matched && classification.tipo === 'fgts' && !metadata.primaryCnpj && metadata.valor != null && metadata.competencia) {
+    const fgtsHash = await dedupHashFgts({
+      empresaId: matched.id,
+      tipo: classification.tipo,
+      competencia: metadata.competencia,
+      vencimento: metadata.vencimento,
+      valor: metadata.valor,
+      identificadorGuia: metadata.identificador,
+    });
+    duplicate = { ...duplicate, hash: fgtsHash } as typeof duplicate;
+  }
   const dispatchPlans = matched ? await buildDispatchPlans(db, matched, classification, metadata, mode, config) : [];
   const connectorErrors = dispatchConnectorErrors(dispatchPlans, integrations, gmailKey);
   const criticalFields = buildCriticalFields(metadata, matched, dispatchPlans);
@@ -879,22 +934,54 @@ async function processOneGuide(
     codigo_barras: metadata.codigoBarras,
     identificador_guia: metadata.identificador,
     razao_social_detectada: metadata.razaoSocial,
+    subtipo: metadata.subtipo,
+    empregador_documento_raw: metadata.empregadorDocumentoRaw,
+    empregador_documento_tipo: metadata.empregadorDocumentoTipo,
+    empregador_nome_razao_social: metadata.empregadorNomeRazaoSocial,
+    match_method: matchMethod,
     texto_extraido_preview: extraction.text.slice(0, 600),
     pagina_count: extraction.pageCount,
     extraction_method: extraction.extractionMethod,
     has_text_layer: true,
     confidence_score: confidence.overallConfidence,
-    critical_fields_json: criticalFields,
+    critical_fields_json: {
+      ...criticalFields,
+      ...(classification.tipo === 'fgts' && !metadata.primaryCnpj ? {
+        cnpj: {
+          value: null,
+          raw: metadata.empregadorDocumentoRaw,
+          status: 'partial',
+          source: 'CPF/CNPJ do Empregador',
+          method: 'fgts_employer_document_partial',
+          confidence: 0.55,
+          reason: 'FGTS Digital exibiu apenas documento parcial/raiz, nao CNPJ completo',
+        },
+        razao_social: metadata.fields.razao_social ?? null,
+        company_match: matched ? {
+          empresa_id: matched.id,
+          method: matchMethod,
+          confidence: fgtsMatch?.confidence ?? 0.98,
+          status: 'valid',
+        } : (fgtsMatch ? {
+          method: fgtsMatch.method,
+          candidates: fgtsMatch.candidates,
+          reason: fgtsMatch.reason,
+          status: 'pending',
+        } : null),
+      } : {}),
+    },
     validation_issues_json: issues,
     decision_status: route.status,
-    decision_reason: route.reason,
+    decision_reason: classification.tipo === 'fgts' && !metadata.primaryCnpj && matched && fgtsNameBased
+      ? `${route.reason} | FGTS Digital identificado por razao social do empregador, pois CNPJ completo nao estava disponivel no PDF.`
+      : route.reason,
     decision_reasons: [{ reason: route.reason, action: route.action, status: route.status }],
     manual_review_level: route.reviewLevel || null,
     duplicate_level: route.duplicateLevel || duplicate.level || null,
     duplicate_of: duplicate.duplicate?.id || null,
     dispatch_blocked_reason: route.status !== "pronta_envio" || route.readyButAwaitingApproval ? route.reason : null,
     processed_at: new Date().toISOString(),
-    match_source: metadata.primaryCnpj ? "cnpj_pdf" : (options.manualApproval ? "manual" : "filename"),
+    match_source: metadata.primaryCnpj ? "cnpj_pdf" : (fgtsNameBased ? "fgts_employer_name" : (options.manualApproval ? "manual" : "filename")),
   };
   if (duplicate.hash) baseUpdate.dedup_hash = duplicate.hash;
 
