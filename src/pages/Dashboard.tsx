@@ -16,6 +16,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
@@ -24,6 +25,18 @@ import { useDataStore } from '@/data/DataProvider';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formatDateTime } from '@/lib/formatters';
+import { useDeleteGuide } from '@/features/guias/useGuideOps';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 type MetricTone = 'waiting' | 'sent' | 'exceptions' | 'failures' | 'time' | 'delivered';
 
@@ -296,7 +309,36 @@ export default function Dashboard() {
               const company = state.empresas.find((entry) => entry.id === guide.empresaId);
               const status = getGuideStatus(guide.status);
               return (
-                <Link key={guide.id} to={`/guias/${guide.id}`} className="guide-flow-row guide-tilt-card">
+                <GuideFlowRow
+                  key={guide.id}
+                  guideId={guide.id}
+                  fileName={guide.fileName}
+                  companyLabel={company?.nomeFantasia || 'Identificando empresa'}
+                  statusLabel={status.label}
+                  statusClassName={status.className}
+                  receivedAt={guide.receivedAt}
+                  tipoGuia={guide.tipoGuia}
+                  competencia={guide.competencia}
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="guide-section p-5">
+          <div className="guide-section-header">
+            <div>
+              <p className="guide-section-kicker">Distribuição</p>
+              <h2>Canais utilizados</h2>
+            </div>
+            <span className="guide-compact-total">{channelTotal}</span>
+          </div>
+
+          <div className="space-y-3">
+            {channelRows.map((channel) => {
+              const Icon = channel.icon;
+              const share = channelTotal ? Math.round((channel.value / channelTotal) * 100) : 0;
+              return (
                   <div className="guide-flow-marker" aria-hidden>
                     <span />
                   </div>
