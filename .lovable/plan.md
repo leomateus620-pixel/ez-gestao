@@ -1,70 +1,42 @@
-## Diagnóstico encontrado
+## Objetivo
 
-1. **O envio não chegou ao WhatsApp porque o pipeline bloqueia antes de chamar o provedor.**
-   - A guia FGTS Digital foi identificada com empresa, valor, vencimento e destinatário corretos.
-   - Porém o validador ainda exige campos legados de WhatsApp/Twilio (`twilio_content_sid`) e placeholders obrigatórios como `[CNPJ]` e `[TIPO_GUIA]`.
-   - Os templates atuais de WhatsApp não têm esses campos, então a guia é enviada para `duplicada`/revisão antes de qualquer chamada real ao WhatsApp.
-   - Resultado: não existe registro em `guia_envios` para essas guias e a função de WhatsApp nem aparece nos logs.
+Remover a confiança (score) como bloqueio para envio automático. A identificação da empresa (por CNPJ **ou** razão social cadastrada em Empresas) passa a ser suficiente. O canal de envio continua vindo de `empresas.canal_preferido` (e‑mail ou WhatsApp). Validar end‑to‑end disparando a guia atual (`GuiaPagamento_21205304000165_…`, DARF 05/2026) para o WhatsApp **+55 55 99969‑9631** via Meta Cloud API.
 
-2. **A duplicidade continua bloqueando o reprocessamento forçado.**
-   - Existem duas guias com o mesmo PDF/hash (`0126060842429268-9.pdf`).
-   - Mesmo com `force_dispatch`, o código ainda roda a detecção de duplicidade dentro do pipeline e transforma a guia em `duplicada` antes do envio.
-   - Uma delas ficou em estado inconsistente: `status = processando`, mas `decision_reason = duplicidade`.
+## O que está bloqueando hoje
 
-3. **A exclusão no “Fluxo recente” provavelmente não abre a confirmação.**
-   - O card inteiro é um link absoluto.
-   - O botão de lixeira chama `preventDefault()` dentro do próprio `AlertDialogTrigger`, o que pode impedir o Radix de abrir o modal de confirmação.
-   - Como não houve log da função `delete-guia`, o clique não chegou ao backend.
+`supabase/functions/_shared/guide-parser.ts` marca o campo `tipo_guia` como **dubious** sempre que `classification.confidence < 0.92` (linha 804‑806). Em seguida, `supabase/functions/run-guide-scan-now/index.ts` (linhas 470‑487) joga a guia para `revisao_manual` por duas razões independentes:
 
-4. **Há um problema adicional de schema/log.**
-   - O código tenta gravar `detected_data_json` em `guia_excecoes`, mas essa coluna não existe na tabela atual.
-   - Isso pode quebrar o fluxo em trechos onde uma exceção é registrada.
+1. Qualquer campo crítico `dubious` → `revisao_manual` com motivo `*_dubious` (foi exatamente isso na auditoria: "Tipo de guia sem confiança suficiente para envio automático").
+2. `confidence_score < MIN_CONFIDENCE_AUTO_DISPATCH` → `revisao_manual` (`low_confidence_*`).
 
-## Plano de correção
+Por isso a guia caiu em revisão manual mesmo com CNPJ válido, empresa ativa e tipo classificado.
 
-### 1. Corrigir o envio WhatsApp Meta Cloud API
-- Atualizar `validateTemplateRender` para WhatsApp não exigir mais `twilio_content_sid`.
-- Ajustar a validação de placeholders para aceitar templates Meta atuais e não bloquear FGTS Digital sem CNPJ completo quando a empresa foi identificada por razão social/alias seguro.
-- Usar `meta_template_name` quando configurado e manter fallback controlado (`envio_guia_fiscal`) apenas se não houver nome definido.
-- Registrar claramente no evento da guia se o envio foi chamado, aceito ou recusado pelo provedor.
+## Mudanças
 
-### 2. Fazer `Processar agora` realmente reprocessar e enviar
-- Quando `force_dispatch = true`, ignorar bloqueio de duplicidade para a guia selecionada/reprocessada.
-- Se houver várias cópias do mesmo PDF, escolher uma guia “canônica” para envio e marcar as outras como excluídas/duplicadas sem bloquear a guia válida.
-- Reaplicar as correções manuais já salvas (`revisao_correcoes`) antes da rota final.
-- Garantir que FGTS Digital identificado por razão social exata/alias exato vá para envio quando os demais campos estiverem válidos.
+### 1. Identificação manda, score não bloqueia
 
-### 3. Corrigir exclusão das guias no Dashboard e na fila
-- Remover a sobreposição de link que compete com o botão de lixeira no `Fluxo recente`.
-- Fazer o botão de excluir abrir o modal de confirmação corretamente.
-- Após confirmar, chamar `delete-guia`, invalidar caches e remover visualmente a guia sem depender de reload manual.
-- Manter os botões de excluir também em `/guias/fila` e no detalhe.
+`supabase/functions/_shared/guide-parser.ts`
+- `tipo_guia` deixa de ser `dubious` por baixa confiança: sempre `validField` quando há classificação (incluindo `outros`), com `justification` informando o score. Mantém `dubious` apenas se a classificação não conseguiu identificar nenhum sinal (`matchedKeywords` vazio E `tipo = outros`).
+- Remover o issue `guide_type_low_confidence` da validação (era só ruído, virava bloqueio na função de scan).
 
-### 4. Corrigir a função `delete-guia`
-- Garantir que ela apague em ordem segura:
-  - envios
-  - eventos
-  - exceções
-  - auditoria relacionada quando necessário ou auditoria final compatível
-  - guia
-- Ajustar qualquer escrita de auditoria para usar somente colunas reais.
-- Retornar mensagens de erro mais claras para a UI caso algo bloqueie a exclusão.
+`supabase/functions/run-guide-scan-now/index.ts`
+- Remover o branch que coloca em `revisao_manual` quando `classification.confidence < MIN_CONFIDENCE_AUTO_DISPATCH || confidence < MIN_CONFIDENCE_AUTO_DISPATCH` (linhas 478‑487). A confiança continua sendo gravada em `confidence_score` para auditoria, mas **não bloqueia**.
+- Manter os bloqueios reais de segurança: empresa não identificada / inativa / ambígua, duplicidade, canal/conector inválido, template/destinatário ausente, valor acima do `high_value_threshold`. Esses continuam exatamente como estão.
 
-### 5. Corrigir gravação de exceções
-- Remover o campo inexistente `detected_data_json` das inserções em `guia_excecoes`, ou criar campo via migração se ele for necessário para auditoria.
-- Para menor risco, vou manter os metadados detalhados em `guia_eventos.metadata_json`, que já existe.
+Resultado: se a empresa foi identificada (`matched.empresa` ativa) e o canal preferido tem conector ativo e destinatário válido, a guia segue direto para `pronta_envio` + dispatch — independente do score.
 
-### 6. Limpeza dos dois registros atuais
-- Após aplicar a correção, remover os dois registros travados/duplicados mostrados no print ou deixar apenas um registro canônico para reprocessamento.
-- Reprocessar a guia válida ponta a ponta.
-- Confirmar no banco:
-  - `guias.status = enviada` ou erro real do provedor registrado
-  - `guia_envios` com canal `whatsapp`
-  - destinatário `+5555999699631`
-  - evento `whatsapp_sent` ou motivo exato da falha
+### 2. Teste end‑to‑end no número +55 55 99969‑9631
 
-### 7. Validação end to end
-- Testar o clique de excluir no Dashboard e na fila.
-- Testar `Processar agora` em guia travada.
-- Conferir logs das funções `run-guide-scan-now`, `dispatch-guide`, `delete-guia` e `send-whatsapp-message`.
-- Só considerar concluído quando houver envio registrado ou erro real do provedor WhatsApp visível na auditoria.
+- Atualizar o secret `WHATSAPP_TEST_TO` para `+5555999699631` (substitui o valor atual de testes).
+- Rodar `run-guide-scan-now` com `{ run_full_pipeline: true, force_dispatch: true }` para a guia DARF 05/2026 (id `21.205.304/0001-65`), em modo teste. Isso usa a configuração atual de modo teste e dispara via `send-whatsapp-message` → Meta Cloud API para o `WHATSAPP_TEST_TO`.
+- Conferir resposta da Meta (`message_id`), `guia_envios.provider_status` e `guia_eventos` para confirmar `enviada_teste`.
+
+## Fora de escopo
+
+- Mudar lógica de identificação por razão social (FGTS) — já existe e continua valendo.
+- Webhook do WhatsApp, Drive/Gmail, Fator R, Reforma Tributária, Classifica.
+- Alterações de schema.
+
+## Confirmação rápida
+
+O teste será **em modo teste** (não move o PDF para a pasta de Enviadas de produção e marca a guia como `enviada_teste`). Confirma que pode trocar o `WHATSAPP_TEST_TO` para `+5555999699631`?
