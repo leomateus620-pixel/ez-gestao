@@ -811,25 +811,42 @@ export function extractMetadata(text: string): GuideMetadata {
   const codigoBarras = extractor.fields.codigoBarras ?? extractCodigoBarras(normalized);
   const identificador = extractor.fields.identificador ?? extractIdentificador(normalized);
 
+  // FGTS Digital fields (always best-effort; only consumed when tipo === 'fgts').
+  const isFgts = classification.tipo === 'fgts';
+  const empregadorRaw = isFgts ? extractEmpregadorDocumento(normalized) : null;
+  const empregadorDoc = classifyEmpregadorDocument(empregadorRaw);
+  const empregadorNome = isFgts ? extractEmpregadorNome(normalized) : null;
+  const fgtsIdentificador = isFgts ? (extractFgtsIdentificador(normalized) || identificador.value) : identificador.value;
+  const subtipo = isFgts && /\bgfd\b|guia\s+do\s+fgts\s+digital|fgts\s+digital/i.test(normalized) ? 'fgts_digital_gfd' : null;
+
+  const razaoSocialField: FieldEvidence<string | null> | undefined = isFgts && empregadorNome
+    ? validField(empregadorNome, 0.98, 'Nome/Razão Social do Empregador', 'fgts_employer_name_exact', 'Razão social extraída do campo do empregador na guia FGTS Digital.', empregadorNome)
+    : undefined;
+
   return {
     cnpjCandidates: validCnpjs.map((candidate) => candidate.value),
     allCnpjCandidates: cnpjOccurrences,
     invalidCnpjCandidates: invalidCnpjs,
     primaryCnpj,
     cnpjAmbiguous: validCnpjs.length > 1,
-    razaoSocial: extractRazaoSocial(normalized, primaryCnpj),
+    razaoSocial: empregadorNome || extractRazaoSocial(normalized, primaryCnpj),
     competencia: competencia.value,
     vencimento: vencimento.value,
     valor: valor.value,
     valorRaw: valor.raw ?? null,
     codigoBarras: codigoBarras.value,
-    identificador: identificador.value,
+    identificador: fgtsIdentificador,
+    subtipo,
+    empregadorDocumentoRaw: empregadorRaw,
+    empregadorDocumentoTipo: empregadorDoc.tipo,
+    empregadorNomeRazaoSocial: empregadorNome,
     fields: {
       cnpj: cnpjField,
       tipo_guia: typeField,
       competencia,
       vencimento,
       valor,
+      ...(razaoSocialField ? { razao_social: razaoSocialField } : {}),
     },
   };
 }
@@ -868,11 +885,21 @@ function barcodeAmount(text: string | null): number | null {
 
 export function collectValidationIssues(metadata: GuideMetadata, classification: ClassifyResult): ExtractionIssue[] {
   const issues: ExtractionIssue[] = [];
+  const isFgtsWithEmployerName = classification.tipo === 'fgts' && !!metadata.empregadorNomeRazaoSocial;
   if (metadata.invalidCnpjCandidates.length > 0 && metadata.cnpjCandidates.length === 0) {
     issues.push({ code: 'cnpj_invalid', severity: 'error', message: 'CNPJ encontrado com digitos verificadores invalidos.', field: 'cnpj' });
   }
   if (metadata.cnpjCandidates.length === 0) {
-    issues.push({ code: 'cnpj_missing', severity: 'error', message: 'Nenhum CNPJ valido encontrado.', field: 'cnpj' });
+    if (isFgtsWithEmployerName) {
+      issues.push({
+        code: 'fgts_partial_employer_document',
+        severity: 'info',
+        message: 'FGTS Digital sem CNPJ completo; identificacao seguira pela razao social do empregador.',
+        field: 'cnpj',
+      });
+    } else {
+      issues.push({ code: 'cnpj_missing', severity: 'error', message: 'Nenhum CNPJ valido encontrado.', field: 'cnpj' });
+    }
   }
   if (metadata.cnpjCandidates.length > 1) {
     issues.push({ code: 'multiple_cnpj', severity: 'warning', message: 'Mais de um CNPJ valido encontrado no PDF.', field: 'cnpj' });
@@ -881,6 +908,8 @@ export function collectValidationIssues(metadata: GuideMetadata, classification:
     issues.push({ code: 'guide_type_low_confidence', severity: 'warning', message: 'Tipo de guia abaixo do limite de automacao.', field: 'tipo_guia' });
   }
   for (const [field, evidence] of Object.entries(metadata.fields)) {
+    // For FGTS sem CNPJ + razao_social presente, nao tratar o campo cnpj como bloqueio.
+    if (field === 'cnpj' && isFgtsWithEmployerName) continue;
     if (evidence.status === 'missing') {
       issues.push({ code: `${field}_missing`, severity: 'warning', message: `Campo critico ausente: ${field}.`, field });
     }
@@ -910,6 +939,20 @@ export function calculateConfidence(metadata: GuideMetadata, classification: Cla
   const competencia = metadata.fields.competencia.status === 'valid' ? metadata.fields.competencia.confidence : 0;
   const vencimento = metadata.fields.vencimento.status === 'valid' ? metadata.fields.vencimento.confidence : 0;
   const valor = metadata.fields.valor.status === 'valid' ? metadata.fields.valor.confidence : 0;
+  // FGTS alternative weighting: when there is no full CNPJ but the employer
+  // legal name is present, use razao_social as the anchor field.
+  const isFgtsAlt = classification.tipo === 'fgts'
+    && metadata.fields.cnpj.status !== 'valid'
+    && !!metadata.fields.razao_social?.value
+    && cnpjMatchedCompany; // only when an exact name/alias match was found upstream
+  if (isFgtsAlt) {
+    const company = metadata.fields.razao_social!.confidence;
+    const overall = (company * 0.40) + (tipo * 0.20) + (competencia * 0.15) + (vencimento * 0.15) + (valor * 0.10);
+    return {
+      fieldConfidence: { cnpj: 0, tipo, competencia, vencimento, valor },
+      overallConfidence: Number(overall.toFixed(2)),
+    };
+  }
   const overall = (cnpj * 0.30) + (tipo * 0.20) + (competencia * 0.15) + (vencimento * 0.17) + (valor * 0.18);
   return {
     fieldConfidence: { cnpj, tipo, competencia, vencimento, valor },
@@ -942,6 +985,27 @@ export function hasCriticalFieldProblem(fields: Record<string, FieldEvidence<any
 
 export async function dedupHash(parts: { cnpj: string; tipo: string; competencia: string | null; vencimento: string | null; valor: number | null }): Promise<string> {
   const raw = `${normalizeCnpj(parts.cnpj)}|${parts.tipo}|${parts.competencia || ''}|${parts.vencimento || ''}|${parts.valor == null ? '' : Number(parts.valor).toFixed(2)}`;
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** FGTS-aware dedup hash that does not depend on full CNPJ. */
+export async function dedupHashFgts(parts: {
+  empresaId: string;
+  tipo: string;
+  competencia: string | null;
+  vencimento: string | null;
+  valor: number | null;
+  identificadorGuia: string | null;
+}): Promise<string> {
+  const raw = [
+    parts.empresaId,
+    parts.tipo,
+    parts.competencia || '',
+    parts.vencimento || '',
+    parts.valor == null ? '' : Number(parts.valor).toFixed(2),
+    parts.identificadorGuia || '',
+  ].join('|');
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
