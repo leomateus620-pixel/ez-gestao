@@ -1039,7 +1039,14 @@ async function processOneGuide(
     channels: dispatchPlans.map((plan) => plan.channel),
   }, "info", options.batchId);
 
-  if (mode === "teste" || route.readyButAwaitingApproval) {
+  if ((mode === "teste" && !options.forceDispatch) || route.readyButAwaitingApproval) {
+    await logEvent(db, guide.id, "auto_dispatch_blocked", route.reason, {
+      mode,
+      reason: route.reason,
+      operation_level: config.operation_level,
+      auto_dispatch_enabled: config.auto_dispatch_enabled,
+      require_batch_approval: config.require_batch_approval,
+    }, "info", options.batchId);
     return {
       status: "pronta_envio",
       reason: mode === "teste" ? "test_preview_only" : "awaiting_approval",
@@ -1060,6 +1067,11 @@ async function processOneGuide(
     };
   }
 
+  await logEvent(db, guide.id, "auto_dispatch_approved", "Pipeline completo: dispatch automatico aprovado.", {
+    mode,
+    forced: options.forceDispatch,
+    channels: dispatchPlans.map((plan) => plan.channel),
+  }, "info", options.batchId);
   const results = await dispatchGuide(db, guide, matched, metadata, classification, bytes, dispatchPlans, gmailKey, mode, options.batchId);
   const allOk = results.every((result) => result.status === "aceito" || result.status === "entregue" || result.skipped === "already_sent");
   if (!allOk) {
@@ -1068,6 +1080,11 @@ async function processOneGuide(
     return { status: "erro", reason: "dispatch_failed", results, confidence: confidence.overallConfidence };
   }
 
+  if (mode === "teste") {
+    // Test dispatch went to test recipients only — do NOT move Drive file to production "Enviadas".
+    await db.from("guias").update({ status: "enviada_teste", sent_at: new Date().toISOString() }).eq("id", guide.id);
+    return { status: "enviada_teste", reason: "sent_test", results, confidence: confidence.overallConfidence };
+  }
   await organizeSentFile(db, guide, driveKey, folders, matched, metadata, classification, options.batchId);
   return { status: "enviada", reason: "sent", results, confidence: confidence.overallConfidence };
 }
