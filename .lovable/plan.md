@@ -1,52 +1,41 @@
-## Diagnóstico — por que o WhatsApp não disparou
+## Diagnóstico
 
-Consultei o banco. As duas guias da imagem têm status que **bloqueiam envio por design** — o problema não está no WhatsApp em si:
+### 1) "Processar agora" não envia nada
+O botão chama `run-guide-scan-now` **sem `guide_ids`**, então ele só varre a pasta do Drive em busca de arquivos novos. As duas guias que aparecem como `duplicada` e `nao_identificada` (TARIFA ZERO) já estão em subpastas (`duplicadas/`, `nao_identificadas/`) e têm `dedup_hash` salvo — a varredura as ignora. Resultado: clicar em "Processar agora" não reprocessa as guias paradas. Só novos PDFs disparariam o envio.
 
-| Guia | Status real | Motivo registrado |
-|---|---|---|
-| 1ª (14:45) | `duplicada` | "Duplicidade exata por hash de arquivo" — é o mesmo PDF reprocessado |
-| 2ª (14:18) FGTS | `nao_identificada` | "CNPJ invalido no PDF" — barrada **antes** do fallback por razão social |
+Além disso, a guia "nao_identificada" da TARIFA ZERO já tem `revisao_correcoes` aplicada (empresa correta, valor, vencimento, competência), mas ficou bloqueada por `dispatch_blocked_reason = "CNPJ invalido no PDF."` — o early-return de CNPJ inválido em `routeGuide` impediu o fallback FGTS por razão social na primeira passada. Hoje não há nada na UI que force o reprocesso individual dessas guias travadas.
 
-Secrets do WhatsApp (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEST_TO`) estão configurados, e `guide_test_config` está em `modo_global=producao`. Ou seja, o pipeline dispararia — mas nenhuma das duas guias chegou no estágio de envio.
+### 2) Não consegue excluir guias com erro
+- O botão "Excluir" só existe no card **Fluxo recente do Dashboard** (`GuideFlowRow`). Não existe na lista `/guias`, nem em `/guias/:id`, nem em Revisão Manual. Se o usuário está em `/guias` ou no detalhe, simplesmente não há botão.
+- O Dashboard registrou no console (build anterior) `ReferenceError: GuideFlowRow is not defined`. Pode ser HMR antigo, mas vou validar com Playwright para garantir que o botão renderiza hoje.
+- A função `delete-guia` tenta gravar em `guide_audit` colunas que não existem (`actor_user_id`, `payload`). A tabela tem `actor`, `action`, `before`, `after`. A insert falha mas está em try/catch, então a exclusão ainda funciona — porém o log de auditoria nunca é registrado.
 
-**Causa raiz da 2ª guia (a única "salvável"):** no `routeGuide`, a checagem `cnpj.status === "invalid"` (linha 411) retorna `nao_identificada` **antes** do fallback FGTS por razão social. O fallback só roda para `status !== "valid"` na linha 416, mas nunca é alcançado porque o early-return já disparou. O "21.205.304" parcial do GFD é classificado como inválido (não como missing), por isso cai no ramo errado.
+## Plano de correção
 
-## Plano
+### A. Reprocessar guias paradas a partir da UI
+1. Em `GuideProvider.scan`: quando houver guias em status terminal mas reprocessáveis (`nao_identificada`, `duplicada`, `erro`, `revisao_manual` com `revisao_correcoes`), enviar `guide_ids` dessas guias junto com `run_full_pipeline: true` e `force_dispatch: true` para o `run-guide-scan-now`. Assim "Processar agora" passa a também reprocessar o que está travado.
+2. Em `run-guide-scan-now`: quando `guide_ids` for fornecido com `force_dispatch`, ignorar `dedup_hash` e o bloqueio "duplicada por hash exato" para esses IDs (releitura autorizada), e reaplicar `revisao_correcoes` antes de rotear.
+3. Confirmar que o fallback FGTS por razão social roda mesmo com `cnpj.status === 'invalid'` (já está no código, mas a guia em questão ficou com `decision_reason = "CNPJ invalido no PDF."` — validar com curl no edge function após o ajuste e ler logs).
+4. Botão individual "Processar agora" no detalhe da guia (`GuiaDetalhe.tsx`) e na lista `/guias` — invoca `dispatch-guide` com `{ guide_id, force_dispatch: true, manual_approval: true }` para reprocessar apenas aquela guia.
 
-### 1. Corrigir fallback FGTS por razão social (root cause do não-envio)
-**`supabase/functions/run-guide-scan-now/index.ts` — `routeGuide`:**
-- Antes do early-return de `cnpj.status === "invalid"`, computar `fgtsEmployerMatched` e pular o bloqueio quando `tipo === "fgts" && matched && razao_social válida`. Mesma lógica já existente para `"missing"`, estendida para `"invalid"`.
-- Garantir que `matchCompanyForFGTSGuide` rode mesmo com CNPJ inválido (verificar que `matched` é populado a partir do nome quando o CNPJ não bate). Se hoje só roda no caminho missing, replicar para invalid usando o documento parcial classificado como `documento_parcial`.
-- `critical_fields_json.match_method` continua registrando o método (`exact_normalized_legal_name`, etc.) para auditoria.
+### B. Excluir guias em todos os lugares
+1. Adicionar botão "Excluir" (ícone lixeira + `AlertDialog`) em:
+   - `src/pages/guias/Guias.tsx` — em cada linha/card da lista.
+   - `src/pages/guias/GuiaDetalhe.tsx` — no header de ações, redirecionando para `/guias` após sucesso.
+2. Garantir que o `GuideFlowRow` do Dashboard renderize sem erro (validar com Playwright e screenshot).
+3. Corrigir `supabase/functions/delete-guia/index.ts` para gravar auditoria com as colunas reais (`actor`, `action`, `after` com `{motivo, file_name, status, tipo_guia}`), removendo `actor_user_id`/`payload`. Manter try/catch defensivo, mas dessa vez a inserção vai funcionar.
 
-Resultado esperado: guia FGTS com CNPJ parcial + razão social única → vira `pronta_envio` e dispara WhatsApp para `whatsapp_principal` da empresa (modo produção).
+### C. Validação
+- `bunx vitest run src/features/guias` para não regredir os testes do parser FGTS.
+- Playwright: navegar `/`, `/guias`, `/guias/:id`, capturar screenshots dos botões de excluir/processar; clicar "Processar agora" e confirmar via `supabase--read_query` que a guia TARIFA ZERO mudou de `nao_identificada` → `pronta_envio` ou `enviada` e que `guia_envios` recebeu uma linha WhatsApp.
+- `supabase--edge_function_logs run-guide-scan-now` para confirmar caminho do envio.
 
-### 2. Excluir guias do Fluxo recente
-**Backend** — nova edge function `delete-guia`:
-- Recebe `{ guia_id }`, exige auth.
-- Apaga linhas de `guia_envios`, `guia_eventos`, `guia_exceptions` ligadas; remove arquivo do Storage (bucket de PDFs) se houver `storage_path`; deleta `guias`.
-- Loga `guia_eventos` em tabela `guia_audit_log` (registro de exclusão com user_id + motivo opcional).
-- Permitido para qualquer status (não só duplicada/erro), pois é ação manual operador.
+## Critérios de aceitação
+- Em `/`, `/guias` e `/guias/:id` é possível excluir uma guia, com confirmação e auditoria gravada.
+- Clicar em "Processar agora" reprocessa as guias paradas (`nao_identificada`, `duplicada`, `erro`) — a guia TARIFA ZERO atual deve sair de `nao_identificada` e gerar um envio WhatsApp para `+5555999699631`.
+- Botão individual "Processar agora" funciona no detalhe e na lista.
+- Build e testes existentes passam.
 
-**Frontend** — `src/pages/Dashboard.tsx` (`Fluxo recente`):
-- Adicionar botão ícone "lixeira" (ghost, ao lado do `ChevronIcon`) em cada `guide-flow-row`.
-- Click abre `AlertDialog` shadcn ("Excluir guia X? Esta ação remove arquivo, eventos e histórico.").
-- Confirmação chama `useMutation` que invoca a edge function e invalida `['guias']`.
-- Não navega ao detalhe quando o clique é no botão (stopPropagation).
-- Mesmo botão na lista `/guias/fila` (`src/pages/guias/Guias.tsx`) e na página de detalhe (`GuiaDetalhe.tsx`), reutilizando o mesmo hook `useDeleteGuide` em `useGuideOps.ts`.
-
-### 3. Auditoria e mensagens
-- `decision_reason` da 2ª guia será atualizado para refletir o caminho FGTS quando reprocessada (não há migração retroativa — basta clicar "Processar agora" depois do fix; ou usar o botão excluir e reenviar o PDF).
-- Documentar no `docs/guias-automation.md`: novo comportamento do fallback para CNPJ inválido + endpoint `delete-guia`.
-
-### 4. Fora de escopo
-- Mudanças no parser GFD (já feito turno anterior).
-- Mudança no pipeline de envio WhatsApp em si (funciona; verificado pelos secrets).
-- Reprocessar automaticamente guias antigas.
-
-## Critérios de aceite
-- Botão de excluir aparece e funciona no Fluxo recente, lista da fila e detalhe.
-- Após exclusão, a guia some das listas sem refresh manual.
-- Guia FGTS com CNPJ parcial + razão social única em empresa ativa: ao clicar "Processar agora" vira `pronta_envio` e dispara WhatsApp/e-mail para a empresa.
-- Guia FGTS com razão social ambígua continua em `revisao_manual`.
-- Build e testes existentes (`fgts-digital.test.ts`, `guide-rules.test.ts`) passam.
+## Fora de escopo
+- Mudanças no parser do PDF (CNJ parcial já é tratado pelo fallback de razão social).
+- Mudanças no serviço WhatsApp em si.
