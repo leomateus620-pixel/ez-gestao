@@ -56,6 +56,33 @@ Google Drive e Gmail continuam usando exclusivamente os gateways Lovable:
    atualiza `guia_envios.provider_status`, `delivered_at` e `failed_at`. Não
    reenvia automaticamente em falhas.
 
+### Botao "Processar agora" (pipeline completo)
+
+O botao **Processar agora** no Dashboard chama `run-guide-scan-now` com
+`{ "run_full_pipeline": true }`. Esse flag faz a Edge Function executar o
+pipeline inteiro (scan -> parse -> validate -> route -> dispatch -> Drive)
+sem exigir aprovacao manual de lote, mesmo quando o `guide_test_config`
+esta em `somente_classificacao`, `require_batch_approval = true` ou
+`auto_dispatch_enabled = false`. Continuam bloqueando o envio automatico:
+
+- duplicidade, ambiguidade, empresa inativa, campos criticos invalidos;
+- conector inativo (Gmail/WhatsApp/Drive);
+- template ou destinatario ausente/invalido;
+- valor acima do `high_value_threshold` (exige `manual_approval`).
+
+Em **modo teste** com `run_full_pipeline=true`, o dispatch acontece para os
+destinatarios de teste (`email_teste` / `whatsapp_teste`) e a guia recebe
+`status = enviada_teste` (o PDF nao e movido para a pasta de Enviadas de
+producao). Sem destinatarios de teste configurados, o pipeline cai em
+quarentena com `destination_missing`.
+
+Quando o envio fica bloqueado por configuracao, o motivo exato e gravado
+em `guias.dispatch_blocked_reason` e em `guias.decision_reason`
+(ex.: `auto_dispatch_disabled`, `requires_batch_approval`,
+`operation_level_blocks:somente_classificacao`,
+`high_value_requires_approval:>=50000`). A fila do dashboard exibe esses
+motivos no card da guia.
+
 ## Deploy Supabase
 
 Aplicar a migration `20260526120000_guide_delivery_pipeline.sql` e publicar as
