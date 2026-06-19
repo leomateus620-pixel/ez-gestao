@@ -623,7 +623,7 @@ async function dispatchGuide(
           body: JSON.stringify({
             to: normalized,
             guide_id: guide.id,
-            modo,
+            modo: mode,
             template_name: tpl.meta_template_name || 'envio_guia_fiscal',
             language: tpl.meta_template_language || 'pt_BR',
             has_document_header: Boolean(tpl.meta_template_has_document_header && linkGuia),
