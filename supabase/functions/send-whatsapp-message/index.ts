@@ -130,11 +130,3 @@ serve(async (req) => {
     raw: { contacts: respJson?.contacts ?? null, messages: respJson?.messages ?? null },
   }), { headers: cors });
 });
-      const max = msg?.max_attempts ?? 3;
-      const finalStatus = attempts >= max ? "failed" : "queued";
-      await supabase.from("whatsapp_messages").update({ attempts, status: finalStatus, failed_at: finalStatus === "failed" ? new Date().toISOString() : null, last_error: String(err) }).eq("id", messageId);
-      await supabase.from("whatsapp_message_events").insert({ message_id: messageId, event_type: "failed", payload: { error: String(err) } });
-    }
-    return new Response(JSON.stringify({ ok: false, error: "Não foi possível enviar sua mensagem de WhatsApp agora." }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  }
-});
