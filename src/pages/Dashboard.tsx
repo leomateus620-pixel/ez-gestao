@@ -476,3 +476,76 @@ function ChevronIcon() {
     </span>
   );
 }
+
+interface GuideFlowRowProps {
+  guideId: string;
+  fileName: string;
+  companyLabel: string;
+  statusLabel: string;
+  statusClassName: string;
+  receivedAt: string;
+  tipoGuia?: string | null;
+  competencia?: string | null;
+}
+
+function GuideFlowRow({ guideId, fileName, companyLabel, statusLabel, statusClassName, receivedAt, tipoGuia, competencia }: GuideFlowRowProps) {
+  const deleteGuide = useDeleteGuide();
+  return (
+    <div className="guide-flow-row guide-tilt-card group relative">
+      <Link to={`/guias/${guideId}`} className="absolute inset-0 z-0" aria-label={`Abrir ${fileName}`} />
+      <div className="guide-flow-marker pointer-events-none relative z-10" aria-hidden>
+        <span />
+      </div>
+      <div className="pointer-events-none relative z-10 min-w-0 flex-1">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-[hsl(var(--text-primary))]">{fileName}</p>
+            <p className="mt-1 text-xs font-medium text-[hsl(var(--text-secondary))]">{companyLabel}</p>
+          </div>
+          <GuidePill label={statusLabel} className={statusClassName} />
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-medium text-[hsl(var(--text-tertiary))]">
+          <span>{formatDateTime(receivedAt)}</span>
+          {tipoGuia && <span>{tipoGuia}</span>}
+          {competencia && <span>Competência {competencia}</span>}
+        </div>
+      </div>
+      <div className="relative z-10 flex items-center gap-1">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-[hsl(var(--text-tertiary))] hover:text-destructive"
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              aria-label="Excluir guia"
+              disabled={deleteGuide.isPending}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir esta guia?</AlertDialogTitle>
+              <AlertDialogDescription>
+                A guia <strong>{fileName}</strong> será removida da fila junto com seus envios, eventos e exceções.
+                Esta ação não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deleteGuide.mutate({ guia_id: guideId, motivo: 'Excluida pelo operador no Fluxo recente' })}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        <ChevronIcon />
+      </div>
+    </div>
+  );
+}
