@@ -67,7 +67,7 @@ function ConnectorCard({ integration, folders, onTest, onBootstrap, bootstrappin
   const isConnected = integration.status === 'ativo' || integration.status === 'configurado';
   const [testDest, setTestDest] = useState('');
   const testCanal: 'email' | 'whatsapp' | null = integration.provider === 'gmail' ? 'email'
-    : integration.provider === 'twilio_whatsapp' ? 'whatsapp' : null;
+    : integration.provider === 'whatsapp' ? 'whatsapp' : null;
   return (
     <GlassCard variant="elevated" className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
@@ -112,6 +112,17 @@ function ConnectorCard({ integration, folders, onTest, onBootstrap, bootstrappin
             <Button size="sm" variant="outline" onClick={onBootstrap} disabled={bootstrapping} className="w-full">
               <FolderCog className="mr-2 h-3.5 w-3.5" /> {bootstrapping ? 'Revalidando...' : 'Revalidar pastas no Drive'}
             </Button>
+          )}
+        </div>
+      )}
+      {integration.provider === 'whatsapp' && (
+        <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-[11px] text-foreground/76 space-y-1">
+          <p>Provedor: <span className="font-mono">meta_cloud_api</span></p>
+          <p>API: <span className="font-mono">{(integration as unknown as { apiVersion?: string }).apiVersion || '—'}</span></p>
+          <p>Webhook: <span className="font-mono">{(integration as unknown as { webhookConfigured?: boolean }).webhookConfigured ? 'configurado' : 'pendente'}</span></p>
+          <p>WHATSAPP_TEST_TO: <span className="font-mono">{(integration as unknown as { testToConfigured?: boolean }).testToConfigured ? 'configurado' : 'ausente'}</span></p>
+          {!(integration as unknown as { testToConfigured?: boolean }).testToConfigured && (
+            <p className="text-warning">Configure WHATSAPP_TEST_TO antes de testar.</p>
           )}
         </div>
       )}
