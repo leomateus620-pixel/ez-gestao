@@ -766,7 +766,10 @@ async function processOneGuide(
   await db.from("guias").update({ status: "processando", modo: mode, operation_batch_id: options.batchId }).eq("id", guide.id);
   await logEvent(db, guide.id, "scan_started", "Processamento da guia iniciado.", { mode }, "info", options.batchId);
 
-  const exactBeforeDownload = guide.sha256
+  // When the operator forces reprocess (Processar agora on a stuck guia),
+  // do NOT treat its twin as a duplicate up-front — the operator explicitly
+  // asked to re-run the pipeline for this record.
+  const exactBeforeDownload = guide.sha256 && !options.forceDispatch
     ? await db.from("guias")
       .select("id,status,file_name")
       .eq("sha256", guide.sha256)
