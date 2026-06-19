@@ -12,12 +12,12 @@ import { formatDateTime } from '@/lib/formatters';
 import { supabase } from '@/integrations/supabase/client';
 import googleDriveLogo from '@/assets/connectors/google-drive.svg';
 import gmailLogo from '@/assets/connectors/gmail.svg';
-import twilioLogo from '@/assets/connectors/twilio.svg';
 import { toast } from 'sonner';
 
 const icons: Record<IntegrationProvider, typeof FileText> = {
   google_drive: FolderInput,
   gmail: Mail,
+  whatsapp: MessageCircle,
   twilio_whatsapp: MessageCircle,
   pdf_native_reader: FileText,
 };
@@ -25,20 +25,24 @@ const icons: Record<IntegrationProvider, typeof FileText> = {
 const logos: Record<IntegrationProvider, string | null> = {
   google_drive: googleDriveLogo,
   gmail: gmailLogo,
-  twilio_whatsapp: twilioLogo,
+  whatsapp: null,
+  twilio_whatsapp: null,
   pdf_native_reader: null,
 };
 
 const providerLabels: Record<IntegrationProvider, string> = {
   google_drive: 'Google Drive',
   gmail: 'Gmail',
-  twilio_whatsapp: 'Twilio WhatsApp',
+  whatsapp: 'WhatsApp Cloud API (Meta)',
+  twilio_whatsapp: 'Twilio WhatsApp (legado)',
   pdf_native_reader: 'Leitura PDF nativa',
 };
 
 const providerDescriptions: Partial<Record<IntegrationProvider, string>> = {
   pdf_native_reader:
     'Extração direta de texto em PDFs digitais, sem OCR externo. PDFs escaneados são enviados para Exceções.',
+  whatsapp:
+    'Envio oficial via Meta Cloud API (Graph). Templates aprovados, header document quando aplicável, webhook de status.',
 };
 
 type Folders = {
