@@ -63,12 +63,17 @@ export interface GuideMetadata {
   valorRaw: string | null;
   codigoBarras: string | null;
   identificador: string | null;
+  subtipo: string | null;
+  empregadorDocumentoRaw: string | null;
+  empregadorDocumentoTipo: 'cnpj_completo' | 'cnpj_raiz' | 'documento_parcial' | 'cpf' | null;
+  empregadorNomeRazaoSocial: string | null;
   fields: {
     cnpj: FieldEvidence<string | null>;
     tipo_guia: FieldEvidence<TipoGuia | null>;
     competencia: FieldEvidence<string | null>;
     vencimento: FieldEvidence<string | null>;
     valor: FieldEvidence<number | null>;
+    razao_social?: FieldEvidence<string | null>;
   };
 }
 
