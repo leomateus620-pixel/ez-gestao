@@ -1,61 +1,52 @@
-## Objetivo
+## Diagnóstico — por que o WhatsApp não disparou
 
-Fazer com que "Processar agora" execute o pipeline completo e dispare o envio automaticamente quando a guia estiver segura, inclusive para FGTS Digital identificado por razão social/alias. Hoje a guia chega em `pronta_envio` mas fica parada porque a configuração padrão (`auto_dispatch_enabled=false`, `operation_level=somente_classificacao`, `require_batch_approval=true`) bloqueia o dispatch, e o frontend não mostra o motivo real.
+Consultei o banco. As duas guias da imagem têm status que **bloqueiam envio por design** — o problema não está no WhatsApp em si:
 
-## Diagnóstico rápido
+| Guia | Status real | Motivo registrado |
+|---|---|---|
+| 1ª (14:45) | `duplicada` | "Duplicidade exata por hash de arquivo" — é o mesmo PDF reprocessado |
+| 2ª (14:18) FGTS | `nao_identificada` | "CNPJ invalido no PDF" — barrada **antes** do fallback por razão social |
 
-Em `supabase/functions/run-guide-scan-now/index.ts`:
+Secrets do WhatsApp (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEST_TO`) estão configurados, e `guide_test_config` está em `modo_global=producao`. Ou seja, o pipeline dispararia — mas nenhuma das duas guias chegou no estágio de envio.
 
-- `routeGuide` (linhas ~495-516) marca `readyButAwaitingApproval=true` sempre que `operation_level` é `somente_classificacao`/`leitura_revisao`, `require_batch_approval=true` ou `auto_dispatch_enabled=false`. O padrão atual de `guide_test_config` cai em todos esses casos, então toda guia vai para `pronta_envio` "aguardando aprovação".
-- `processOneGuide` (linhas ~1032-1051) também retorna sem dispatch quando `mode === "teste"`, sem distinguir teste com destinatário configurado vs. teste sem destinatário.
-- Quando o usuário clica "Processar agora" no card, não há um sinal explícito de "rodar pipeline completo" — só o `force_dispatch` opcional, que existe mas não é usado pelo botão.
-- O frontend (`Guias.tsx`, `GuiaDetalhe.tsx`) mostra `pronta_envio` como item de fila sem expor `dispatch_blocked_reason`.
+**Causa raiz da 2ª guia (a única "salvável"):** no `routeGuide`, a checagem `cnpj.status === "invalid"` (linha 411) retorna `nao_identificada` **antes** do fallback FGTS por razão social. O fallback só roda para `status !== "valid"` na linha 416, mas nunca é alcançado porque o early-return já disparou. O "21.205.304" parcial do GFD é classificado como inválido (não como missing), por isso cai no ramo errado.
 
-## Mudanças (escopo focado, sem mexer no parser FGTS já aprovado)
+## Plano
 
-### 1. Edge Function `run-guide-scan-now`
+### 1. Corrigir fallback FGTS por razão social (root cause do não-envio)
+**`supabase/functions/run-guide-scan-now/index.ts` — `routeGuide`:**
+- Antes do early-return de `cnpj.status === "invalid"`, computar `fgtsEmployerMatched` e pular o bloqueio quando `tipo === "fgts" && matched && razao_social válida`. Mesma lógica já existente para `"missing"`, estendida para `"invalid"`.
+- Garantir que `matchCompanyForFGTSGuide` rode mesmo com CNPJ inválido (verificar que `matched` é populado a partir do nome quando o CNPJ não bate). Se hoje só roda no caminho missing, replicar para invalid usando o documento parcial classificado como `documento_parcial`.
+- `critical_fields_json.match_method` continua registrando o método (`exact_normalized_legal_name`, etc.) para auditoria.
 
-- Aceitar nova flag `run_full_pipeline: true` no body. Quando o botão "Processar agora" enviar essa flag:
-  - Tratar como `forceDispatch = true` para fins de bypass de `auto_dispatch_enabled`, `operation_level` e `require_batch_approval` — desde que as validações de segurança (campos críticos, empresa ativa, sem duplicidade, template/destinatário/conector OK) passem.
-  - Não bypass de: `mode=teste` (continua redirecionando para destinatário de teste), duplicidade, ambiguidade, valor acima do `high_value_threshold`, conector inativo.
-- Em `routeGuide`, separar `awaiting_approval` em motivos discretos e gravar em `dispatch_blocked_reason` o motivo exato (`auto_dispatch_disabled`, `operation_level_blocks`, `requires_batch_approval`, `high_value_requires_approval`, `mode_test_preview_only`).
-- Em modo `teste`, se `email_teste`/`whatsapp_teste` estiverem configurados e `run_full_pipeline=true`, executar dispatch real para o destinatário de teste e marcar `guia_envios.status = 'aceito'` com `modo='teste'` e `guias.status = 'enviada_teste'` (sem mover para Enviadas/produção). Senão, manter preview.
-- Garantir que o caminho FGTS sem CNPJ completo já existente (com `matched` + `fgtsNameBased`) passa pela mesma porta de dispatch (já passa, é só não bloquear pelo flag).
+Resultado esperado: guia FGTS com CNPJ parcial + razão social única → vira `pronta_envio` e dispara WhatsApp para `whatsapp_principal` da empresa (modo produção).
 
-### 2. Confiança FGTS
+### 2. Excluir guias do Fluxo recente
+**Backend** — nova edge function `delete-guia`:
+- Recebe `{ guia_id }`, exige auth.
+- Apaga linhas de `guia_envios`, `guia_eventos`, `guia_exceptions` ligadas; remove arquivo do Storage (bucket de PDFs) se houver `storage_path`; deleta `guias`.
+- Loga `guia_eventos` em tabela `guia_audit_log` (registro de exclusão com user_id + motivo opcional).
+- Permitido para qualquer status (não só duplicada/erro), pois é ação manual operador.
 
-- Em `_shared/guide-parser.ts` (`calculateConfidence`), adicionar branch específico para `tipo='fgts'` quando `cnpj.status !== 'valid'` mas `match_method` está em {`exact_normalized_legal_name`, `alias_exact`, `exact_normalized_no_legal_terms`, `cnpj_raiz_unique`}: usar pesos solicitados (empresa 0.40, tipo 0.20, competência 0.15, vencimento 0.15, valor 0.10) — não penalizar pelo CNPJ ausente. Para `similarity` continua < 0.92.
+**Frontend** — `src/pages/Dashboard.tsx` (`Fluxo recente`):
+- Adicionar botão ícone "lixeira" (ghost, ao lado do `ChevronIcon`) em cada `guide-flow-row`.
+- Click abre `AlertDialog` shadcn ("Excluir guia X? Esta ação remove arquivo, eventos e histórico.").
+- Confirmação chama `useMutation` que invoca a edge function e invalida `['guias']`.
+- Não navega ao detalhe quando o clique é no botão (stopPropagation).
+- Mesmo botão na lista `/guias/fila` (`src/pages/guias/Guias.tsx`) e na página de detalhe (`GuiaDetalhe.tsx`), reutilizando o mesmo hook `useDeleteGuide` em `useGuideOps.ts`.
 
-### 3. Frontend
+### 3. Auditoria e mensagens
+- `decision_reason` da 2ª guia será atualizado para refletir o caminho FGTS quando reprocessada (não há migração retroativa — basta clicar "Processar agora" depois do fix; ou usar o botão excluir e reenviar o PDF).
+- Documentar no `docs/guias-automation.md`: novo comportamento do fallback para CNPJ inválido + endpoint `delete-guia`.
 
-- `src/pages/guias/Guias.tsx` e `src/features/guias/useGuideOps.ts`: enviar `run_full_pipeline: true` quando o usuário clicar em "Processar agora" no card/dashboard. O botão "Scan rápido" existente continua sem a flag.
-- `src/pages/guias/GuiaDetalhe.tsx` e o card da fila: mostrar `dispatch_blocked_reason` com mensagem legível, ex.:
-  - `auto_dispatch_disabled` → "Identificada, envio automático desativado em Configurações"
-  - `requires_batch_approval` → "Identificada, aguardando aprovação de lote"
-  - `template_missing` / `destination_missing` → "Identificada, template/canal incompleto"
-  - `mode_test_preview_only` → "Modo teste, preview gerado sem envio real"
-- Em `Guias.tsx`, separar visualmente a fila operacional: `aguardando_processamento|processando|enviando` ficam em "Em processamento"; `pronta_envio` com `dispatch_blocked_reason` vai para "Identificadas aguardando configuração" com chamada para a página de Configurações; `revisao_manual|quarentena|erro|nao_identificada|duplicada` continuam em "Precisam de ação".
-
-### 4. Auditoria
-
-- Adicionar eventos `auto_dispatch_approved` e `auto_dispatch_blocked` em `guia_eventos` no momento da decisão (com o motivo exato). Os eventos já existentes (`dispatch_started`, `email_sent`, `whatsapp_sent`, `drive_move_finished`) permanecem.
-
-### 5. Documentação
-
-- Atualizar `docs/guias-automation.md` explicando o novo flag `run_full_pipeline`, os motivos discretos de bloqueio e o comportamento de modo teste com destinatário configurado.
-
-## Fora de escopo
-
-- Mudanças no parser FGTS (já entregues no turno anterior).
-- WhatsApp Cloud API / templates Meta.
-- Mudanças no schema do banco — usamos colunas já existentes (`dispatch_blocked_reason`, `decision_status`, `decision_reason`).
-- Drive/Gmail/Reforma Tributária/Fator R/Classifica.
+### 4. Fora de escopo
+- Mudanças no parser GFD (já feito turno anterior).
+- Mudança no pipeline de envio WhatsApp em si (funciona; verificado pelos secrets).
+- Reprocessar automaticamente guias antigas.
 
 ## Critérios de aceite
-
-- Clicar em "Processar agora" no dashboard envia guias seguras em produção sem aprovação manual.
-- FGTS Digital com razão social exata + demais campos válidos é enviado automaticamente.
-- Modo teste com destinatário configurado envia para o destinatário de teste e marca `enviada_teste`.
-- Guias bloqueadas mostram o motivo exato no card/detalhe.
-- Match aproximado, ambiguidade, duplicidade, conector inativo e campos faltantes continuam bloqueando.
-- Build/tests passam.
+- Botão de excluir aparece e funciona no Fluxo recente, lista da fila e detalhe.
+- Após exclusão, a guia some das listas sem refresh manual.
+- Guia FGTS com CNPJ parcial + razão social única em empresa ativa: ao clicar "Processar agora" vira `pronta_envio` e dispara WhatsApp/e-mail para a empresa.
+- Guia FGTS com razão social ambígua continua em `revisao_manual`.
+- Build e testes existentes (`fgts-digital.test.ts`, `guide-rules.test.ts`) passam.
