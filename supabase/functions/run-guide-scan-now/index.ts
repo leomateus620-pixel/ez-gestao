@@ -408,15 +408,15 @@ function routeGuide(args: {
       reviewLevel: "full",
     };
   }
-  if (metadata.fields.cnpj.status === "invalid") {
-    return { status: "nao_identificada", folder: "not_identified", exceptionType: "cnpj_invalid", reason: "CNPJ invalido no PDF.", action: "Corrigir documento ou revisar manualmente.", severity: "error", reviewLevel: "full" };
-  }
   // FGTS Digital fallback: when there is no full CNPJ but the employer legal name
   // already produced a unique match to an active company, do not block on cnpj.
   const fgtsEmployerMatched = classification.tipo === "fgts"
     && metadata.fields.cnpj.status !== "valid"
     && !!matched
     && !!metadata.fields.razao_social?.value;
+  if (metadata.fields.cnpj.status === "invalid" && !fgtsEmployerMatched) {
+    return { status: "nao_identificada", folder: "not_identified", exceptionType: "cnpj_invalid", reason: "CNPJ invalido no PDF.", action: "Corrigir documento ou revisar manualmente.", severity: "error", reviewLevel: "full" };
+  }
   if (metadata.fields.cnpj.status === "missing" && !fgtsEmployerMatched) {
     return { status: "nao_identificada", folder: "not_identified", exceptionType: "cnpj_missing", reason: "CNPJ ausente no PDF.", action: "Revisar manualmente.", severity: "warning", reviewLevel: "full" };
   }
