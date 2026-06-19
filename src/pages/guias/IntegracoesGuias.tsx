@@ -94,14 +94,19 @@ function ConnectorCard({ integration, folders, onTest, onBootstrap, bootstrappin
           <div className="rounded-xl border border-border/50 bg-muted/20 p-3 text-[11px] text-foreground/76 space-y-1 font-mono">
             <p>A Enviar: {folders?.source_folder_id || '—'}</p>
             <p>Enviadas: {folders?.sent_folder_id || '—'}</p>
-            <p>Revisão Manual: {folders?.review_folder_id || '—'}</p>
-            <p>Não Identificadas: {folders?.not_identified_folder_id || '—'}</p>
-            <p>Erros: {folders?.errors_folder_id || '—'}</p>
-            <p>Duplicadas: {folders?.duplicates_folder_id || '—'}</p>
+            {folders?.review_folder_id && <p>Revisão Manual: {folders.review_folder_id}</p>}
+            {folders?.not_identified_folder_id && <p>Não Identificadas: {folders.not_identified_folder_id}</p>}
+            {folders?.errors_folder_id && <p>Erros: {folders.errors_folder_id}</p>}
+            {folders?.duplicates_folder_id && <p>Duplicadas: {folders.duplicates_folder_id}</p>}
+            {!folders?.review_folder_id && (
+              <p className="text-foreground/55 not-italic">
+                Modo simplificado: PDFs com problema ficam registrados apenas no app (sem mover de pasta no Drive).
+              </p>
+            )}
           </div>
           {onBootstrap && (
             <Button size="sm" variant="outline" onClick={onBootstrap} disabled={bootstrapping} className="w-full">
-              <FolderCog className="mr-2 h-3.5 w-3.5" /> {bootstrapping ? 'Recriando...' : 'Recriar estrutura de pastas'}
+              <FolderCog className="mr-2 h-3.5 w-3.5" /> {bootstrapping ? 'Revalidando...' : 'Revalidar pastas no Drive'}
             </Button>
           )}
         </div>
