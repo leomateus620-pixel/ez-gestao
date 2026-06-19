@@ -61,21 +61,41 @@ export interface GuideFolders {
   rootId: string;
   aEnviarId: string;
   enviadasId: string;
-  revisaoId: string;
-  naoIdentificadasId: string;
-  errosId: string;
-  duplicadasId: string;
+  revisaoId: string | null;
+  naoIdentificadasId: string | null;
+  errosId: string | null;
+  duplicadasId: string | null;
 }
 
-export async function ensureGuideStructure(driveKey: string): Promise<GuideFolders> {
+export async function ensureGuideStructure(
+  driveKey: string,
+  options: { createAuxFolders?: boolean } = {},
+): Promise<GuideFolders> {
+  const createAux = options.createAuxFolders === true;
   const rootId = await findOrCreateFolder(driveKey, 'Guias');
-  const [aEnviarId, enviadasId, revisaoId, naoIdentificadasId, errosId, duplicadasId] = await Promise.all([
-    findOrCreateFolder(driveKey, 'A Enviar', rootId),
+  // O fluxo padrão usa apenas "A enviar" e "Enviadas". As pastas auxiliares
+  // (Revisão, Não Identificadas, Erros, Duplicadas) só são criadas quando
+  // explicitamente solicitado — caso contrário PDFs com problema ficam
+  // apenas registrados no app, sem serem movidos no Drive.
+  // Aceita também "A Enviar" (com E maiúsculo) por compatibilidade.
+  const [aEnviarId, enviadasId] = await Promise.all([
+    (async () => {
+      try { return await findOrCreateFolder(driveKey, 'A enviar', rootId); }
+      catch { return await findOrCreateFolder(driveKey, 'A Enviar', rootId); }
+    })(),
     findOrCreateFolder(driveKey, 'Enviadas', rootId),
-    findOrCreateFolder(driveKey, 'Revisão Manual', rootId),
-    findOrCreateFolder(driveKey, 'Não Identificadas', rootId),
-    findOrCreateFolder(driveKey, 'Erros', rootId),
-    findOrCreateFolder(driveKey, 'Duplicadas', rootId),
   ]);
+  let revisaoId: string | null = null;
+  let naoIdentificadasId: string | null = null;
+  let errosId: string | null = null;
+  let duplicadasId: string | null = null;
+  if (createAux) {
+    [revisaoId, naoIdentificadasId, errosId, duplicadasId] = await Promise.all([
+      findOrCreateFolder(driveKey, 'Revisão Manual', rootId),
+      findOrCreateFolder(driveKey, 'Não Identificadas', rootId),
+      findOrCreateFolder(driveKey, 'Erros', rootId),
+      findOrCreateFolder(driveKey, 'Duplicadas', rootId),
+    ]);
+  }
   return { rootId, aEnviarId, enviadasId, revisaoId, naoIdentificadasId, errosId, duplicadasId };
 }
