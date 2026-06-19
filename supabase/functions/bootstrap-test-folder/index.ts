@@ -35,7 +35,7 @@ serve(async (req) => {
   }
 
   try {
-    const folders = await ensureGuideStructure(driveKey);
+    const folders = await ensureGuideStructure(driveKey, { createAuxFolders: false });
 
     let senderEmail = "";
     const prof = await fetch(`${GMAIL_GW}/users/me/profile`, { headers: gwHeaders(gmailKey) });
@@ -46,10 +46,10 @@ serve(async (req) => {
       root_folder_id: folders.rootId,
       source_folder_id: folders.aEnviarId,
       sent_folder_id: folders.enviadasId,
-      review_folder_id: folders.revisaoId,
-      not_identified_folder_id: folders.naoIdentificadasId,
-      errors_folder_id: folders.errosId,
-      duplicates_folder_id: folders.duplicadasId,
+      review_folder_id: null,
+      not_identified_folder_id: null,
+      errors_folder_id: null,
+      duplicates_folder_id: null,
       status: "ativo", last_error: null, last_check_at: new Date().toISOString(),
     }).eq("provider", "google_drive");
     await db.from("integracoes_guias").update({
@@ -64,10 +64,6 @@ serve(async (req) => {
         root: `https://drive.google.com/drive/folders/${folders.rootId}`,
         a_enviar: `https://drive.google.com/drive/folders/${folders.aEnviarId}`,
         enviadas: `https://drive.google.com/drive/folders/${folders.enviadasId}`,
-        revisao: `https://drive.google.com/drive/folders/${folders.revisaoId}`,
-        nao_identificadas: `https://drive.google.com/drive/folders/${folders.naoIdentificadasId}`,
-        erros: `https://drive.google.com/drive/folders/${folders.errosId}`,
-        duplicadas: `https://drive.google.com/drive/folders/${folders.duplicadasId}`,
       },
       sender: senderEmail,
     }), { headers: cors });
