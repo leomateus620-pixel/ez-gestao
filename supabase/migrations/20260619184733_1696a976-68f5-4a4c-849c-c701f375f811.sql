@@ -1,0 +1,1 @@
+UPDATE public.guias SET status='aguardando_processamento', decision_reason=NULL, dispatch_blocked_reason=NULL, authorized_reprocess=true WHERE id = '33483ecd-a333-46c7-aec5-f5ebd45d36d4';
