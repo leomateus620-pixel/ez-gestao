@@ -1,8 +1,19 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, Download, FileText, FolderCog, Loader2, Play, Send, ShieldAlert, FlaskConical, Rocket } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Download, FileText, FolderCog, Loader2, Play, RefreshCw, Send, ShieldAlert, FlaskConical, Rocket, Trash2 } from 'lucide-react';
 import { useGuides } from '@/features/guias/GuideProvider';
-import { useTestConfig, useBatchRuns, useBootstrapFolders, type TestConfig } from '@/features/guias/useGuideOps';
+import { useTestConfig, useBatchRuns, useBootstrapFolders, useDispatchGuide, useDeleteGuide, type TestConfig } from '@/features/guias/useGuideOps';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { PageHeader } from '@/components/PageHeader';
 import { GlassCard } from '@/components/GlassCard';
 import { EmptyState } from '@/components/EmptyState';
@@ -70,6 +81,8 @@ function GuideBadge({ status }: { status: GuiaStatus }) {
 }
 
 function GuidesTable({ guides }: { guides: Guia[] }) {
+  const dispatchGuide = useDispatchGuide();
+  const deleteGuide = useDeleteGuide();
   return (
     <Table>
       <TableHeader>
@@ -81,7 +94,7 @@ function GuidesTable({ guides }: { guides: Guia[] }) {
           <TableHead>Status</TableHead>
           <TableHead>Decisao</TableHead>
           <TableHead>Recebida</TableHead>
-          <TableHead className="w-12" />
+          <TableHead className="w-32 text-right">Ações</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -109,9 +122,51 @@ function GuidesTable({ guides }: { guides: Guia[] }) {
             </TableCell>
             <TableCell className="text-xs text-foreground/72">{formatDateTime(guide.receivedAt)}</TableCell>
             <TableCell>
-              <Button asChild size="icon" variant="ghost" className="h-8 w-8">
-                <Link to={`/guias/${guide.id}`} aria-label="Abrir detalhe"><ArrowRight className="h-4 w-4" /></Link>
-              </Button>
+              <div className="flex items-center justify-end gap-1">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8"
+                  title="Processar agora"
+                  disabled={dispatchGuide.isPending || guide.status === 'enviada'}
+                  onClick={() => dispatchGuide.mutate({ guide_id: guide.id, force_dispatch: true, manual_approval: true })}
+                >
+                  <RefreshCw className={cn('h-4 w-4', dispatchGuide.isPending && 'animate-spin')} />
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-foreground/70 hover:text-destructive"
+                      title="Excluir guia"
+                      disabled={deleteGuide.isPending}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Excluir esta guia?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        A guia <strong>{guide.fileName}</strong> será removida da fila junto com seus envios, eventos e exceções. Esta ação não pode ser desfeita.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => deleteGuide.mutate({ guia_id: guide.id, motivo: 'Excluida pelo operador na lista de guias' })}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Excluir
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <Button asChild size="icon" variant="ghost" className="h-8 w-8">
+                  <Link to={`/guias/${guide.id}`} aria-label="Abrir detalhe"><ArrowRight className="h-4 w-4" /></Link>
+                </Button>
+              </div>
             </TableCell>
           </TableRow>
         ))}
