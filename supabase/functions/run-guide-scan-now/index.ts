@@ -411,7 +411,13 @@ function routeGuide(args: {
   if (metadata.fields.cnpj.status === "invalid") {
     return { status: "nao_identificada", folder: "not_identified", exceptionType: "cnpj_invalid", reason: "CNPJ invalido no PDF.", action: "Corrigir documento ou revisar manualmente.", severity: "error", reviewLevel: "full" };
   }
-  if (metadata.fields.cnpj.status === "missing") {
+  // FGTS Digital fallback: when there is no full CNPJ but the employer legal name
+  // already produced a unique match to an active company, do not block on cnpj.
+  const fgtsEmployerMatched = classification.tipo === "fgts"
+    && metadata.fields.cnpj.status !== "valid"
+    && !!matched
+    && !!metadata.fields.razao_social?.value;
+  if (metadata.fields.cnpj.status === "missing" && !fgtsEmployerMatched) {
     return { status: "nao_identificada", folder: "not_identified", exceptionType: "cnpj_missing", reason: "CNPJ ausente no PDF.", action: "Revisar manualmente.", severity: "warning", reviewLevel: "full" };
   }
   if (metadata.cnpjCandidates.length > 1) {
@@ -448,7 +454,9 @@ function routeGuide(args: {
     };
   }
 
-  const criticalFields = Object.values(metadata.fields);
+  const criticalFields = Object.entries(metadata.fields)
+    .filter(([name]) => !(fgtsEmployerMatched && name === 'cnpj'))
+    .map(([, evidence]) => evidence);
   const missingOrInvalid = criticalFields.find((entry) => entry.status === "missing" || entry.status === "invalid");
   if (missingOrInvalid) {
     return { status: "revisao_manual", folder: "review", exceptionType: `${missingOrInvalid.source}_blocked`, reason: missingOrInvalid.justification, action: "Preencher e confirmar campo manualmente.", severity: "warning", reviewLevel: "full" };
