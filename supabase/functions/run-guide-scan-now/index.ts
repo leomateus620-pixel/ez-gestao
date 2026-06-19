@@ -1144,10 +1144,10 @@ serve(async (req) => {
   }).select().single();
 
   let files: any[] = [];
-  if (reprocessIds.length > 0) {
-    const { data: targets } = await db.from("guias").select("drive_file_id, file_name, mime_type, sha256").in("id", reprocessIds);
-    files = (targets || []).map((target: any) => ({ id: target.drive_file_id, name: target.file_name, mimeType: target.mime_type, md5Checksum: target.sha256 }));
-  } else {
+  // Always scan the Drive source folder for new files. When reprocessIds are
+  // provided, also include those existing guias (even if they no longer live
+  // in the source folder) so the operator can retry stuck guias from the UI.
+  {
     const params = new URLSearchParams({
       q: `'${drive.source_folder_id}' in parents and trashed = false`,
       fields: "files(id,name,mimeType,md5Checksum,modifiedTime)",
@@ -1168,6 +1168,23 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "drive_list_failed", status: list.status }), { status: 502, headers: cors });
     }
     files = ((await list.json()).files || []) as any[];
+  }
+
+  if (reprocessIds.length > 0) {
+    const { data: targets } = await db.from("guias")
+      .select("drive_file_id, file_name, mime_type, sha256")
+      .in("id", reprocessIds);
+    const known = new Set(files.map((f: any) => f.id));
+    for (const target of (targets || []) as any[]) {
+      if (!target.drive_file_id || known.has(target.drive_file_id)) continue;
+      files.push({
+        id: target.drive_file_id,
+        name: target.file_name,
+        mimeType: target.mime_type,
+        md5Checksum: target.sha256,
+      });
+      known.add(target.drive_file_id);
+    }
   }
 
   const results: any[] = [];
