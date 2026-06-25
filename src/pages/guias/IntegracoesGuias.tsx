@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useGuides } from '@/features/guias/GuideProvider';
 import { useBootstrapFolders, useTestConnection } from '@/features/guias/useGuideOps';
+import { WhatsAppDiagnosticPanel } from '@/features/guias/WhatsAppDiagnosticPanel';
 import type { IntegracaoGuia, IntegrationProvider } from '@/data/types';
 import { formatDateTime } from '@/lib/formatters';
 import { supabase } from '@/integrations/supabase/client';
@@ -230,6 +231,8 @@ export default function IntegracoesGuias() {
           />
         ))}
       </div>
+
+      <WhatsAppDiagnosticPanel />
     </div>
   );
 }
