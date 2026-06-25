@@ -1,42 +1,82 @@
 ## Objetivo
+Consolidar a integração WhatsApp Cloud API em modo produção lendo segredos somente no backend, com diagnóstico seguro, envio com templates, auditoria e controle de acesso admin — sem alterar a identidade visual.
 
-Remover a confiança (score) como bloqueio para envio automático. A identificação da empresa (por CNPJ **ou** razão social cadastrada em Empresas) passa a ser suficiente. O canal de envio continua vindo de `empresas.canal_preferido` (e‑mail ou WhatsApp). Validar end‑to‑end disparando a guia atual (`GuiaPagamento_21205304000165_…`, DARF 05/2026) para o WhatsApp **+55 55 99969‑9631** via Meta Cloud API.
+## Arquivos a alterar / criar
 
-## O que está bloqueando hoje
+### Edge Functions
+1. **`supabase/functions/test-guide-connection/index.ts`** (ajustar)
+   - Reescrever o ramo `whatsapp` para o fluxo de diagnóstico em 3 etapas (A, B, C):
+     - **A. Secrets:** retornar `{ access_token, waba_id, phone_number_id, api_version }` apenas como `"present" | "missing"`. Nunca o valor.
+     - **B. WABA / templates:** `GET /{API_VERSION}/{WABA_ID}/message_templates`.
+       - sucesso com array → `templates_count`, `templates_active` (nomes APPROVED), `token_scope: "waba_ok"`.
+       - array vazio → `token_scope: "waba_ok_no_templates"`.
+       - erro `code 100` → mensagem amigável "Token sem permissão, WABA não atribuída ao usuário do sistema, escopos incorretos ou ID da WABA incorreto."
+       - erro `code 190` → "Token inválido, expirado ou revogado."
+       - outros erros → mensagem genérica + `error_code` (sem token, sem URL com token).
+     - **C. Phone Number:** `GET /{API_VERSION}/{PHONE_NUMBER_ID}` → expor apenas `display_phone_number`, `verified_name`, `quality_rating`, `code_verification_status`.
+   - Remover o envio automático de `hello_world` desta função (movido para D).
+   - Exigir `admin` via `has_role(auth.uid(), 'admin')` (ver Segurança).
 
-`supabase/functions/_shared/guide-parser.ts` marca o campo `tipo_guia` como **dubious** sempre que `classification.confidence < 0.92` (linha 804‑806). Em seguida, `supabase/functions/run-guide-scan-now/index.ts` (linhas 470‑487) joga a guia para `revisao_manual` por duas razões independentes:
+2. **`supabase/functions/send-whatsapp-test/index.ts`** (criar — passo D)
+   - Input: `{ to: string (E.164), template_name: string, language?: "pt_BR", parameters?: string[], document?: { link, filename } }`.
+   - Valida admin. Normaliza `to` para dígitos E.164.
+   - Monta payload `template` com `components` (header documento opcional + body com `parameters` posicionais).
+   - `POST /{API_VERSION}/{PHONE_NUMBER_ID}/messages`.
+   - Grava log de auditoria (tabela nova abaixo).
+   - Retorna `{ ok, message_id, error_friendly, error_code }` — nunca o token nem o payload de Authorization.
 
-1. Qualquer campo crítico `dubious` → `revisao_manual` com motivo `*_dubious` (foi exatamente isso na auditoria: "Tipo de guia sem confiança suficiente para envio automático").
-2. `confidence_score < MIN_CONFIDENCE_AUTO_DISPATCH` → `revisao_manual` (`low_confidence_*`).
+3. **`supabase/functions/send-whatsapp-message/index.ts`** (ajustar — passo F)
+   - Manter assinatura usada por `dispatch-guide` / `run-guide-scan-now`.
+   - Antes de chamar Graph API: validar secrets, sanitizar telefone.
+   - Após resposta: persistir em `whatsapp_messages` (já existe) o `message_id`, `provider_response_sanitized` (sem Authorization), `status` (`queued` → `sent` | `failed`).
+   - Mapear erros 100/190 para mensagens amigáveis e expor apenas isso no retorno HTTP.
+   - Manter fluxo de reenvio manual existente em `WhatsApp.tsx` (já chama esta function).
 
-Por isso a guia caiu em revisão manual mesmo com CNPJ válido, empresa ativa e tipo classificado.
+4. **`supabase/functions/integracoes-status/index.ts`** (ajustar)
+   - Continuar retornando apenas booleans `present/absent`. Adicionar `whatsapp_business_account_id: boolean`. Garantir nenhum valor de secret no payload.
 
-## Mudanças
+### Frontend (sem mudança visual de tema)
+5. **`src/pages/guias/IntegracoesGuias.tsx`** (ajustar — painel admin de diagnóstico)
+   - Botão **"Diagnosticar WhatsApp"** → chama `test-guide-connection` com `canal: 'whatsapp'` e mostra:
+     - presença dos 4 secrets, status do token (válido / sem permissão / inválido), contagem de templates, lista de templates APPROVED, dados do número (display, verificação).
+   - Botão **"Testar envio WhatsApp"** → modal com:
+     - input `Número (E.164)` com máscara/validação,
+     - select de template (alimentado pela lista retornada no diagnóstico),
+     - campos dinâmicos de parâmetros (n inputs conforme template escolhido — usuário informa quantas variáveis e os valores; v1 simples com textarea linha-por-linha),
+     - botão "Enviar" → chama `send-whatsapp-test`.
+   - Toda a tela protegida por `getCurrentRole() === 'admin'`.
 
-### 1. Identificação manda, score não bloqueia
+6. **`src/services/whatsapp.ts`** (ajustar)
+   - Adicionar `sendWhatsAppTest({ to, templateName, language, parameters })` que invoca `send-whatsapp-test`.
+   - Não enviar token; apenas usa `supabase.functions.invoke`.
 
-`supabase/functions/_shared/guide-parser.ts`
-- `tipo_guia` deixa de ser `dubious` por baixa confiança: sempre `validField` quando há classificação (incluindo `outros`), com `justification` informando o score. Mantém `dubious` apenas se a classificação não conseguiu identificar nenhum sinal (`matchedKeywords` vazio E `tipo = outros`).
-- Remover o issue `guide_type_low_confidence` da validação (era só ruído, virava bloqueio na função de scan).
+7. **`src/pages/admin/WhatsApp.tsx`** (ajustar)
+   - Garantir gate de admin (já tem). Adicionar atalho para diagnóstico/teste reaproveitando o modal acima ou link para `IntegracoesGuias`.
 
-`supabase/functions/run-guide-scan-now/index.ts`
-- Remover o branch que coloca em `revisao_manual` quando `classification.confidence < MIN_CONFIDENCE_AUTO_DISPATCH || confidence < MIN_CONFIDENCE_AUTO_DISPATCH` (linhas 478‑487). A confiança continua sendo gravada em `confidence_score` para auditoria, mas **não bloqueia**.
-- Manter os bloqueios reais de segurança: empresa não identificada / inativa / ambígua, duplicidade, canal/conector inválido, template/destinatário ausente, valor acima do `high_value_threshold`. Esses continuam exatamente como estão.
+### Banco / Migração
+8. **Nova tabela `public.whatsapp_integration_logs`** (passo E)
+   - Colunas: `id uuid pk default gen_random_uuid()`, `created_at timestamptz default now()`, `triggered_by uuid null` (auth.uid), `test_type text` (`diagnostic_secrets` | `diagnostic_waba` | `diagnostic_phone` | `send_test` | `dispatch_guia`), `status text` (`success`|`failed`|`pending`), `endpoint text` (sem querystring sensível), `phone_number_id text`, `waba_id text`, `to_phone text null`, `template_name text null`, `message_id text null`, `error_code int null`, `error_message text null` (sanitizado), `meta jsonb default '{}'::jsonb`.
+   - GRANTs: `SELECT, INSERT` a `authenticated`; `ALL` a `service_role`. Sem `anon`.
+   - RLS: somente admins (`has_role(auth.uid(),'admin')`) podem `SELECT`; `INSERT` apenas via `service_role` (edge functions).
+   - Se a função `public.has_role` e o tipo `app_role` ainda não existirem, criar conforme padrão de roles (tabela `user_roles` + função `security definer`).
 
-Resultado: se a empresa foi identificada (`matched.empresa` ativa) e o canal preferido tem conector ativo e destinatário válido, a guia segue direto para `pronta_envio` + dispatch — independente do score.
+### Segurança transversal (passo G)
+- Toda Edge Function de diagnóstico/teste valida JWT e checa `has_role(uid,'admin')` via cliente service_role antes de prosseguir; usuário comum recebe `403 forbidden`.
+- Auditar todos os arquivos para remover: tokens hardcoded, fallbacks `WHATSAPP_TOKEN ?? '...'`, prints de `Authorization`, ecos de `accessToken` em `console.log`/`return`. Lista de arquivos a varrer: `supabase/functions/**/*.ts`, `src/**` (somente para garantir ausência de `WHATSAPP_ACCESS_TOKEN` em `VITE_*`).
+- Nenhum valor de secret em `provider_response`, `last_error`, `whatsapp_messages.metadata` ou `whatsapp_integration_logs`.
 
-### 2. Teste end‑to‑end no número +55 55 99969‑9631
+## Plano de testes (passo H) — executado após implementação
+1. `secrets--fetch_secrets` — confirmar nomes presentes (não valores).
+2. `curl test-guide-connection` como admin → validar A+B+C; capturar `templates_count` e dados do número.
+3. `curl send-whatsapp-test` com template aprovado para `+5555999699631` → esperar `message_id`.
+4. `curl send-whatsapp-test` com número inválido `+5500000000000` → esperar erro amigável.
+5. Reenviar via `WhatsApp.tsx` → confirma `status=sent` e novo `message_id`.
+6. `supabase--read_query` em `whatsapp_integration_logs` e `whatsapp_messages` → confirmar persistência.
+7. `curl test-guide-connection` sem token / como não-admin → esperar `401`/`403`.
+8. `rg` no repo para garantir que `WHATSAPP_ACCESS_TOKEN` aparece apenas em `Deno.env.get(...)`.
 
-- Atualizar o secret `WHATSAPP_TEST_TO` para `+5555999699631` (substitui o valor atual de testes).
-- Rodar `run-guide-scan-now` com `{ run_full_pipeline: true, force_dispatch: true }` para a guia DARF 05/2026 (id `21.205.304/0001-65`), em modo teste. Isso usa a configuração atual de modo teste e dispara via `send-whatsapp-message` → Meta Cloud API para o `WHATSAPP_TEST_TO`.
-- Conferir resposta da Meta (`message_id`), `guia_envios.provider_status` e `guia_eventos` para confirmar `enviada_teste`.
-
-## Fora de escopo
-
-- Mudar lógica de identificação por razão social (FGTS) — já existe e continua valendo.
-- Webhook do WhatsApp, Drive/Gmail, Fator R, Reforma Tributária, Classifica.
-- Alterações de schema.
-
-## Confirmação rápida
-
-O teste será **em modo teste** (não move o PDF para a pasta de Enviadas de produção e marca a guia como `enviada_teste`). Confirma que pode trocar o `WHATSAPP_TEST_TO` para `+5555999699631`?
+## Entregáveis no resumo final
+- Lista de arquivos alterados/criados.
+- Functions criadas/ajustadas: `test-guide-connection`, `send-whatsapp-test` (novo), `send-whatsapp-message`, `integracoes-status`.
+- Tabela criada: `whatsapp_integration_logs` (+ infra de roles se ausente).
+- Resultados de cada teste (1–8), incluindo se templates listaram, se o número validou, se o envio real funcionou e quais erros ainda dependem de configuração na Meta (ex.: número de destino não cadastrado em sandbox, template não APPROVED em pt_BR, escopo `whatsapp_business_management` ausente).
