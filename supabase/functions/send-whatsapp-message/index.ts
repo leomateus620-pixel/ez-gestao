@@ -109,18 +109,43 @@ serve(async (req) => {
   let respJson: any = null;
   try { respJson = JSON.parse(respText); } catch { /* keep null */ }
 
+  const messageId = respJson?.messages?.[0]?.id || null;
+  const errorCode: number | null = respJson?.error?.code ?? null;
+  const friendly = (() => {
+    if (errorCode === 100) return "Token sem permissão, WABA não atribuída ao usuário do sistema, escopos incorretos ou ID da WABA incorreto.";
+    if (errorCode === 190) return "Token inválido, expirado ou revogado.";
+    if (errorCode === 131030) return "Número de destino não está autorizado a receber mensagens neste momento.";
+    return respJson?.error?.message?.slice?.(0, 240) || null;
+  })();
+
+  // Auditoria (best-effort) — nunca grava token
+  try {
+    const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    await svc.from("whatsapp_integration_logs").insert({
+      test_type: "dispatch_guia",
+      status: resp.ok ? "success" : "failed",
+      endpoint: `https://graph.facebook.com/${apiVersion}/{phone_number_id}/messages`,
+      phone_number_id: phoneId,
+      waba_id: Deno.env.get("WHATSAPP_BUSINESS_ACCOUNT_ID") ?? null,
+      to_phone: finalTo,
+      template_name: templateName,
+      message_id: messageId,
+      error_code: errorCode,
+      error_message: resp.ok ? null : friendly,
+      meta: { modo, http_status: resp.status, has_document_header: hasDocumentHeader },
+    });
+  } catch { /* */ }
+
   if (!resp.ok) {
-    const errMsg = respJson?.error?.message || respText.slice(0, 400);
     return new Response(JSON.stringify({
       ok: false,
       status: resp.status,
-      error: errMsg,
-      error_code: respJson?.error?.code ?? null,
+      error: friendly || `HTTP ${resp.status}`,
+      error_code: errorCode,
       error_subcode: respJson?.error?.error_subcode ?? null,
     }), { status: 502, headers: cors });
   }
 
-  const messageId = respJson?.messages?.[0]?.id || null;
   return new Response(JSON.stringify({
     ok: true,
     provider: "meta_whatsapp",
