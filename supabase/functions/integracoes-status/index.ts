@@ -19,6 +19,7 @@ serve((req) => {
       Deno.env.get("WHATSAPP_API_VERSION"),
     ),
     whatsapp_provider: 'meta_cloud_api',
+    whatsapp_waba_id_configured: Boolean(Deno.env.get("WHATSAPP_BUSINESS_ACCOUNT_ID")),
     whatsapp_test_to_configured: Boolean(Deno.env.get("WHATSAPP_TEST_TO")),
     whatsapp_webhook_configured: Boolean(Deno.env.get("WHATSAPP_VERIFY_TOKEN")),
     whatsapp_api_version: Deno.env.get("WHATSAPP_API_VERSION") || null,
