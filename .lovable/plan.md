@@ -1,32 +1,31 @@
 ## Objetivo
-Trocar as 4 credenciais do WhatsApp Cloud API (Meta) e validar a integração com um envio real do template `hello_world` para `5555999699631`.
+Habilitar o webhook público da WhatsApp Cloud API no projeto e entregar a URL exata para colar no Meta Developers.
+
+## Situação atual
+- A Edge Function `whatsapp-webhook` **já existe** em `supabase/functions/whatsapp-webhook/index.ts` e já está configurada como pública (`verify_jwt = false` em `supabase/config.toml`).
+- Ela já implementa exatamente o comportamento pedido:
+  - **GET**: lê `hub.mode`, `hub.verify_token`, `hub.challenge`; compara o token contra `Deno.env.get("WHATSAPP_VERIFY_TOKEN")`; devolve `hub.challenge` como `text/plain` 200 quando bate, ou 403.
+  - **POST**: valida assinatura `X-Hub-Signature-256` (HMAC SHA-256 com `WHATSAPP_APP_SECRET`, quando presente), parseia o payload, atualiza `guia_envios` por `provider_message_id` e registra um evento sanitizado em `guia_eventos` (sem tokens, sem secrets), respondendo 200 rapidamente para a Meta.
+- O secret `WHATSAPP_VERIFY_TOKEN` **já está cadastrado** no projeto (aparece em `<secrets>`).
+
+Ou seja: não há código novo a escrever nem migration a rodar.
 
 ## Passos
-
-1. **Atualizar `WHATSAPP_API_VERSION`** para `v22.0` via `set_secret` (valor conhecido, não-sensível).
-
-2. **Solicitar nova entrada segura dos 3 secrets sensíveis** via `update_secret` (formulário seguro para o usuário colar os novos valores):
-   - `WHATSAPP_ACCESS_TOKEN`
-   - `WHATSAPP_BUSINESS_ACCOUNT_ID`
-   - `WHATSAPP_PHONE_NUMBER_ID`
-
-3. **Rodar diagnóstico** chamando `test-guide-connection` (canal=whatsapp) para confirmar:
-   - Etapa A — presença dos 4 secrets.
-   - Etapa B — WABA acessível (lista templates aprovados).
-   - Etapa C — Phone Number ID válido (display number, verified name, qualidade).
-
-4. **Enviar mensagem de teste** invocando `send-whatsapp-test` com:
-   - `to`: `5555999699631` (normalizado E.164)
-   - `template_name`: `hello_world`
-   - `language`: `en_US`
-   - `parameters`: nenhum (hello_world não tem variáveis)
-
-5. **Verificar resultado**:
-   - Confirmar `message_id` retornado pela Meta.
-   - Conferir registro em `whatsapp_integration_logs` (test_type=`send_test`, status=`success`).
-   - Em caso de erro, traduzir o `error_code` (100 = permissões/WABA; 190 = token; 131030 = destinatário não autorizado) e indicar o ajuste necessário na Meta.
+1. **Confirmar/atualizar o valor do secret** `WHATSAPP_VERIFY_TOKEN` para exatamente `ezguias_webhook_2026_seguro`.
+   - Como o secret já existe, usar `update_secret` (formulário seguro — o valor não trafega em texto na conversa do agente). Você cola o valor `ezguias_webhook_2026_seguro` no formulário.
+   - Alternativa: se preferir que eu grave o valor diretamente (já que você o publicou no chat), uso `set_secret` após apagar o atual. Avise qual prefere.
+2. **Entregar a URL pública** do webhook para colar no Meta Developers → Webhooks → Callback URL:
+   ```text
+   https://wsgphutkybxhajyicxif.supabase.co/functions/v1/whatsapp-webhook
+   ```
+   E o **Verify Token** a colar no mesmo formulário da Meta: `ezguias_webhook_2026_seguro`.
+3. **Validar handshake** (opcional, após você salvar na Meta): rodar um GET de teste contra a URL com `hub.mode=subscribe&hub.verify_token=...&hub.challenge=ping` e confirmar resposta `ping` 200. Se a Meta aceitar a verificação na tela dela, esse passo é redundante.
+4. **Assinar os campos de evento** no painel da Meta (fora do Lovable): em "Webhook fields", inscrever pelo menos `messages` (entrega status: sent/delivered/read/failed). Sem isso a Meta não envia POSTs.
 
 ## Notas de segurança
-- Nenhum token é escrito em código, log ou resposta.
-- `update_secret` exige interação do usuário — apenas o nome do secret trafega; o valor é digitado em formulário seguro.
-- O envio de teste é feito server-side via edge function gated por admin/bootstrap.
+- Nenhum secret é exibido em logs, responses ou frontend — o handler já sanitiza `errors`/`status` antes de gravar em `guia_eventos`.
+- Recomendado também cadastrar `WHATSAPP_APP_SECRET` (já presente nos secrets) para que a validação HMAC do POST fique ativa; sem ele, o handler aceita POSTs sem assinatura.
+- `WHATSAPP_VERIFY_TOKEN` é usado **somente** na comparação do GET de handshake; nunca é retornado nem logado.
+
+## O que você precisa decidir antes de eu implementar
+- Confirmar que quer que eu use `update_secret` (você redigita o valor no formulário seguro) **ou** `set_secret` (eu gravo o valor que você já mandou no chat).
