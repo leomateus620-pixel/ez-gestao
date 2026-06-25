@@ -2761,12 +2761,91 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      whatsapp_integration_logs: {
+        Row: {
+          created_at: string
+          endpoint: string | null
+          error_code: number | null
+          error_message: string | null
+          id: string
+          message_id: string | null
+          meta: Json
+          phone_number_id: string | null
+          status: string
+          template_name: string | null
+          test_type: string
+          to_phone: string | null
+          triggered_by: string | null
+          waba_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          endpoint?: string | null
+          error_code?: number | null
+          error_message?: string | null
+          id?: string
+          message_id?: string | null
+          meta?: Json
+          phone_number_id?: string | null
+          status: string
+          template_name?: string | null
+          test_type: string
+          to_phone?: string | null
+          triggered_by?: string | null
+          waba_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string | null
+          error_code?: number | null
+          error_message?: string | null
+          id?: string
+          message_id?: string | null
+          meta?: Json
+          phone_number_id?: string | null
+          status?: string
+          template_name?: string | null
+          test_type?: string
+          to_phone?: string | null
+          triggered_by?: string | null
+          waba_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      no_admin_configured: { Args: never; Returns: boolean }
     }
     Enums: {
       alerta_prioridade: "critica" | "alta" | "media" | "baixa"
@@ -2778,6 +2857,7 @@ export type Database = {
         | "vencido"
         | "sem_pdf"
         | "checklist_incompleto"
+      app_role: "admin" | "operador" | "user"
       artifact_type: "screenshot" | "html" | "pdf" | "trace" | "text"
       batch_status:
         | "agendado"
@@ -3049,6 +3129,7 @@ export const Constants = {
         "sem_pdf",
         "checklist_incompleto",
       ],
+      app_role: ["admin", "operador", "user"],
       artifact_type: ["screenshot", "html", "pdf", "trace", "text"],
       batch_status: ["agendado", "executando", "concluido", "parcial", "falha"],
       canal_envio: ["email", "whatsapp", "ambos"],
