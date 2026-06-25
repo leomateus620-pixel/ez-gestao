@@ -69,80 +69,100 @@ serve(async (req) => {
     return new Response(JSON.stringify({ ok: true, canal: 'email', from, message_id: (await send.json()).id }), { headers: cors });
   }
 
-  // WhatsApp via Meta Cloud API
+  // WhatsApp via Meta Cloud API — diagnóstico em 3 etapas (A, B, C). NUNCA envia mensagens reais aqui.
   const accessToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN");
   const phoneId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
   const wabaId = Deno.env.get("WHATSAPP_BUSINESS_ACCOUNT_ID");
   const apiVersion = Deno.env.get("WHATSAPP_API_VERSION") || "v25.0";
-  const verifyToken = Deno.env.get("WHATSAPP_VERIFY_TOKEN");
-  const testTo = Deno.env.get("WHATSAPP_TEST_TO");
 
-  const diagnostics: Record<string, unknown> = {
-    provider: "meta_cloud_api",
-    api_version: apiVersion,
-    access_token: accessToken ? "configured" : "missing",
-    phone_number_id: phoneId ? "configured" : "missing",
-    waba_id: wabaId ? "configured" : "missing",
-    verify_token: verifyToken ? "configured" : "missing",
-    test_to: testTo ? "configured" : "missing",
-    app_secret: Deno.env.get("WHATSAPP_APP_SECRET") ? "configured" : "missing",
+  // A) Presença de secrets (sem expor valor)
+  const secrets = {
+    access_token: accessToken ? "present" : "missing",
+    phone_number_id: phoneId ? "present" : "missing",
+    waba_id: wabaId ? "present" : "missing",
+    api_version: apiVersion ? "present" : "missing",
+  };
+  if (!accessToken || !phoneId || !wabaId) {
+    return new Response(JSON.stringify({
+      ok: false, canal: "whatsapp", error: "whatsapp_not_configured",
+      whatsapp: { provider: "meta_cloud_api", api_version: apiVersion, secrets },
+    }), { status: 409, headers: cors });
+  }
+
+  const friendlyForCode = (code: number | null | undefined) => {
+    if (code === 100) return "Token sem permissão, WABA não atribuída ao usuário do sistema, escopos incorretos ou ID da WABA incorreto.";
+    if (code === 190) return "Token inválido, expirado ou revogado.";
+    return null;
   };
 
-  if (!accessToken || !phoneId) {
-    return new Response(JSON.stringify({ ok: false, error: "whatsapp_not_configured", diagnostics }), { status: 409, headers: cors });
-  }
-
-  // 1) Valida token + phone_number_id
-  const phoneResp = await fetch(`${GRAPH_BASE}/${apiVersion}/${phoneId}`, {
+  // B) Templates da WABA
+  const tplResp = await fetch(`${GRAPH_BASE}/${apiVersion}/${wabaId}/message_templates?limit=100`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  const phoneBody = await phoneResp.text();
-  diagnostics.phone_check = phoneResp.ok ? "ok" : `error_${phoneResp.status}`;
-  if (!phoneResp.ok) {
-    return new Response(JSON.stringify({ ok: false, error: "invalid_phone_or_token", detail: phoneBody.slice(0, 300), diagnostics }), { status: 502, headers: cors });
+  const tplText = await tplResp.text();
+  let tplJson: any = null; try { tplJson = JSON.parse(tplText); } catch { /* */ }
+  let waba: Record<string, unknown> = {};
+  if (tplResp.ok) {
+    const list: any[] = Array.isArray(tplJson?.data) ? tplJson.data : [];
+    waba = {
+      ok: true,
+      token_scope: list.length > 0 ? "waba_ok" : "waba_ok_no_templates",
+      templates_count: list.length,
+      templates_active: list.filter((t) => t?.status === "APPROVED").map((t) => ({
+        name: t.name, language: t.language, category: t.category,
+      })),
+    };
+  } else {
+    const code = tplJson?.error?.code ?? null;
+    waba = {
+      ok: false,
+      status: tplResp.status,
+      error_code: code,
+      error_message: friendlyForCode(code) || tplJson?.error?.message?.slice?.(0, 240) || `HTTP ${tplResp.status}`,
+    };
   }
 
-  // 2) Lista templates da WABA (opcional)
-  if (wabaId) {
-    const tplResp = await fetch(`${GRAPH_BASE}/${apiVersion}/${wabaId}/message_templates?limit=50`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (tplResp.ok) {
-      const tplJson = await tplResp.json();
-      diagnostics.templates_count = Array.isArray(tplJson?.data) ? tplJson.data.length : 0;
-      diagnostics.templates_active = Array.isArray(tplJson?.data)
-        ? tplJson.data.filter((t: any) => t?.status === "APPROVED").map((t: any) => t.name)
-        : [];
-    } else {
-      diagnostics.templates_count = `error_${tplResp.status}`;
-    }
-  }
-
-  // 3) Envia mensagem de teste para WHATSAPP_TEST_TO (sempre, ignora destinatario do form)
-  const sendTo = testTo || destinatario;
-  if (!sendTo) {
-    return new Response(JSON.stringify({ ok: false, error: "no_test_recipient", diagnostics }), { status: 400, headers: cors });
-  }
-  const sendResp = await fetch(`${GRAPH_BASE}/${apiVersion}/${phoneId}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to: sendTo,
-      type: "template",
-      template: { name: "hello_world", language: { code: "en_US" } },
-    }),
+  // C) Phone Number
+  const phoneResp = await fetch(`${GRAPH_BASE}/${apiVersion}/${phoneId}?fields=display_phone_number,verified_name,quality_rating,code_verification_status`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
-  const sendBody = await sendResp.text();
-  let sendJson: any = null;
-  try { sendJson = JSON.parse(sendBody); } catch { /* */ }
-  diagnostics.last_test_status = sendResp.ok ? "sent" : `error_${sendResp.status}`;
-  diagnostics.last_test_message_id = sendJson?.messages?.[0]?.id ?? null;
-  diagnostics.last_test_error = sendResp.ok ? null : (sendJson?.error?.message || sendBody.slice(0, 300));
+  const phoneText = await phoneResp.text();
+  let phoneJson: any = null; try { phoneJson = JSON.parse(phoneText); } catch { /* */ }
+  let phone: Record<string, unknown> = {};
+  if (phoneResp.ok) {
+    phone = {
+      ok: true,
+      display_phone_number: phoneJson?.display_phone_number ?? null,
+      verified_name: phoneJson?.verified_name ?? null,
+      quality_rating: phoneJson?.quality_rating ?? null,
+      code_verification_status: phoneJson?.code_verification_status ?? null,
+    };
+  } else {
+    const code = phoneJson?.error?.code ?? null;
+    phone = {
+      ok: false,
+      status: phoneResp.status,
+      error_code: code,
+      error_message: friendlyForCode(code) || phoneJson?.error?.message?.slice?.(0, 240) || `HTTP ${phoneResp.status}`,
+    };
+  }
+
+  // Log de auditoria (best-effort)
+  try {
+    const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    await svc.from("whatsapp_integration_logs").insert({
+      test_type: "diagnostic",
+      status: (waba as any).ok && (phone as any).ok ? "success" : "failed",
+      endpoint: `${GRAPH_BASE}/${apiVersion}/{waba_id}/message_templates + /{phone_number_id}`,
+      phone_number_id: phoneId,
+      waba_id: wabaId,
+      meta: { secrets, waba, phone },
+    });
+  } catch { /* ignore */ }
 
   return new Response(JSON.stringify({
-    ok: sendResp.ok,
+    ok: (waba as any).ok && (phone as any).ok,
     canal: "whatsapp",
-    whatsapp: diagnostics,
-  }), { status: sendResp.ok ? 200 : 502, headers: cors });
+    whatsapp: { provider: "meta_cloud_api", api_version: apiVersion, secrets, waba, phone },
+  }), { headers: cors });
 });
