@@ -126,6 +126,34 @@ export function useTestConnection() {
   });
 }
 
+export function useWhatsAppDiagnostic() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('test-guide-connection', {
+        body: { canal: 'whatsapp', destinatario: '' },
+      });
+      if (error) throw error;
+      return data as any;
+    },
+    onError: (e: any) => toast.error('Diagnóstico falhou', { description: e?.message }),
+  });
+}
+
+export function useSendWhatsAppTest() {
+  return useMutation({
+    mutationFn: async (params: { to: string; template_name: string; language?: string; parameters?: string[] }) => {
+      const { data, error } = await supabase.functions.invoke('send-whatsapp-test', { body: params });
+      if (error) throw error;
+      return data as any;
+    },
+    onSuccess: (d: any) => {
+      if (d?.ok) toast.success('Mensagem enviada', { description: d?.message_id ? `ID: ${d.message_id}` : 'OK' });
+      else toast.error('Falha no envio', { description: d?.message || 'Verifique os logs.' });
+    },
+    onError: (e: any) => toast.error('Falha no envio', { description: e?.message }),
+  });
+}
+
 export function useBootstrapFolders() {
   const client = useQueryClient();
   return useMutation({
