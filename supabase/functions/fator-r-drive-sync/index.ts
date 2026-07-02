@@ -114,27 +114,23 @@ serve(async (req) => {
     const supabase = createClient(reqEnv("SUPABASE_URL"), reqEnv("SUPABASE_SERVICE_ROLE_KEY"));
     const driveKey = reqEnv("GOOGLE_DRIVE_API_KEY");
     const lovableKey = reqEnv("LOVABLE_API_KEY");
-    const globalFolderId = reqEnv("GOOGLE_DRIVE_FOLDER_ID");
+    const inboxFolderId = Deno.env.get("FATOR_R_INBOX_FOLDER_ID") || Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
+    if (!inboxFolderId) throw new Error("Secret ausente: FATOR_R_INBOX_FOLDER_ID");
     const alertFrom = Deno.env.get("FATOR_R_EMAIL_FROM") || "leomateus620@gmail.com";
     const defaultRecipient = Deno.env.get("FATOR_R_ALERT_DEFAULT_RECIPIENT") || null;
     const emailDryRun = Deno.env.get("FATOR_R_EMAIL_DRY_RUN") !== "false";
+    const emailAlertsEnabled = Deno.env.get("FATOR_R_EMAIL_ALERTS_ENABLED") === "true";
     const analyzedFolderName = Deno.env.get("FATOR_R_ANALYZED_FOLDER_NAME") || "Analisados";
     const { data: config } = await supabase.from("fator_r_sync_config").select("*").limit(1).maybeSingle();
     const syncUserId = config?.user_id ?? Deno.env.get("FATOR_R_DEFAULT_USER_ID") ?? null;
     if (config?.sync_enabled === false) return Response.json({ ok: true, skipped: true, reason: "sync_disabled" }, { headers: cors });
 
-    const { data: companyFolders } = await supabase.from("fator_r_companies").select("id, drive_folder_id").not("drive_folder_id", "is", null);
-    const folderMap = new Map<string, string | null>();
-    folderMap.set(globalFolderId, null);
-    for (const row of companyFolders ?? []) folderMap.set(row.drive_folder_id, row.id);
-
+    // Fluxo unificado: uma única pasta central (ex.: "PGDAS JULHO"). Sem per-company folders.
     const allFiles: any[] = [];
-    for (const [folderId, companyId] of folderMap.entries()) {
-      const files = await listFolderFilesRecursive(folderId, driveKey, lovableKey);
-      for (const file of files) {
-        const actualParent = Array.isArray(file.parents) && file.parents.length ? file.parents[0] : folderId;
-        allFiles.push({ ...file, sourceCompanyId: companyId, sourceFolderId: actualParent });
-      }
+    const files = await listFolderFilesRecursive(inboxFolderId, driveKey, lovableKey);
+    for (const file of files) {
+      const actualParent = Array.isArray(file.parents) && file.parents.length ? file.parents[0] : inboxFolderId;
+      allFiles.push({ ...file, sourceCompanyId: null, sourceFolderId: actualParent });
     }
 
     let processed = 0;
@@ -354,7 +350,7 @@ serve(async (req) => {
           }, { onConflict: "company_id,reference_month,reference_year" }).select("id").single();
           monthlyResultId = upsert.data?.id ?? null;
 
-          if (!duplicateDocument && company?.active && config?.email_alerts_enabled !== false && alert) {
+          if (emailAlertsEnabled && !duplicateDocument && company?.active && config?.email_alerts_enabled !== false && alert) {
             const recipients = [...new Set([
               company.responsible_email,
               ...(company.secondary_emails ?? []),
