@@ -225,7 +225,7 @@ export default function FatorR() {
 
         {companyRows.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-dashed border-primary/30 bg-primary/5 p-5 text-sm text-foreground/75">
-            Nenhum PGDAS processado ainda. Coloque os extratos na pasta <strong>PGDAS JULHO</strong> do Drive e clique em <strong>Rodar verificação</strong>.
+            Nenhum PGDAS processado ainda. Coloque os extratos na pasta <strong>FATOR R - PGDAS</strong> do Drive e clique em <strong>Rodar verificação</strong>.
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-3 mt-4">
