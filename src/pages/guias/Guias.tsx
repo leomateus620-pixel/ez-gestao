@@ -458,7 +458,6 @@ function SettingsPanel({ testConfig }: { testConfig: ReturnType<typeof useTestCo
   );
 }
 
-function ContactResolutionDialog({
 function MidnightHero({
   isScanning,
   guidesCount,
