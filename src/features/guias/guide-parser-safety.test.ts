@@ -70,22 +70,38 @@ describe('safe guide parser Golden Set', () => {
     expect(extractDARFData(goldenSet[2].text).tipo).toBe('darf');
   });
 
-  it('blocks templates with unresolved placeholders or missing WhatsApp SID', () => {
+  it('blocks unresolved placeholders for email templates', () => {
+    const errors = validateTemplateRender({
+      template: {
+        tipo_guia: 'das',
+        canal: 'email',
+        ativo: true,
+        corpo: 'Guia [EMPRESA] [VALOR]',
+      },
+      canal: 'email',
+      tipo: 'das',
+      renderedSubject: 'Guia [EMPRESA]',
+      renderedBody: 'Guia Empresa [VALOR]',
+    });
+
+    expect(errors.some((error) => error.startsWith('unresolved_placeholders'))).toBe(true);
+  });
+
+  it('does not require legacy Twilio SID for WhatsApp Cloud templates', () => {
     const errors = validateTemplateRender({
       template: {
         tipo_guia: 'das',
         canal: 'whatsapp',
         ativo: true,
-        corpo: 'Guia [EMPRESA] [VALOR]',
+        corpo: 'Template aprovado na Meta',
         twilio_content_sid: null,
       },
       canal: 'whatsapp',
       tipo: 'das',
       renderedSubject: null,
-      renderedBody: 'Guia Empresa [VALOR]',
+      renderedBody: 'Template aprovado na Meta',
     });
 
-    expect(errors).toContain('twilio_content_sid_missing');
-    expect(errors.some((error) => error.startsWith('unresolved_placeholders'))).toBe(true);
+    expect(errors).not.toContain('twilio_content_sid_missing');
   });
 });

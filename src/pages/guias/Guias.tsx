@@ -1,8 +1,43 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, Download, FileText, FolderCog, Loader2, Play, RefreshCw, Send, ShieldAlert, FlaskConical, Rocket, Trash2 } from 'lucide-react';
+import {
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  Download,
+  FileCheck2,
+  FileText,
+  FolderCog,
+  Loader2,
+  Play,
+  Send,
+  ShieldAlert,
+  Sparkles,
+  Trash2,
+  UserRoundPlus,
+} from 'lucide-react';
 import { useGuides } from '@/features/guias/GuideProvider';
-import { useTestConfig, useBatchRuns, useBootstrapFolders, useDispatchGuide, useDeleteGuide, type TestConfig } from '@/features/guias/useGuideOps';
+import {
+  useBatchRuns,
+  useBootstrapFolders,
+  useDeleteGuide,
+  useDispatchGuide,
+  useGuideCompanies,
+  useResolveGuideContact,
+  useTestConfig,
+  type TestConfig,
+} from '@/features/guias/useGuideOps';
+import {
+  classifyGuideContactIssue,
+  defaultGuideContactForm,
+  guideCompanyName,
+  hasValidGuideEmail,
+  hasValidGuidePhone,
+  normalizeBrazilianPhone,
+  validateGuideContactForm,
+  type GuideContactFormValues,
+  type GuideContactIssue,
+} from '@/features/guias/guide-contact-rules';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,47 +49,25 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { PageHeader } from '@/components/PageHeader';
-import { GlassCard } from '@/components/GlassCard';
-import { EmptyState } from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { formatCNPJ, formatDate, formatDateTime } from '@/lib/formatters';
-import type { Guia, GuiaStatus } from '@/data/types';
+import type { CanalEnvio, Empresa, Guia, GuiaExcecao, GuiaStatus } from '@/data/types';
 import { cn } from '@/lib/utils';
 
 type GuideView = 'fila' | 'enviadas' | 'excecoes';
-
-const guideLabels: Record<GuiaStatus, string> = {
-  aguardando: 'Aguardando',
-  aguardando_processamento: 'Aguard. processamento',
-  lendo: 'Lendo',
-  ocr: 'OCR',
-  processando: 'Processando',
-  validando: 'Validando',
-  identificada: 'Identificada',
-  enviando: 'Enviando',
-  enviada: 'Enviada',
-  erro: 'Erro',
-  revisao: 'Revisao',
-  revisao_manual: 'Revisao manual',
-  quarentena: 'Quarentena',
-  pronta_envio: 'Pronta p/ envio',
-  nao_identificada: 'Não identificada',
-  duplicada: 'Duplicada',
-};
-
-const operationLabels = {
-  automacao_desligada: 'Automacao desligada',
-  somente_classificacao: 'Somente classificacao',
-  leitura_revisao: 'Leitura + revisao',
-  envio_automatico_seguro: 'Envio automatico seguro',
-  producao_total: 'Producao total',
-} as const;
 
 type BatchPreviewRow = {
   file?: string;
@@ -65,113 +78,525 @@ type BatchPreviewRow = {
   [key: string]: unknown;
 };
 
+const guideLabels: Record<GuiaStatus, string> = {
+  aguardando: 'Aguardando',
+  aguardando_processamento: 'Aguardando processamento',
+  lendo: 'Lendo',
+  ocr: 'OCR',
+  processando: 'Processando',
+  validando: 'Validando',
+  identificada: 'Identificada',
+  enviando: 'Enviando',
+  enviada: 'Enviada',
+  erro: 'Erro',
+  revisao: 'Revisão',
+  revisao_manual: 'Revisão manual',
+  quarentena: 'Quarentena',
+  pronta_envio: 'Pronta para envio',
+  nao_identificada: 'Não identificada',
+  duplicada: 'Duplicada',
+};
+
+const operationLabels = {
+  automacao_desligada: 'Automação desligada',
+  somente_classificacao: 'Somente classificação',
+  leitura_revisao: 'Leitura + revisão',
+  envio_automatico_seguro: 'Envio automático seguro',
+  producao_total: 'Produção total',
+} as const;
+
+const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
 function GuideBadge({ status }: { status: GuiaStatus }) {
+  const tone =
+    status === 'enviada' ? 'guide-pill-success'
+      : ['erro', 'nao_identificada'].includes(status) ? 'guide-pill-danger'
+        : ['revisao', 'revisao_manual', 'quarentena', 'duplicada'].includes(status) ? 'guide-pill-warning'
+          : status === 'pronta_envio' ? 'guide-pill-info'
+            : 'guide-pill-muted';
   return (
-    <Badge variant="outline" className={cn(
-      'font-medium',
-      status === 'enviada' && 'border-success/30 bg-success/10 text-success',
-      ['lendo', 'ocr', 'processando', 'validando', 'identificada', 'enviando'].includes(status) && 'border-primary/30 bg-primary/10 text-primary',
-      ['aguardando', 'aguardando_processamento', 'pronta_envio'].includes(status) && 'border-info/30 bg-info/10 text-info',
-      ['revisao', 'revisao_manual', 'quarentena'].includes(status) && 'border-warning/30 bg-warning/10 text-warning',
-      status === 'erro' && 'border-destructive/30 bg-destructive/10 text-destructive',
-    )}>
+    <span className={cn('guide-pill', tone)}>
+      <span className="guide-pill-dot" />
       {guideLabels[status]}
-    </Badge>
+    </span>
   );
 }
 
-function GuidesTable({ guides }: { guides: Guia[] }) {
+function guideValue(guide: Guia) {
+  return guide.valor == null ? 'Valor não extraído' : currency.format(Number(guide.valor));
+}
+
+function guideDueDate(guide: Guia) {
+  return guide.vencimento ? formatDate(guide.vencimento) : 'Sem vencimento';
+}
+
+function channelsLabel(company: Empresa | null) {
+  if (!company) return 'Sem cliente';
+  const emailOk = hasValidGuideEmail(company);
+  const phoneOk = hasValidGuidePhone(company);
+  const preferred = company.canalPreferido;
+  if (preferred === 'ambos' && emailOk && phoneOk) return 'Enviar pelos dois canais';
+  if (preferred === 'whatsapp' && phoneOk) return 'Enviar por WhatsApp';
+  if (preferred === 'email' && emailOk) return 'Enviar por e-mail';
+  if (emailOk && phoneOk) return 'Canais cadastrados';
+  if (emailOk) return 'E-mail cadastrado';
+  if (phoneOk) return 'WhatsApp cadastrado';
+  return 'Contato pendente';
+}
+
+function channelOptions(company: Empresa | null) {
+  if (!company) return [];
+  const options: string[] = [];
+  const emailOk = hasValidGuideEmail(company);
+  const phoneOk = hasValidGuidePhone(company);
+  const preferred = company.canalPreferido;
+  if ((preferred === 'email' || preferred === 'ambos') && emailOk) options.push('Enviar por e-mail');
+  if ((preferred === 'whatsapp' || preferred === 'ambos') && phoneOk) options.push('Enviar por WhatsApp');
+  if (preferred === 'ambos' && emailOk && phoneOk) options.push('Enviar pelos dois canais');
+  return options.length ? options : [channelsLabel(company)];
+}
+
+function SummaryCard({
+  label,
+  value,
+  caption,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: number | string;
+  caption: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: string;
+}) {
+  return (
+    <div className={cn('guide-kpi guide-tilt-card', tone)}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="guide-kpi-label">{label}</p>
+          <p className="guide-kpi-value">{value}</p>
+        </div>
+        <span className="guide-kpi-icon"><Icon className="h-5 w-5" /></span>
+      </div>
+      <p className="guide-kpi-footer">{caption}</p>
+    </div>
+  );
+}
+
+function GuideFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[0.68rem] font-black uppercase text-[hsl(var(--text-tertiary))]">{label}</p>
+      <p className="mt-1 truncate text-sm font-bold text-[hsl(var(--text-primary))]">{value}</p>
+    </div>
+  );
+}
+
+function GuideRow({
+  guide,
+  company,
+  contactIssue,
+  onResolve,
+  compact = false,
+}: {
+  guide: Guia;
+  company: Empresa | null;
+  contactIssue?: GuideContactIssue | null;
+  onResolve?: (issue: GuideContactIssue) => void;
+  compact?: boolean;
+}) {
   const dispatchGuide = useDispatchGuide();
   const deleteGuide = useDeleteGuide();
+  const availableChannels = channelOptions(company);
+  const canDispatch = guide.status === 'pronta_envio' && !contactIssue;
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow className="border-border/50">
-          <TableHead>Arquivo</TableHead>
-          <TableHead>Identificação</TableHead>
-          <TableHead>Guia</TableHead>
-          <TableHead>Score</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Decisao</TableHead>
-          <TableHead>Recebida</TableHead>
-          <TableHead className="w-32 text-right">Ações</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {guides.map((guide) => (
-          <TableRow key={guide.id} className="border-border/40">
-            <TableCell>
-              <div className="flex items-center gap-2.5">
-                <FileText className="h-4 w-4 text-primary shrink-0" />
-                <span className="max-w-64 truncate font-medium">{guide.fileName}</span>
-              </div>
-            </TableCell>
-            <TableCell className="text-xs text-foreground/76">
-              {guide.cnpjDetectado ? formatCNPJ(guide.cnpjDetectado) : 'Pendente'}
-            </TableCell>
-            <TableCell className="text-xs">
-              {guide.tipoGuia || 'A extrair'}
-              {guide.competencia && <span className="block text-foreground/68">{guide.competencia}</span>}
-            </TableCell>
-            <TableCell className="text-xs font-medium">
-              {guide.confidenceScore == null ? '-' : `${Math.round(guide.confidenceScore * 100)}%`}
-            </TableCell>
-            <TableCell><GuideBadge status={guide.status} /></TableCell>
-            <TableCell className="max-w-64 truncate text-xs text-foreground/72">
-              {guide.decisionReason || '-'}
-            </TableCell>
-            <TableCell className="text-xs text-foreground/72">{formatDateTime(guide.receivedAt)}</TableCell>
-            <TableCell>
-              <div className="flex items-center justify-end gap-1">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8"
-                  title="Processar agora"
-                  disabled={dispatchGuide.isPending || guide.status === 'enviada'}
-                  onClick={() => dispatchGuide.mutate({ guide_id: guide.id, force_dispatch: true, manual_approval: true })}
+    <div className={cn(
+      'guide-flow-row guide-tilt-card',
+      contactIssue && 'border-[hsl(var(--brand-orange)/0.32)] bg-[hsl(var(--brand-orange)/0.08)]',
+      compact && 'py-3',
+    )}>
+      <div className="guide-flow-marker"><span /></div>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate font-display text-[0.98rem] font-black text-[hsl(var(--text-primary))]">
+            {guideCompanyName(guide, company)}
+          </p>
+          <GuideBadge status={guide.status} />
+          {guide.confidenceScore != null && (
+            <span className="guide-pill guide-pill-muted">
+              {Math.round(guide.confidenceScore * 100)}% confiança
+            </span>
+          )}
+        </div>
+        <p className="mt-1 truncate text-xs font-semibold text-[hsl(var(--text-secondary))]">{guide.fileName}</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <GuideFact label="CNPJ" value={guide.cnpjDetectado ? formatCNPJ(guide.cnpjDetectado) : 'Não identificado'} />
+          <GuideFact label="Guia" value={guide.tipoGuia || 'A extrair'} />
+          <GuideFact label="Vencimento" value={guideDueDate(guide)} />
+          <GuideFact label="Valor" value={guideValue(guide)} />
+          <GuideFact label="Canal" value={channelsLabel(company)} />
+        </div>
+        {contactIssue ? (
+          <p className="mt-3 text-sm font-semibold text-[hsl(var(--brand-orange-deep))]">{contactIssue.title}</p>
+        ) : guide.decisionReason ? (
+          <p className="mt-3 line-clamp-2 text-xs font-semibold text-[hsl(var(--text-secondary))]">{guide.decisionReason}</p>
+        ) : null}
+        {canDispatch && availableChannels.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {availableChannels.map((option) => (
+              <span key={option} className="guide-pill guide-pill-success">{option}</span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="flex flex-col items-stretch justify-center gap-2 sm:min-w-36">
+        {contactIssue && onResolve ? (
+          <Button size="sm" className="gap-2" onClick={() => onResolve(contactIssue)}>
+            <UserRoundPlus className="h-4 w-4" />
+            Resolver pendência
+          </Button>
+        ) : canDispatch ? (
+          <Button
+            size="sm"
+            className="gap-2"
+            disabled={dispatchGuide.isPending}
+            onClick={() => dispatchGuide.mutate({ guide_id: guide.id, force_dispatch: true, manual_approval: true })}
+          >
+            {dispatchGuide.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            Confirmar forma de envio
+          </Button>
+        ) : (
+          <Button asChild size="sm" variant="outline" className="guide-link-action gap-2">
+            <Link to={`/guias/${guide.id}`}>Ver detalhes <ArrowRight className="h-4 w-4" /></Link>
+          </Button>
+        )}
+        <div className="flex justify-end gap-1">
+          <Button asChild size="icon" variant="ghost" className="h-8 w-8" title="Ver detalhes da guia">
+            <Link to={`/guias/${guide.id}`} aria-label="Ver detalhes da guia"><ArrowRight className="h-4 w-4" /></Link>
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button size="icon" variant="ghost" className="h-8 w-8 text-foreground/70 hover:text-destructive" title="Excluir guia">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Excluir esta guia?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  A guia <strong>{guide.fileName}</strong> será removida da fila junto com envios, eventos e exceções.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deleteGuide.mutate({ guia_id: guide.id, motivo: 'Excluída pelo operador na lista de guias' })}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
-                  <RefreshCw className={cn('h-4 w-4', dispatchGuide.isPending && 'animate-spin')} />
-                </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 text-foreground/70 hover:text-destructive"
-                      title="Excluir guia"
-                      disabled={deleteGuide.isPending}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Excluir esta guia?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        A guia <strong>{guide.fileName}</strong> será removida da fila junto com seus envios, eventos e exceções. Esta ação não pode ser desfeita.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={() => deleteGuide.mutate({ guia_id: guide.id, motivo: 'Excluida pelo operador na lista de guias' })}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        Excluir
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-                <Button asChild size="icon" variant="ghost" className="h-8 w-8">
-                  <Link to={`/guias/${guide.id}`} aria-label="Abrir detalhe"><ArrowRight className="h-4 w-4" /></Link>
-                </Button>
+                  Excluir
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GuideSection({
+  kicker,
+  title,
+  count,
+  children,
+  variant,
+}: {
+  kicker: string;
+  title: string;
+  count: number;
+  children: React.ReactNode;
+  variant?: 'flow' | 'exceptions';
+}) {
+  return (
+    <section className={cn(
+      'guide-section p-4 sm:p-5',
+      variant === 'flow' && 'guide-section-flow',
+      variant === 'exceptions' && 'guide-section-exceptions',
+    )}>
+      <div className="guide-section-header">
+        <div>
+          <p className="guide-section-kicker">{kicker}</p>
+          <h2>{title}</h2>
+        </div>
+        <span className="guide-compact-total">{count}</span>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function EmptyGuidePanel({
+  icon: Icon,
+  title,
+  description,
+  success,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  success?: boolean;
+}) {
+  return (
+    <div className={cn('guide-empty-state', success && 'guide-empty-state-success')}>
+      <Icon className="mt-0.5 h-5 w-5 shrink-0" />
+      <div>
+        <p>{title}</p>
+        <span>{description}</span>
+      </div>
+    </div>
+  );
+}
+
+function SettingsPanel({ testConfig }: { testConfig: ReturnType<typeof useTestConfig> }) {
+  const [editEmail, setEditEmail] = useState('');
+  const [editWp, setEditWp] = useState('');
+  const modo = testConfig.data?.modo_global ?? 'teste';
+  const isTeste = modo === 'teste';
+
+  return (
+    <section className="guide-section p-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex gap-3">
+          <span className={cn('guide-channel-icon', isTeste ? 'text-warning' : 'text-success')}>
+            {isTeste ? <Sparkles className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+          </span>
+          <div>
+            <p className="text-sm font-black">Modo {isTeste ? 'TESTE' : 'PRODUÇÃO'}</p>
+            <p className="mt-1 max-w-3xl text-xs font-semibold text-[hsl(var(--text-secondary))]">
+              {isTeste
+                ? 'A varredura valida dados reais, mas envios ficam controlados por destinatários de teste.'
+                : 'Envios usam os contatos cadastrados nas empresas e seguem as regras do pipeline.'}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-bold text-[hsl(var(--text-tertiary))]">TESTE</span>
+          <Switch
+            checked={!isTeste}
+            disabled={testConfig.update.isPending}
+            onCheckedChange={(checked) => testConfig.update.mutate({ modo_global: checked ? 'producao' : 'teste' })}
+          />
+          <span className="text-xs font-bold text-[hsl(var(--text-tertiary))]">PRODUÇÃO</span>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-end">
+        <div className="space-y-1">
+          <Label className="text-xs font-bold">Nível operacional</Label>
+          <Select
+            value={testConfig.data?.operation_level ?? 'somente_classificacao'}
+            onValueChange={(value) => testConfig.update.mutate({ operation_level: value as TestConfig['operation_level'] })}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(operationLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <label className="flex min-h-10 items-center gap-2 rounded-xl border border-border/50 bg-white/45 px-3 py-2 text-xs font-semibold">
+          <Switch
+            checked={testConfig.data?.auto_dispatch_enabled ?? false}
+            disabled={testConfig.update.isPending || isTeste}
+            onCheckedChange={(checked) => testConfig.update.mutate({ auto_dispatch_enabled: checked })}
+          />
+          Envio automático seguro
+        </label>
+        <label className="flex min-h-10 items-center gap-2 rounded-xl border border-border/50 bg-white/45 px-3 py-2 text-xs font-semibold">
+          <Switch
+            checked={testConfig.data?.require_batch_approval ?? true}
+            disabled={testConfig.update.isPending}
+            onCheckedChange={(checked) => testConfig.update.mutate({ require_batch_approval: checked })}
+          />
+          Aprovar lote
+        </label>
+      </div>
+
+      {isTeste && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label className="text-xs font-bold">E-mail de teste</Label>
+            <div className="flex gap-2">
+              <Input
+                defaultValue={testConfig.data?.email_teste ?? ''}
+                placeholder="teste@exemplo.com"
+                onChange={(event) => setEditEmail(event.target.value)}
+              />
+              <Button size="sm" variant="outline" onClick={() => testConfig.update.mutate({ email_teste: editEmail || testConfig.data?.email_teste || null })}>
+                Salvar
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs font-bold">WhatsApp de teste</Label>
+            <div className="flex gap-2">
+              <Input
+                defaultValue={testConfig.data?.whatsapp_teste ?? ''}
+                placeholder="+5511999999999"
+                onChange={(event) => setEditWp(event.target.value)}
+              />
+              <Button size="sm" variant="outline" onClick={() => testConfig.update.mutate({ whatsapp_teste: normalizeBrazilianPhone(editWp) || editWp || testConfig.data?.whatsapp_teste || null })}>
+                Salvar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ContactResolutionDialog({
+  issue,
+  queue,
+  open,
+  onOpenChange,
+}: {
+  issue: GuideContactIssue | null;
+  queue: GuideContactIssue[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const resolveContact = useResolveGuideContact();
+  const [form, setForm] = useState<GuideContactFormValues>({
+    email: '',
+    phone: '',
+    preferredChannel: 'email',
+    observation: '',
+  });
+  const [errors, setErrors] = useState<Partial<Record<keyof GuideContactFormValues, string>>>({});
+
+  useEffect(() => {
+    if (!issue) return;
+    setForm(defaultGuideContactForm(issue));
+    setErrors({});
+  }, [issue]);
+
+  if (!issue) return null;
+
+  const current = queue.findIndex((entry) => entry.guide.id === issue.guide.id) + 1;
+  const submit = async () => {
+    const validation = validateGuideContactForm(issue, form);
+    setErrors(validation.errors);
+    if (!validation.ok) return;
+    await resolveContact.mutateAsync({ issue, values: form });
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[92dvh] overflow-y-auto rounded-2xl border-white/20 bg-[hsl(var(--background))] p-0 sm:max-w-2xl">
+        <div className="guide-hero rounded-b-none p-5">
+          <DialogHeader className="relative z-10 text-left">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="guide-hero-chip">Pendências encontradas</span>
+              {queue.length > 1 && <span className="guide-hero-chip">Item {current} de {queue.length}</span>}
+            </div>
+            <DialogTitle className="text-2xl font-black text-white">{issue.title}</DialogTitle>
+            <DialogDescription className="text-sm font-semibold text-white/78">
+              {issue.description}
+            </DialogDescription>
+          </DialogHeader>
+        </div>
+
+        <div className="space-y-5 p-5">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-border/60 bg-white/55 p-3">
+              <p className="text-[0.68rem] font-black uppercase text-[hsl(var(--text-tertiary))]">Razão social identificada</p>
+              <p className="mt-1 text-sm font-black">{guideCompanyName(issue.guide, issue.company)}</p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-white/55 p-3">
+              <p className="text-[0.68rem] font-black uppercase text-[hsl(var(--text-tertiary))]">CNPJ identificado</p>
+              <p className="mt-1 font-mono text-sm font-black">{issue.guide.cnpjDetectado ? formatCNPJ(issue.guide.cnpjDetectado) : 'Não identificado'}</p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-white/55 p-3">
+              <p className="text-[0.68rem] font-black uppercase text-[hsl(var(--text-tertiary))]">Guia/documento</p>
+              <p className="mt-1 text-sm font-black">{issue.guide.tipoGuia || 'Guia em processamento'}</p>
+              <p className="mt-1 truncate text-xs font-semibold text-[hsl(var(--text-secondary))]">{issue.guide.fileName}</p>
+            </div>
+            <div className="rounded-xl border border-border/60 bg-white/55 p-3">
+              <p className="text-[0.68rem] font-black uppercase text-[hsl(var(--text-tertiary))]">Motivo</p>
+              <p className="mt-1 text-sm font-black">{issue.exception?.reason || issue.guide.decisionReason || 'Cadastro incompleto para envio.'}</p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[hsl(var(--brand-orange)/0.18)] bg-white/55 p-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="guide-contact-email" className="text-xs font-black">E-mail</Label>
+                <Input
+                  id="guide-contact-email"
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => setForm((currentForm) => ({ ...currentForm, email: event.target.value }))}
+                  className={errors.email ? 'border-destructive' : ''}
+                  placeholder="financeiro@empresa.com.br"
+                />
+                {errors.email && <p className="text-xs font-semibold text-destructive">{errors.email}</p>}
               </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+              <div className="space-y-1.5">
+                <Label htmlFor="guide-contact-phone" className="text-xs font-black">Celular/WhatsApp</Label>
+                <Input
+                  id="guide-contact-phone"
+                  value={form.phone}
+                  onChange={(event) => setForm((currentForm) => ({ ...currentForm, phone: event.target.value }))}
+                  className={errors.phone ? 'border-destructive' : ''}
+                  placeholder="+55 55 99999-9999"
+                />
+                {errors.phone && <p className="text-xs font-semibold text-destructive">{errors.phone}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-black">Forma preferida de envio</Label>
+                <Select
+                  value={form.preferredChannel}
+                  onValueChange={(value) => setForm((currentForm) => ({ ...currentForm, preferredChannel: value as CanalEnvio }))}
+                >
+                  <SelectTrigger className={errors.preferredChannel ? 'border-destructive' : ''}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="email">Enviar por e-mail</SelectItem>
+                    <SelectItem value="whatsapp">Enviar por WhatsApp</SelectItem>
+                    <SelectItem value="ambos">Enviar pelos dois canais</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.preferredChannel && <p className="text-xs font-semibold text-destructive">{errors.preferredChannel}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="guide-contact-observation" className="text-xs font-black">Observação opcional</Label>
+                <Textarea
+                  id="guide-contact-observation"
+                  value={form.observation}
+                  onChange={(event) => setForm((currentForm) => ({ ...currentForm, observation: event.target.value }))}
+                  className="min-h-[76px]"
+                  placeholder="Ex.: contato informado pelo financeiro."
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="border-t border-border/60 bg-white/40 p-5">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Resolver depois</Button>
+          <Button onClick={submit} disabled={resolveContact.isPending} className="gap-2">
+            {resolveContact.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            Salvar e processar envio
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -179,32 +604,57 @@ export default function Guias({ view }: { view: GuideView }) {
   const { guides, exceptions, isInitialLoading, isScanning, runScan, resolveException } = useGuides();
   const testConfig = useTestConfig();
   const batches = useBatchRuns(5);
+  const companiesQuery = useGuideCompanies();
   const bootstrap = useBootstrapFolders();
-  const [editEmail, setEditEmail] = useState<string>('');
-  const [editWp, setEditWp] = useState<string>('');
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [autoOpenedBatchId, setAutoOpenedBatchId] = useState<string | null>(null);
 
-  const modo = testConfig.data?.modo_global ?? 'teste';
-  const isTeste = modo === 'teste';
+  const companyById = useMemo(() => {
+    const map = new Map<string, Empresa>();
+    for (const company of companiesQuery.data || []) map.set(company.id, company);
+    return map;
+  }, [companiesQuery.data]);
 
-  const pending = useMemo(() =>
-    guides.filter((guide) => guide.status !== 'enviada'), [guides]);
-  const sent = useMemo(() =>
-    guides.filter((guide) => guide.status === 'enviada'), [guides]);
   const openExceptions = useMemo(() =>
     exceptions.filter((entry) => entry.status !== 'resolved' && entry.status !== 'ignored'), [exceptions]);
-  const reviewing = useMemo(() => guides.filter((g) => ['revisao', 'revisao_manual', 'quarentena', 'nao_identificada', 'duplicada', 'erro'].includes(g.status)), [guides]);
-  const byStatus = useMemo(() => {
-    const out: Partial<Record<GuiaStatus, number>> = {};
-    for (const g of guides) out[g.status] = (out[g.status] || 0) + 1;
-    return out;
-  }, [guides]);
+
+  const enrichedGuides = useMemo(() => guides.map((guide) => {
+    const company = guide.empresaId ? companyById.get(guide.empresaId) || null : null;
+    const contactIssue = classifyGuideContactIssue(guide, company, openExceptions);
+    return { guide, company, contactIssue };
+  }), [companyById, guides, openExceptions]);
+
+  const pendingContact = useMemo(() =>
+    enrichedGuides.filter((entry): entry is typeof entry & { contactIssue: GuideContactIssue } => Boolean(entry.contactIssue)), [enrichedGuides]);
+
+  const readyToSend = useMemo(() =>
+    enrichedGuides.filter(({ guide, contactIssue }) => guide.status === 'pronta_envio' && !contactIssue), [enrichedGuides]);
+
+  const sent = useMemo(() =>
+    enrichedGuides.filter(({ guide }) => guide.status === 'enviada'), [enrichedGuides]);
+
+  const processing = useMemo(() =>
+    enrichedGuides.filter(({ guide, contactIssue }) =>
+      guide.status !== 'enviada' &&
+      guide.status !== 'pronta_envio' &&
+      !contactIssue &&
+      !['erro', 'duplicada', 'nao_identificada'].includes(guide.status),
+    ), [enrichedGuides]);
+
+  const failed = useMemo(() =>
+    enrichedGuides.filter(({ guide }) => ['erro', 'duplicada', 'nao_identificada', 'quarentena', 'revisao_manual'].includes(guide.status)), [enrichedGuides]);
+
   const lastBatch = batches.data?.[0];
-  const totalGuides = guides.length || 1;
-  const reliability = {
-    autoReady: Math.round(((byStatus.pronta_envio ?? 0) + (byStatus.enviada ?? 0)) / totalGuides * 100),
-    manualReview: Math.round(((byStatus.revisao ?? 0) + (byStatus.revisao_manual ?? 0) + (byStatus.quarentena ?? 0)) / totalGuides * 100),
-    errors: Math.round(((byStatus.erro ?? 0) + (byStatus.nao_identificada ?? 0) + (byStatus.duplicada ?? 0)) / totalGuides * 100),
-  };
+  const selectedIssue = pendingContact.find((entry) => entry.guide.id === selectedIssueId)?.contactIssue || null;
+
+  useEffect(() => {
+    if (isScanning || pendingContact.length === 0) return;
+    const batchId = lastBatch?.id || 'sem-lote';
+    if (autoOpenedBatchId === batchId) return;
+    setSelectedIssueId(pendingContact[0].guide.id);
+    setAutoOpenedBatchId(batchId);
+  }, [autoOpenedBatchId, isScanning, lastBatch?.id, pendingContact]);
+
   const exportLastBatch = () => {
     const rows = Array.isArray(lastBatch?.preview_json) ? lastBatch.preview_json : [];
     if (!rows.length) return;
@@ -234,198 +684,82 @@ export default function Guias({ view }: { view: GuideView }) {
     URL.revokeObjectURL(url);
   };
 
-  const title = view === 'fila' ? 'Fila de Guias' : view === 'enviadas' ? 'Guias Enviadas' : 'Exceções de Guias';
-  const subtitle = view === 'fila'
-    ? 'PDFs em leitura, identificação, OCR ou aguardando despacho.'
-    : view === 'enviadas'
-      ? 'Documentos aceitos pelo canal e movidos para a pasta enviados.'
-      : 'Tudo que exige revisão humana permanece rastreavel aqui.';
-
   return (
-    <div className="space-y-6">
-      <PageHeader title={title} subtitle={subtitle}>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => bootstrap.mutate()} disabled={bootstrap.isPending} className="gap-2">
-            <FolderCog className="h-4 w-4" /> Recriar pastas
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/guias/revisao">Revisão manual ({reviewing.length})</Link>
-          </Button>
-          <Button onClick={runScan} disabled={isScanning} className="gap-2">
-            {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            Varredura agora
-          </Button>
-        </div>
-      </PageHeader>
-
-      {/* Toggle Modo Teste/Produção */}
-      <GlassCard variant={isTeste ? 'critical' : 'elevated'} className="p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-3">
-            {isTeste ? <FlaskConical className="h-5 w-5 text-warning" /> : <Rocket className="h-5 w-5 text-success" />}
-            <div>
-              <p className="text-sm font-semibold">
-                Modo {isTeste ? 'TESTE' : 'PRODUÇÃO'}
-                <Badge variant="outline" className={cn('ml-2', isTeste ? 'border-warning/40 bg-warning/10 text-warning' : 'border-success/40 bg-success/10 text-success')}>
-                  {isTeste ? 'envios redirecionados' : 'envios reais'}
-                </Badge>
-              </p>
-              <p className="mt-0.5 text-xs text-foreground/70">
-                {isTeste
-                  ? 'Em modo teste, e-mails e WhatsApp vão para os destinatários abaixo, PDFs NÃO são movidos no Drive.'
-                  : 'Em produção, envios vão para os contatos reais da empresa e PDFs são movidos para Enviadas/[Empresa]/[AAAA-MM].'}
-              </p>
+    <div className="guide-dashboard space-y-6">
+      <section className="guide-hero">
+        <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <div className="flex flex-wrap gap-2">
+              <span className="guide-hero-chip">Drive + CNPJ + contatos</span>
+              <span className={cn('guide-hero-chip guide-hero-chip-live', isScanning && 'guide-live-dot-processing')}>
+                <span className={cn('guide-live-dot', isScanning && 'guide-live-dot-processing')} />
+                {isScanning ? 'Verificando agora' : 'Fluxo monitorado'}
+              </span>
+            </div>
+            <h1 className="mt-4 font-display text-3xl font-black tracking-tight text-white md:text-4xl">Envio de Guias</h1>
+            <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-white/76">
+              O sistema verifica a pasta do Drive, identifica razão social e CNPJ, cruza com o cadastro de empresas e libera o envio somente quando há canal válido.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:min-w-[26rem]">
+            <div className="guide-hero-telemetry">
+              <div><span>{guides.length}</span><p>Guias encontradas</p></div>
+              <div><span>{readyToSend.length}</span><p>Prontas</p></div>
+              <div><span>{pendingContact.length}</span><p>Pendências</p></div>
+            </div>
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <Button onClick={runScan} disabled={isScanning} className="guide-primary-action gap-2">
+                {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                Verificar guias no Drive
+              </Button>
+              <Button asChild variant="outline" className="guide-link-action gap-2">
+                <Link to="/guias/revisao">Revisão manual</Link>
+              </Button>
+              <Button variant="outline" className="guide-link-action gap-2" onClick={() => bootstrap.mutate()} disabled={bootstrap.isPending}>
+                <FolderCog className="h-4 w-4" />
+                Pastas
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-foreground/68">TESTE</span>
-            <Switch
-              checked={!isTeste}
-              disabled={testConfig.update.isPending}
-              onCheckedChange={(checked) => testConfig.update.mutate({ modo_global: checked ? 'producao' : 'teste' })}
-            />
-            <span className="text-xs text-foreground/68">PRODUÇÃO</span>
-          </div>
         </div>
+      </section>
 
-        {isTeste && (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground/72">E-mail de teste</label>
-              <div className="flex gap-2">
-                <Input
-                  defaultValue={testConfig.data?.email_teste ?? ''}
-                  placeholder="teste@exemplo.com"
-                  onChange={(e) => setEditEmail(e.target.value)}
-                />
-                <Button size="sm" variant="outline" onClick={() => testConfig.update.mutate({ email_teste: editEmail || testConfig.data?.email_teste || null })}>Salvar</Button>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground/72">WhatsApp de teste (E.164)</label>
-              <div className="flex gap-2">
-                <Input
-                  defaultValue={testConfig.data?.whatsapp_teste ?? ''}
-                  placeholder="+5511999999999"
-                  onChange={(e) => setEditWp(e.target.value)}
-                />
-                <Button size="sm" variant="outline" onClick={() => testConfig.update.mutate({ whatsapp_teste: editWp || testConfig.data?.whatsapp_teste || null })}>Salvar</Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-end">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground/72">Nivel operacional</label>
-            <Select
-              value={testConfig.data?.operation_level ?? 'somente_classificacao'}
-              onValueChange={(value) => testConfig.update.mutate({ operation_level: value as TestConfig['operation_level'] })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(operationLabels).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <label className="flex items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-xs">
-            <Switch
-              checked={testConfig.data?.auto_dispatch_enabled ?? false}
-              disabled={testConfig.update.isPending || isTeste}
-              onCheckedChange={(checked) => testConfig.update.mutate({ auto_dispatch_enabled: checked })}
-            />
-            Envio automatico seguro
-          </label>
-          <label className="flex items-center gap-2 rounded-lg border border-border/50 px-3 py-2 text-xs">
-            <Switch
-              checked={testConfig.data?.require_batch_approval ?? true}
-              disabled={testConfig.update.isPending}
-              onCheckedChange={(checked) => testConfig.update.mutate({ require_batch_approval: checked })}
-            />
-            Aprovar lote
-          </label>
-        </div>
-      </GlassCard>
-
-      {/* Cards de status */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        {([
-          ['aguardando', 'A processar', (byStatus.aguardando ?? 0) + (byStatus.aguardando_processamento ?? 0)],
-          ['pronta_envio', 'Pronta envio', byStatus.pronta_envio ?? 0],
-          ['enviada', 'Enviadas', byStatus.enviada ?? 0],
-          ['revisao', 'Revisão', byStatus.revisao ?? 0],
-          ['nao_identificada', 'Não ident.', byStatus.nao_identificada ?? 0],
-          ['duplicada', 'Duplicadas', byStatus.duplicada ?? 0],
-          ['erro', 'Erros', byStatus.erro ?? 0],
-        ] as const).map(([key, label, count]) => (
-          <GlassCard key={key} className="p-3">
-            <p className="text-[10px] uppercase tracking-wide text-foreground/60">{label}</p>
-            <p className="mt-1 text-2xl font-semibold">{count}</p>
-          </GlassCard>
-        ))}
-        <GlassCard className="p-3">
-          <p className="text-[10px] uppercase tracking-wide text-foreground/60">Revisao manual</p>
-          <p className="mt-1 text-2xl font-semibold">{byStatus.revisao_manual ?? 0}</p>
-        </GlassCard>
-        <GlassCard className="p-3">
-          <p className="text-[10px] uppercase tracking-wide text-foreground/60">Quarentena</p>
-          <p className="mt-1 text-2xl font-semibold">{byStatus.quarentena ?? 0}</p>
-        </GlassCard>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <SummaryCard label="Guias encontradas" value={guides.length} caption="Itens detectados no fluxo atual" icon={FileText} tone="guide-kpi-waiting" />
+        <SummaryCard label="Prontas para envio" value={readyToSend.length} caption="Com cliente e canal válidos" icon={FileCheck2} tone="guide-kpi-delivered" />
+        <SummaryCard label="Pendências de cadastro" value={pendingContact.length} caption="Exigem contato ou cliente" icon={UserRoundPlus} tone="guide-kpi-exceptions" />
+        <SummaryCard label="Enviadas" value={sent.length} caption="Aceitas pelo fluxo de envio" icon={Send} tone="guide-kpi-sent" />
+        <SummaryCard label="Falhas/exceções" value={openExceptions.length} caption="Bloqueios técnicos ou revisão" icon={ShieldAlert} tone="guide-kpi-failures" />
       </div>
 
-      {/* Métricas última varredura */}
-      <GlassCard className="p-4">
-        <div className="grid gap-3 text-xs sm:grid-cols-3">
-          <div>
-            <p className="uppercase tracking-wide text-foreground/60">Prontas/seguras</p>
-            <p className="mt-1 text-xl font-semibold text-success">{reliability.autoReady}%</p>
-          </div>
-          <div>
-            <p className="uppercase tracking-wide text-foreground/60">Revisao/quarentena</p>
-            <p className="mt-1 text-xl font-semibold text-warning">{reliability.manualReview}%</p>
-          </div>
-          <div>
-            <p className="uppercase tracking-wide text-foreground/60">Erro/duplicidade</p>
-            <p className="mt-1 text-xl font-semibold text-destructive">{reliability.errors}%</p>
-          </div>
-        </div>
-      </GlassCard>
+      <SettingsPanel testConfig={testConfig} />
 
       {lastBatch && (
-        <GlassCard className="p-4">
+        <section className="guide-section p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-wide text-foreground/60">Última varredura</p>
-              <p className="mt-0.5 text-sm font-semibold">
-                {formatDateTime(lastBatch.started_at)} • modo {lastBatch.modo}
-              </p>
+              <p className="guide-section-kicker">Última varredura</p>
+              <h2>{formatDateTime(lastBatch.started_at)} · modo {lastBatch.modo}</h2>
             </div>
-            {Array.isArray(lastBatch.preview_json) && lastBatch.preview_json.length > 0 && (
-              <Button size="sm" variant="outline" className="gap-2" onClick={exportLastBatch}>
-                <Download className="h-4 w-4" /> CSV
-              </Button>
-            )}
-            <div className="flex flex-wrap gap-4 text-xs text-foreground/72">
-              <span>Total: <b>{lastBatch.total ?? 0}</b></span>
-              <span>Prontas: <b className="text-info">{lastBatch.prontas_envio ?? 0}</b></span>
-              <span>Identificadas: <b>{lastBatch.identificadas ?? 0}</b></span>
-              <span>Enviadas: <b className="text-success">{lastBatch.enviadas ?? 0}</b></span>
-              <span>Revisão: <b className="text-warning">{lastBatch.revisao ?? 0}</b></span>
-              <span>Quarentena: <b className="text-warning">{lastBatch.quarentena ?? 0}</b></span>
-              <span>Erros: <b className="text-destructive">{lastBatch.erros ?? 0}</b></span>
-              <span>Duplicadas: <b>{lastBatch.duplicadas ?? 0}</b></span>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[hsl(var(--text-secondary))]">
+              <span>Total: {lastBatch.total ?? 0}</span>
+              <span>Prontas: {lastBatch.prontas_envio ?? 0}</span>
+              <span>Revisão: {lastBatch.revisao ?? 0}</span>
+              <span>Quarentena: {lastBatch.quarentena ?? 0}</span>
+              <span>Erros: {lastBatch.erros ?? 0}</span>
+              {Array.isArray(lastBatch.preview_json) && lastBatch.preview_json.length > 0 && (
+                <Button size="sm" variant="outline" className="guide-link-action gap-2" onClick={exportLastBatch}>
+                  <Download className="h-4 w-4" /> CSV
+                </Button>
+              )}
             </div>
           </div>
-        </GlassCard>
+        </section>
       )}
 
       <div className="flex flex-wrap gap-2">
         <Button asChild size="sm" variant={view === 'fila' ? 'default' : 'outline'}>
-          <Link to="/guias/fila">Fila ({pending.length})</Link>
+          <Link to="/guias/fila">Fila ({guides.length - sent.length})</Link>
         </Button>
         <Button asChild size="sm" variant={view === 'enviadas' ? 'default' : 'outline'}>
           <Link to="/guias/enviadas">Enviadas ({sent.length})</Link>
@@ -435,55 +769,99 @@ export default function Guias({ view }: { view: GuideView }) {
         </Button>
       </div>
 
-      {view !== 'excecoes' && (
-        <GlassCard variant="elevated" className="overflow-hidden p-0">
-          {isInitialLoading && guides.length === 0 ? (
-            <div className="flex items-center justify-center gap-2 p-16 text-sm text-foreground/72">
-              <Loader2 className="h-4 w-4 animate-spin" /> Carregando guias
+      {isInitialLoading || companiesQuery.isLoading ? (
+        <div className="guide-section flex items-center justify-center gap-2 p-12 text-sm font-semibold text-[hsl(var(--text-secondary))]">
+          <Loader2 className="h-4 w-4 animate-spin" /> Carregando fluxo de guias
+        </div>
+      ) : view === 'enviadas' ? (
+        <GuideSection kicker="Concluídas" title="Guias enviadas" count={sent.length} variant="flow">
+          {sent.length ? (
+            <div className="guide-flow-list">
+              {sent.map(({ guide, company }) => <GuideRow key={guide.id} guide={guide} company={company} compact />)}
             </div>
-          ) : (view === 'fila' ? pending : sent).length ? (
-            <GuidesTable guides={view === 'fila' ? pending : sent} />
           ) : (
-            <EmptyState
-              icon={view === 'fila' ? FileText : Send}
-              title={view === 'fila' ? 'Nenhuma guia aguardando processamento' : 'Nenhuma guia enviada ainda'}
-              description={view === 'fila' ? 'Arquivos PDF da pasta a enviar aparecerao aqui.' : 'Os envios confirmados serao organizados nesta lista.'}
-              className="border-0 shadow-none bg-transparent"
-            />
+            <EmptyGuidePanel icon={Send} title="Nenhuma guia enviada ainda" description="Os envios confirmados pelo fluxo aparecerão aqui." success />
           )}
-        </GlassCard>
-      )}
-
-      {view === 'excecoes' && (
-        <div className="space-y-3">
-          {openExceptions.length === 0 ? (
-            <EmptyState icon={ShieldAlert} title="Nenhuma exceção aberta" description="Falhas de OCR, cadastro, consentimento ou conector serao exibidas aqui." />
-          ) : openExceptions.map((entry) => (
-            <GlassCard key={entry.id} variant={entry.severity === 'critical' || entry.severity === 'error' ? 'critical' : 'default'}>
-              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                <div className="flex gap-3">
-                  <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold">{entry.exceptionType.replace(/_/g, ' ')}</p>
-                      <Badge variant="outline">{entry.severity}</Badge>
+        </GuideSection>
+      ) : view === 'excecoes' ? (
+        <GuideSection kicker="Atenção" title="Exceções e erros" count={openExceptions.length} variant="exceptions">
+          {openExceptions.length ? (
+            <div className="space-y-3">
+              {openExceptions.map((entry: GuiaExcecao) => (
+                <div key={entry.id} className="guide-exception-row">
+                  <p className="guide-exception-type">{entry.exceptionType.replace(/_/g, ' ')}</p>
+                  <h3>{entry.reason}</h3>
+                  <p>Ação recomendada: {entry.actionRecommended || 'Análise manual.'}</p>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-[hsl(var(--text-tertiary))]">{formatDate(entry.createdAt)}</span>
+                    <div className="flex gap-2">
+                      {entry.guiaId && (
+                        <Button variant="outline" size="sm" asChild className="guide-link-action">
+                          <Link to={`/guias/${entry.guiaId}`}>Ver detalhes da guia</Link>
+                        </Button>
+                      )}
+                      <Button size="sm" onClick={() => resolveException(entry.id)}>Resolver</Button>
                     </div>
-                    <p className="mt-1 text-sm text-foreground/70">{entry.reason}</p>
-                    <p className="mt-2 text-xs text-foreground/70">Acao recomendada: {entry.actionRecommended || 'Análise manual.'}</p>
-                    <p className="mt-1 text-[11px] text-foreground/64">{formatDate(entry.createdAt)}</p>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  {entry.guiaId && (
-                    <Button variant="outline" size="sm" asChild><Link to={`/guias/${entry.guiaId}`}>Abrir guia</Link></Button>
-                  )}
-                  <Button size="sm" onClick={() => resolveException(entry.id)}>Resolver</Button>
-                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyGuidePanel icon={ShieldAlert} title="Nenhuma exceção aberta" description="Falhas de leitura, cadastro, conector ou envio serão destacadas aqui." success />
+          )}
+        </GuideSection>
+      ) : (
+        <div className="space-y-5">
+          <GuideSection kicker="Cadastro e contato" title="Pendências de cadastro" count={pendingContact.length} variant="exceptions">
+            {pendingContact.length ? (
+              <div className="guide-flow-list">
+                {pendingContact.map(({ guide, company, contactIssue }) => (
+                  <GuideRow
+                    key={guide.id}
+                    guide={guide}
+                    company={company}
+                    contactIssue={contactIssue}
+                    onResolve={(issue) => setSelectedIssueId(issue.guide.id)}
+                  />
+                ))}
               </div>
-            </GlassCard>
-          ))}
+            ) : (
+              <EmptyGuidePanel icon={CheckCircle2} title="Sem pendências de cadastro" description="Clientes encontrados possuem dados suficientes para seguir conforme a regra de envio." success />
+            )}
+          </GuideSection>
+
+          <GuideSection kicker="Próximo passo" title="Prontas para envio" count={readyToSend.length} variant="flow">
+            {readyToSend.length ? (
+              <div className="guide-flow-list">
+                {readyToSend.map(({ guide, company }) => <GuideRow key={guide.id} guide={guide} company={company} />)}
+              </div>
+            ) : (
+              <EmptyGuidePanel icon={Clock3} title="Nenhuma guia pronta no momento" description="Depois da verificação, itens com cliente e canal válidos aparecem aqui para confirmação." />
+            )}
+          </GuideSection>
+
+          <GuideSection kicker="Fila operacional" title="Guias encontradas" count={processing.length + failed.length} variant="flow">
+            {processing.length || failed.length ? (
+              <div className="guide-flow-list">
+                {[...processing, ...failed]
+                  .filter(({ guide }) => !pendingContact.some((entry) => entry.guide.id === guide.id))
+                  .map(({ guide, company }) => <GuideRow key={guide.id} guide={guide} company={company} compact />)}
+              </div>
+            ) : (
+              <EmptyGuidePanel icon={FileText} title="Nenhuma guia aguardando processamento" description="Arquivos PDF da pasta do Drive aparecerão aqui após a verificação." />
+            )}
+          </GuideSection>
         </div>
       )}
+
+      <ContactResolutionDialog
+        issue={selectedIssue}
+        queue={pendingContact.map((entry) => entry.contactIssue)}
+        open={Boolean(selectedIssue)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedIssueId(null);
+        }}
+      />
     </div>
   );
 }

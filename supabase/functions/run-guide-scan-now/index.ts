@@ -76,6 +76,12 @@ type DispatchPlan = {
   errors: string[];
 };
 
+type ContactPreconditionIssue = {
+  exceptionType: "missing_email" | "missing_phone" | "missing_contact_channels" | "missing_channel";
+  reason: string;
+  action: string;
+};
+
 async function extractPdf(bytes: Uint8Array) {
   const pdf = await getDocumentProxy(bytes);
   const { text, totalPages } = await extractText(pdf, { mergePages: true });
@@ -161,6 +167,14 @@ function folderIdFor(folders: any, key?: RouteDecision["folder"]) {
   if (key === "review") return { id: folders.review_folder_id, pasta: "revisao_manual" };
   if (key === "errors") return { id: folders.errors_folder_id, pasta: "erros" };
   return { id: null, pasta: "a_enviar" };
+}
+
+function currentFolderIdForGuide(folders: any, guide: any) {
+  if (guide?.pasta_atual === "revisao_manual") return folders.review_folder_id || folders.source_folder_id;
+  if (guide?.pasta_atual === "nao_identificadas") return folders.not_identified_folder_id || folders.source_folder_id;
+  if (guide?.pasta_atual === "erros") return folders.errors_folder_id || folders.source_folder_id;
+  if (guide?.pasta_atual === "duplicadas") return folders.duplicates_folder_id || folders.source_folder_id;
+  return folders.source_folder_id;
 }
 
 async function moveToFolder(
@@ -333,6 +347,44 @@ function dispatchConnectorErrors(plans: DispatchPlan[], integrations: any[], gma
   return [...new Set(errors)];
 }
 
+function contactPreconditionIssue(company: any): ContactPreconditionIssue | null {
+  const emailOk = validateEmailAddress(company?.email_principal);
+  const phoneOk = Boolean(normalizePhoneE164(company?.whatsapp_principal));
+  const channels = channelsFor(company?.canal_preferido || null);
+  const needsEmail = channels.includes("email");
+  const needsPhone = channels.includes("whatsapp");
+
+  if (!emailOk && !phoneOk) {
+    return {
+      exceptionType: "missing_contact_channels",
+      reason: "Este cliente nao possui e-mail nem numero de WhatsApp/celular cadastrado para envio.",
+      action: "Cadastrar e-mail e/ou WhatsApp, confirmar a forma de envio e processar novamente.",
+    };
+  }
+  if (channels.length === 0) {
+    return {
+      exceptionType: "missing_channel",
+      reason: "Cliente sem forma de envio definida para guias.",
+      action: "Selecionar e-mail, WhatsApp ou ambos antes de enviar.",
+    };
+  }
+  if (needsEmail && !emailOk) {
+    return {
+      exceptionType: "missing_email",
+      reason: "Este cliente nao possui e-mail cadastrado para envio.",
+      action: "Cadastrar e-mail valido no cliente e processar novamente.",
+    };
+  }
+  if (needsPhone && !phoneOk) {
+    return {
+      exceptionType: "missing_phone",
+      reason: "Este cliente nao possui numero de WhatsApp/celular cadastrado para envio.",
+      action: "Cadastrar WhatsApp/celular valido no cliente e processar novamente.",
+    };
+  }
+  return null;
+}
+
 async function detectDuplicates(db: any, guide: any, metadata: GuideMetadata, classification: ClassifyResult, matched: any) {
   // Quando o operador clica em "Processar agora" (force_dispatch), a guia é
   // reprocessada propositalmente — não a tratamos como duplicada interna.
@@ -477,6 +529,18 @@ function routeGuide(args: {
   }
   // Score de confianca nao bloqueia mais: identificacao da empresa (CNPJ ou razao social)
   // ja foi validada acima; o envio segue pelo canal preferido da empresa.
+  const contactIssue = contactPreconditionIssue(matched);
+  if (contactIssue) {
+    return {
+      status: "revisao_manual",
+      folder: "review",
+      exceptionType: contactIssue.exceptionType,
+      reason: contactIssue.reason,
+      action: contactIssue.action,
+      severity: "warning",
+      reviewLevel: "quick",
+    };
+  }
   if (!matched.comunicacao_ativa || channelsFor(matched.canal_preferido).length === 0) {
     return { status: "revisao_manual", folder: "review", exceptionType: "invalid_channel", reason: "Empresa sem canal de envio ativo.", action: "Configurar canal e comunicacao ativa.", severity: "warning", reviewLevel: "full" };
   }
@@ -699,7 +763,7 @@ async function organizeSentFile(db: any, guide: any, driveKey: string, folders: 
     const empresaFolderId = await findOrCreateFolder(driveKey, empresaFolderName, folders.sent_folder_id);
     const compFolderId = await findOrCreateFolder(driveKey, compFolderName, empresaFolderId);
     await renameFile(driveKey, guide.drive_file_id, finalName);
-    await moveFile(driveKey, guide.drive_file_id, compFolderId, folders.source_folder_id);
+    await moveFile(driveKey, guide.drive_file_id, compFolderId, currentFolderIdForGuide(folders, guide));
     await db.from("guias").update({
       status: "enviada",
       pasta_atual: "enviadas",

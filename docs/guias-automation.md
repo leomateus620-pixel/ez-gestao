@@ -56,6 +56,41 @@ Google Drive e Gmail continuam usando exclusivamente os gateways Lovable:
    atualiza `guia_envios.provider_status`, `delivered_at` e `failed_at`. Não
    reenvia automaticamente em falhas.
 
+## Pendencias de cliente e contato
+
+A tela operacional de envio fica em `/guias` e `/guias/fila`, acionada pelo item
+`Guias` do menu principal. O CTA **Verificar guias no Drive** chama
+`run-guide-scan-now` por meio de `GuideProvider`, preservando o fluxo real de
+Drive, parser, decisao, excecoes, eventos e envio.
+
+Durante a varredura, `run-guide-scan-now` continua bloqueando qualquer guia sem
+empresa ativa ou sem contato obrigatorio antes do dispatch. As pendencias de
+cadastro usam `status = revisao_manual`, permanecem auditaveis em
+`guia_excecoes`/`guia_eventos`, e recebem `exception_type` especifico:
+
+- `company_not_found`: cliente ainda nao cadastrado para o CNPJ/razao social
+  identificados.
+- `missing_email`: canal de envio exige e-mail, mas o cliente nao possui e-mail
+  valido.
+- `missing_phone`: canal de envio exige WhatsApp/celular, mas o cliente nao
+  possui numero valido.
+- `missing_contact_channels`: cliente sem e-mail e sem WhatsApp/celular.
+- `missing_channel`: cliente tem contato, mas ainda nao possui forma de envio
+  preferida.
+
+Na UI, essas excecoes aparecem em **Pendencias de cadastro** e abrem um modal
+focado. O modal mostra empresa/CNPJ/guia identificados, permite cadastrar
+e-mail, WhatsApp em formato brasileiro normalizado para E.164, forma de envio
+preferida e observacao. Ao salvar, o frontend atualiza ou cria o registro em
+`empresas`, resolve as excecoes de contato da guia, registra `guide_audit` e
+invoca `dispatch-guide` com `manual_approval`/`force_dispatch`, que delega de
+volta para `run-guide-scan-now` para continuar o processamento pelo pipeline
+existente.
+
+Em modo teste, a varredura tambem valida os contatos reais da empresa. Os
+destinatarios de teste so controlam o envio simulado; eles nao mascaram cliente
+sem e-mail ou sem WhatsApp no cadastro.
+
 ### Botao "Processar agora" (pipeline completo)
 
 O botao **Processar agora** no Dashboard chama `run-guide-scan-now` com
