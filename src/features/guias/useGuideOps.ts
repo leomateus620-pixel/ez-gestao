@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import {
   guideCompanyName,
+  isValidBrazilianPhone,
   normalizeBrazilianPhone,
   validateGuideContactForm,
   type GuideContactFormValues,
@@ -185,12 +186,13 @@ export function useResolveGuideContact() {
       let empresaId = existing?.id || '';
 
       if (existing) {
+        const existingPhoneNormalized = normalizeBrazilianPhone(existing.whatsappPrincipal || '');
         const patch = {
           email_principal: normalized.email || existing.emailPrincipal || '',
-          whatsapp_principal: normalized.phone || normalizeBrazilianPhone(existing.whatsappPrincipal) || existing.whatsappPrincipal || '',
+          whatsapp_principal:
+            normalized.phone
+            || (isValidBrazilianPhone(existing.whatsappPrincipal || '') ? existingPhoneNormalized : ''),
           canal_preferido: normalized.preferredChannel,
-          email_validado: Boolean(normalized.email || existing.emailValidado),
-          whatsapp_opt_in_at: normalized.phone ? now : existing.whatsappOptInAt,
           comunicacao_ativa: true,
           observacoes: appendObservation(existing.observacoes, normalized.observation),
         };
@@ -212,8 +214,6 @@ export function useResolveGuideContact() {
           email_principal: normalized.email,
           whatsapp_principal: normalized.phone,
           canal_preferido: normalized.preferredChannel,
-          email_validado: Boolean(normalized.email),
-          whatsapp_opt_in_at: normalized.phone ? now : null,
           comunicacao_ativa: true,
           saudacao_guia: '',
           observacoes: appendObservation('', normalized.observation),
@@ -270,15 +270,31 @@ export function useResolveGuideContact() {
           },
         },
       });
-      if (error) throw error;
+      if (error) {
+        // O contato foi salvo com sucesso; sinalizamos falha apenas no envio.
+        const message = (error as Error)?.message || 'Falha ao acionar o processamento.';
+        const err = new Error(`Contato salvo. Envio não realizado: ${message}`);
+        (err as Error & { contactSaved?: boolean }).contactSaved = true;
+        throw err;
+      }
       return data;
     },
     onSuccess: () => {
       ['guias', 'guia_envios', 'guia_excecoes', 'guia_eventos', 'guide_batch_runs', 'empresas_for_guides'].forEach((k) =>
         client.invalidateQueries({ queryKey: [k] }));
-      toast.success('Contato salvo e guia reenviada para processamento');
+      toast.success('Contato salvo e guia reenviada para processamento.');
     },
-    onError: (e: any) => toast.error('Não foi possível resolver a pendência', { description: e?.message }),
+    onError: (e: any) => {
+      const contactSaved = Boolean(e?.contactSaved);
+      // Se o contato foi persistido, ainda invalidamos os caches relevantes.
+      if (contactSaved) {
+        ['guias', 'guia_excecoes', 'empresas_for_guides'].forEach((k) =>
+          client.invalidateQueries({ queryKey: [k] }));
+      }
+      toast.error(contactSaved ? 'Contato salvo, mas o envio não foi acionado.' : 'Não foi possível resolver a pendência.', {
+        description: e?.message,
+      });
+    },
   });
 }
 

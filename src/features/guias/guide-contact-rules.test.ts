@@ -3,6 +3,8 @@ import type { Empresa, Guia, GuiaExcecao } from '@/data/types';
 import {
   classifyGuideContactIssue,
   defaultGuideContactForm,
+  hasValidGuidePhone,
+  isValidBrazilianPhone,
   normalizeBrazilianPhone,
   validateGuideContactForm,
 } from './guide-contact-rules';
@@ -156,5 +158,42 @@ describe('guide contact validation', () => {
       [exception('invalid_channel')],
     );
     expect(defaultGuideContactForm(pending!).preferredChannel).toBe('whatsapp');
+  });
+});
+
+describe('strict Brazilian phone validation', () => {
+  it('rejects foreign numbers even with valid E.164 format', () => {
+    expect(normalizeBrazilianPhone('+441234567890')).toBe('');
+    expect(isValidBrazilianPhone('+441234567890')).toBe(false);
+  });
+
+  it('rejects Brazilian mobile numbers that do not start with 9', () => {
+    expect(isValidBrazilianPhone('+5511812345678')).toBe(false);
+  });
+
+  it('rejects invalid DDD (below 11)', () => {
+    expect(isValidBrazilianPhone('+551099999999')).toBe(false);
+  });
+
+  it('hasValidGuidePhone rejects foreign phone stored on empresa', () => {
+    expect(
+      hasValidGuidePhone(company({ whatsappPrincipal: '+441234567890' })),
+    ).toBe(false);
+  });
+
+  it('accepts a well-formed Brazilian mobile number', () => {
+    expect(isValidBrazilianPhone('11 99999-9999')).toBe(true);
+    expect(normalizeBrazilianPhone('11 99999-9999')).toBe('+5511999999999');
+  });
+});
+
+describe('missing_contact_channels ordering', () => {
+  it('requires both channels when preferred is ambos', () => {
+    const issue = classifyGuideContactIssue(
+      guide({ empresaId: 'company-1' }),
+      company({ canalPreferido: 'ambos', emailPrincipal: 'ok@example.com', whatsappPrincipal: '' }),
+      [],
+    );
+    expect(issue?.kind).toBe('missing_phone');
   });
 });

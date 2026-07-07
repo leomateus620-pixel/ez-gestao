@@ -463,11 +463,13 @@ function ContactResolutionDialog({
   queue,
   open,
   onOpenChange,
+  onResolvedNext,
 }: {
   issue: GuideContactIssue | null;
   queue: GuideContactIssue[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onResolvedNext: (nextIssue: GuideContactIssue | null) => void;
 }) {
   const resolveContact = useResolveGuideContact();
   const [form, setForm] = useState<GuideContactFormValues>({
@@ -486,13 +488,27 @@ function ContactResolutionDialog({
 
   if (!issue) return null;
 
-  const current = queue.findIndex((entry) => entry.guide.id === issue.guide.id) + 1;
+  const currentIndex = queue.findIndex((entry) => entry.guide.id === issue.guide.id);
+  const current = currentIndex + 1;
+  const nextIssue = currentIndex >= 0 ? queue.slice(currentIndex + 1).find((entry) => entry.guide.id !== issue.guide.id) || null : null;
+  const hasNext = Boolean(nextIssue);
+  const primaryLabel = hasNext ? 'Salvar e resolver próxima pendência' : 'Salvar e processar envio';
   const submit = async () => {
     const validation = validateGuideContactForm(issue, form);
     setErrors(validation.errors);
     if (!validation.ok) return;
-    await resolveContact.mutateAsync({ issue, values: form });
-    onOpenChange(false);
+    try {
+      await resolveContact.mutateAsync({ issue, values: form });
+    } catch {
+      // erro já tratado via toast em useResolveGuideContact
+      return;
+    }
+    if (hasNext) {
+      onResolvedNext(nextIssue);
+    } else {
+      onResolvedNext(null);
+      onOpenChange(false);
+    }
   };
 
   return (
@@ -502,7 +518,7 @@ function ContactResolutionDialog({
           <DialogHeader className="relative z-10 text-left">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="guide-hero-chip">Pendências encontradas</span>
-              {queue.length > 1 && <span className="guide-hero-chip">Item {current} de {queue.length}</span>}
+              {queue.length > 1 && <span className="guide-hero-chip">Pendência {current} de {queue.length}</span>}
             </div>
             <DialogTitle className="text-2xl font-black text-white">{issue.title}</DialogTitle>
             <DialogDescription className="text-sm font-semibold text-white/78">
@@ -547,7 +563,7 @@ function ContactResolutionDialog({
                 {errors.email && <p className="text-xs font-semibold text-destructive">{errors.email}</p>}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="guide-contact-phone" className="text-xs font-black">Celular/WhatsApp</Label>
+                <Label htmlFor="guide-contact-phone" className="text-xs font-black">WhatsApp/celular</Label>
                 <Input
                   id="guide-contact-phone"
                   value={form.phone}
@@ -592,7 +608,7 @@ function ContactResolutionDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>Resolver depois</Button>
           <Button onClick={submit} disabled={resolveContact.isPending} className="gap-2">
             {resolveContact.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-            Salvar e processar envio
+            {primaryLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -861,6 +877,7 @@ export default function Guias({ view }: { view: GuideView }) {
         onOpenChange={(open) => {
           if (!open) setSelectedIssueId(null);
         }}
+        onResolvedNext={(next) => setSelectedIssueId(next ? next.guide.id : null)}
       />
     </div>
   );
