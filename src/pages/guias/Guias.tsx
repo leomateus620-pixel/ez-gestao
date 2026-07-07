@@ -877,6 +877,7 @@ export default function Guias({ view }: { view: GuideView }) {
         onOpenChange={(open) => {
           if (!open) setSelectedIssueId(null);
         }}
+        onResolvedNext={(next) => setSelectedIssueId(next ? next.guide.id : null)}
       />
     </div>
   );
