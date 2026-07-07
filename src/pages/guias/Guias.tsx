@@ -459,6 +459,117 @@ function SettingsPanel({ testConfig }: { testConfig: ReturnType<typeof useTestCo
 }
 
 function ContactResolutionDialog({
+function MidnightHero({
+  isScanning,
+  guidesCount,
+  readyCount,
+  pendingCount,
+  onScan,
+  onBootstrap,
+  bootstrapPending,
+}: {
+  isScanning: boolean;
+  guidesCount: number;
+  readyCount: number;
+  pendingCount: number;
+  onScan: () => void;
+  onBootstrap: () => void;
+  bootstrapPending: boolean;
+}) {
+  const numberFormat = new Intl.NumberFormat('pt-BR');
+  const readyPct = guidesCount > 0 ? Math.min(100, Math.round((readyCount / guidesCount) * 100)) : 0;
+  const pendingPct = guidesCount > 0 ? Math.min(100, Math.round((pendingCount / guidesCount) * 100)) : 0;
+
+  return (
+    <section className="guide-hero-midnight">
+      <div className="guide-hero-midnight__grid">
+        <div className="flex flex-col gap-7">
+          <div className="flex flex-wrap gap-2">
+            <span className="guide-hero-midnight__chip">
+              <span className="guide-hero-midnight__chip-dot" />
+              Drive
+            </span>
+            <span className="guide-hero-midnight__chip">CNPJ</span>
+            <span className="guide-hero-midnight__chip">Contatos vinculados</span>
+          </div>
+
+          <div className="space-y-4">
+            <h1 className="guide-hero-midnight__title">Envio de Guias</h1>
+            <p className="guide-hero-midnight__subtitle">
+              Verificação da pasta do Drive, identificação de razão social e CNPJ, cruzamento com o cadastro de empresas e liberação do envio somente com canal válido.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:flex-wrap sm:items-center">
+            <button
+              type="button"
+              onClick={onScan}
+              disabled={isScanning}
+              className="guide-hero-midnight__cta-primary"
+            >
+              {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              {isScanning ? 'Verificando agora' : 'Verificar guias no Drive'}
+            </button>
+            <Link to="/guias/revisao" className="guide-hero-midnight__cta-secondary">
+              Revisão manual
+            </Link>
+            <button
+              type="button"
+              onClick={onBootstrap}
+              disabled={bootstrapPending}
+              className="guide-hero-midnight__cta-ghost"
+            >
+              <FolderCog className="h-4 w-4" />
+              Pastas
+            </button>
+          </div>
+        </div>
+
+        <div className="guide-hero-midnight__panel">
+          <div className="mb-5 flex justify-end">
+            <span className={cn('guide-hero-midnight__status', isScanning && 'guide-hero-midnight__status--scanning')}>
+              <span className="guide-hero-midnight__status-dot" />
+              {isScanning ? 'Verificando agora' : 'Fluxo monitorado'}
+            </span>
+          </div>
+
+          <div className="guide-hero-midnight__kpi-stack">
+            <div className="guide-hero-midnight__kpi">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="guide-hero-midnight__kpi-label">Guias encontradas</p>
+                  <p className="guide-hero-midnight__kpi-value">{numberFormat.format(guidesCount)}</p>
+                </div>
+                <span className="guide-hero-midnight__kpi-icon">
+                  <FileText className="h-5 w-5" />
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="guide-hero-midnight__kpi guide-hero-midnight__kpi--sub guide-hero-midnight__kpi--ok">
+                <p className="guide-hero-midnight__kpi-label">Prontas</p>
+                <p className="guide-hero-midnight__kpi-value">{numberFormat.format(readyCount)}</p>
+                <div className="guide-hero-midnight__kpi-progress" aria-hidden="true">
+                  <span style={{ width: `${readyPct}%` }} />
+                </div>
+              </div>
+              <div className="guide-hero-midnight__kpi guide-hero-midnight__kpi--sub guide-hero-midnight__kpi--warn">
+                <p className="guide-hero-midnight__kpi-label">Pendências</p>
+                <p className="guide-hero-midnight__kpi-value">{numberFormat.format(pendingCount)}</p>
+                <div className="guide-hero-midnight__kpi-progress" aria-hidden="true">
+                  <span style={{ width: `${pendingPct}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ContactResolutionDialog({
   issue,
   queue,
   open,
