@@ -22,6 +22,8 @@ export default {
         sans: ["Inter", "system-ui", "sans-serif"],
         display: ["Manrope", "Inter", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "monospace"],
+        sora: ["Sora", "Manrope", "Inter", "system-ui", "sans-serif"],
+        manrope: ["Manrope", "Inter", "system-ui", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
