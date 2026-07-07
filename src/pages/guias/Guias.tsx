@@ -702,48 +702,17 @@ export default function Guias({ view }: { view: GuideView }) {
 
   return (
     <div className="guide-dashboard space-y-6">
-      <section className="guide-hero">
-        <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="flex flex-wrap gap-2">
-              <span className="guide-hero-chip">Drive + CNPJ + contatos</span>
-              <span className={cn('guide-hero-chip guide-hero-chip-live', isScanning && 'guide-live-dot-processing')}>
-                <span className={cn('guide-live-dot', isScanning && 'guide-live-dot-processing')} />
-                {isScanning ? 'Verificando agora' : 'Fluxo monitorado'}
-              </span>
-            </div>
-            <h1 className="mt-4 font-display text-3xl font-black tracking-tight text-white md:text-4xl">Envio de Guias</h1>
-            <p className="mt-3 max-w-2xl text-sm font-semibold leading-6 text-white/76">
-              O sistema verifica a pasta do Drive, identifica razão social e CNPJ, cruza com o cadastro de empresas e libera o envio somente quando há canal válido.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 sm:min-w-[26rem]">
-            <div className="guide-hero-telemetry">
-              <div><span>{guides.length}</span><p>Guias encontradas</p></div>
-              <div><span>{readyToSend.length}</span><p>Prontas</p></div>
-              <div><span>{pendingContact.length}</span><p>Pendências</p></div>
-            </div>
-            <div className="flex flex-wrap gap-2 lg:justify-end">
-              <Button onClick={runScan} disabled={isScanning} className="guide-primary-action gap-2">
-                {isScanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                Verificar guias no Drive
-              </Button>
-              <Button asChild variant="outline" className="guide-link-action gap-2">
-                <Link to="/guias/revisao">Revisão manual</Link>
-              </Button>
-              <Button variant="outline" className="guide-link-action gap-2" onClick={() => bootstrap.mutate()} disabled={bootstrap.isPending}>
-                <FolderCog className="h-4 w-4" />
-                Pastas
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
+      <MidnightHero
+        isScanning={isScanning}
+        guidesCount={guides.length}
+        readyCount={readyToSend.length}
+        pendingCount={pendingContact.length}
+        onScan={runScan}
+        onBootstrap={() => bootstrap.mutate()}
+        bootstrapPending={bootstrap.isPending}
+      />
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard label="Guias encontradas" value={guides.length} caption="Itens detectados no fluxo atual" icon={FileText} tone="guide-kpi-waiting" />
-        <SummaryCard label="Prontas para envio" value={readyToSend.length} caption="Com cliente e canal válidos" icon={FileCheck2} tone="guide-kpi-delivered" />
-        <SummaryCard label="Pendências de cadastro" value={pendingContact.length} caption="Exigem contato ou cliente" icon={UserRoundPlus} tone="guide-kpi-exceptions" />
+      <div className="grid gap-3 md:grid-cols-2">
         <SummaryCard label="Enviadas" value={sent.length} caption="Aceitas pelo fluxo de envio" icon={Send} tone="guide-kpi-sent" />
         <SummaryCard label="Falhas/exceções" value={openExceptions.length} caption="Bloqueios técnicos ou revisão" icon={ShieldAlert} tone="guide-kpi-failures" />
       </div>
