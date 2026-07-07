@@ -1,106 +1,60 @@
-# Refinamento do módulo Envio de Guias (FABLE)
+# Redesign do hero de /guias (Cyber-premium split glass)
 
-## Limitações do ambiente Lovable (importante ler antes de aprovar)
+Aplicar a direção escolhida diretamente sobre o hero atual em `src/pages/guias/Guias.tsx`, preservando toda a lógica (props, hooks, estados) e trocando **apenas a apresentação**. Sem novas rotas, dados falsos ou dependências.
 
-- Não consigo criar branch nomeada, fazer `push` para o GitHub nem abrir Pull Request a partir do Lovable. O controle de versão é gerenciado internamente e o resultado aparece como um commit no repositório sincronizado. Vou entregar todas as mudanças de código, testes e documentação; a abertura da PR precisa ser feita por você (ou eu descrevo exatamente o texto para colar).
-- Testes visuais em `/guias` autenticado: só consigo validar via Playwright usando a sessão Supabase gerenciada. Vou capturar screenshots desktop/notebook/mobile e anexar.
-- Repo-wide lint/typecheck: rodo, mas se houver dívida pré-existente não relacionada, documento e mantenho apenas os arquivos alterados limpos.
+## Tokens travados (paleta Midnight Indigo + Sora/Manrope)
 
-Confirme se posso seguir mesmo sem abertura de PR pelo agente. Se sim, executo o plano abaixo.
+Vou adicionar tokens no `src/index.css` (namespace `--guide-hero-*`) para não sujar outros módulos:
 
-## Mapa do fluxo atual (após leitura de PR #39)
+- `--guide-bg: #0a0a1a`
+- `--guide-surface: #141432`
+- `--guide-surface-2: #1e1e5a`
+- `--guide-accent: #4f46e5` (indigo-600)
+- `--guide-accent-soft: rgba(79,70,229,0.10)`
+- `--guide-border: rgba(79,70,229,0.20)`
+- `--guide-text: #ffffff`
+- `--guide-text-muted: rgba(199,210,254,0.60)` (indigo-200/60, AA sobre `#0a0a1a`)
+- `--guide-ok: #34d399`
+- `--guide-warn: #fb7185`
 
-1. `/guias` renderiza `Guias.tsx` usando `GuideProvider` + `useGuideOps`.
-2. CTA "Verificar guias no Drive" chama `run-guide-scan-now` via provider.
-3. Edge function faz scan Drive → parser nativo PDF → decisão (`guide-rules`) → grava em `guias` + `guia_excecoes` + `guia_eventos`.
-4. `contactPreconditionIssue` (backend) e `classifyGuideContactIssue` (frontend) classificam pendências de contato.
-5. UI mostra seção "Pendências de cadastro" → modal `ContactResolutionDialog` → `useResolveGuideContact` atualiza/insere `empresas`, resolve exceções, dispara `dispatch-guide` com `manual_approval`.
-6. `dispatch-guide` delega de volta a `run-guide-scan-now` com `force_dispatch`, que aplica pipeline seguro (templates, idempotência, canal preferido, modo teste/produção, Drive move).
+Fontes: adicionar `@fontsource/sora` e `@fontsource/manrope` via `bun add`, importar em `src/main.tsx`, e registrar `fontFamily.sora` / `fontFamily.manrope` em `tailwind.config.ts`. Sem `<link>` do Google Fonts.
 
-## Problemas identificados na PR #39
+## Mudanças em `src/pages/guias/Guias.tsx` (só o `<section class="guide-hero">` de nível superior — linhas 689-725)
 
-1. **Divergência frontend/backend na classificação** — ordem de regras difere; o mesmo caso aparece como `missing_email` no front e `dispatch_precondition_failed` no back.
-2. **Validação de telefone frouxa** — `normalizeBrazilianPhone` aceita `+[1-9]\d{7,14}` (qualquer país) mesmo com UI dizendo "WhatsApp/celular brasileiro". `isValidBrazilianPhone` é estrito, mas `hasValidGuidePhone` usa a normalização permissiva.
-3. **Consentimento tratado como sinônimo de cadastro** — `useResolveGuideContact` pode marcar `whatsapp_opt_in_at`/`email_validado` ao salvar contato, sem opt-in real.
-4. **Empresa criada como `ativa` + `simples_nacional` por padrão** — assunção arriscada; deveria ser `cadastro_incompleto` com flag.
-5. **Modal não gerencia fila** — abre uma pendência mas não oferece "Resolver próxima"; risco de empilhar modais quando o usuário clica em várias.
-6. **CTA "Confirmar forma de envio"** é ambíguo quando canal é `ambos` — não deixa claro se envia por e-mail, WhatsApp ou ambos.
-7. **Dispatch dispara mesmo quando save de contato falha silenciosamente** — precisa `await` explícito e bloqueio se update falhar.
-8. **Copy PT-BR** com termos sem acento em mensagens de exceção (`pendencia`, `nao`, `numero`) surfacing na UI.
-9. **Cobertura de testes** — falta caso de canal `ambos` faltando um lado, telefone estrangeiro rejeitado, ausência de consent field, e ordem de fila.
-10. **Layout `/guias`** — CTAs duplicados no header (verificar + processar), badges apertados em notebook (~1280px), modal com overflow em mobile <380px.
+Trocar por split-screen 2 colunas com layout do protótipo `v3`:
 
-## Plano de refinamento em camadas
+**Coluna esquerda**
+- Chips reais (não mock): "Drive + CNPJ + contatos" (mantém a copy atual) — pill indigo `bg-indigo-500/10 border-indigo-500/20 text-indigo-300`.
+- H1 "Envio de Guias" em Sora 800, tracking-tight, `text-white`.
+- Subtítulo atual em Manrope, `text-[hsl(var(--guide-text-muted))]`, max-w-lg.
+- Cluster de CTAs (mantendo handlers existentes):
+  - Primário `Verificar guias no Drive` — bg indigo-600, shadow indigo, com Loader2 quando `isScanning`.
+  - Secundário `Revisão manual` — `bg-[#141432] border-indigo-500/20`, link para `/guias/revisao`.
+  - Ghost `Pastas` — texto indigo-400 → hover white, chama `bootstrap.mutate()`.
 
-### Camada 1 — Regras de contato (frontend + backend alinhados)
-- Endurecer `normalizeBrazilianPhone`/`isValidBrazilianPhone` (aceitar apenas `+55` com 10-11 dígitos após DDI, validar DDD 11-99, celular começando com 9).
-- `hasValidGuidePhone` passa a usar `isValidBrazilianPhone`.
-- Redefinir ordem canônica de classificação em `guide-contact-rules.ts` e replicar no backend `contactPreconditionIssue` de `run-guide-scan-now/index.ts`:
-  1. missing_client
-  2. missing_channel (empresa sem canal preferido)
-  3. missing_contact_channels (sem e-mail e sem telefone)
-  4. missing_email (canal exige e-mail)
-  5. missing_phone (canal exige WhatsApp)
-- Exportar helper compartilhável (mesma lógica em TS puro) para o edge function importar.
+**Coluna direita**
+- Glow decorativo `bg-indigo-600/10 blur-3xl` atrás.
+- Badge "Fluxo monitorado" no topo à direita: `bg-[#141432]/80 backdrop-blur-xl border-indigo-500/30`, dot esmeralda com `animate-pulse`. Quando `isScanning`, dot vira indigo pulsante e label muda para "Verificando agora".
+- Card KPI grande: `Guias encontradas` = `guides.length` (número real, não "1,284"), ícone `FileText` no quadrado indigo. Formatação `pt-BR` via `Intl.NumberFormat`.
+- Grid 2 col menor:
+  - `Prontas` = `readyToSend.length`, barra progresso esmeralda proporcional a `readyToSend/guides` (ou 0 se `guides=0`).
+  - `Pendências` = `pendingContact.length`, barra rose proporcional.
 
-### Camada 2 — Persistência de contato/empresa
-- `useResolveGuideContact`:
-  - Nunca setar `whatsapp_opt_in_at`, `email_validado`, `verified_at`.
-  - Se empresa nova: criar com `status: 'cadastro_incompleto'` + `regime_tributario: null` (add migration se coluna não aceitar).
-  - `await` do update de contato antes de invocar `dispatch-guide`.
-  - Se dispatch falhar, contato persiste mas toast informa "Contato salvo. Envio não realizado: <motivo>". Guia continua listada como pendente de dispatch, não de contato.
-  - Audit log `guide_audit` com `action='contact_resolved'` + campos alterados.
+Remover: os três divs de telemetria antigos (`guide-hero-telemetry`) e os chips laranja/verde antigos. A faixa `SummaryCard` logo abaixo do hero permanece inalterada — o hero passa a mostrar KPIs de destaque e a faixa abaixo mantém o detalhamento (5 cards). Se ficar redundante, ajusto os 5 cards inferiores para não repetir os 3 do hero (remover "Guias encontradas", "Prontas para envio" e "Pendências de cadastro", mantendo apenas "Enviadas" e "Falhas/exceções"). **Decisão:** enxugar a faixa inferior para 2 cards para eliminar redundância.
 
-### Camada 3 — Modal + fila de pendências
-- Refatorar `ContactResolutionDialog` para receber `queue` e mostrar "Pendência X de N".
-- Após save bem-sucedido: botão primário vira "Resolver próxima pendência" (auto-avança para próximo issue) ou "Concluir" se última.
-- Bloquear abertura simultânea (state único `activeIssueId`).
-- Mobile: `max-w-full sm:max-w-lg`, campos empilhados, footer sticky.
-- Cancelar preserva issue na lista; nunca fecha silenciosamente com dispatch parcial.
+## CSS auxiliar em `src/index.css`
 
-### Camada 4 — Visual `/guias`
-- Header: um único CTA primário ("Verificar guias no Drive"). Mover "Rodar teste" para menu secundário.
-- Cards de resumo: quatro colunas com hierarquia consistente (Encontradas, Prontas, Pendências, Enviadas hoje).
-- Seção "Pendências de cadastro" com badge de contagem e CTA "Resolver todas".
-- Rows: densidade -12% padding vertical em notebook, badges com largura mínima.
-- Empty/loading/error states dedicados com copy PT-BR.
-- Sem novos tokens de design; usar `guide-*` classes existentes.
+- Nova classe `.guide-hero-shell` substituindo os visuais laranja/marrom da `.guide-hero` atual (bg `#0a0a1a`, sem gradient sépia). A classe antiga `.guide-hero` continua existindo para o modal de contato (usa a mesma classe). Solução: renomear no hero para `.guide-hero-shell` e manter `.guide-hero` no modal com estilo próprio ou criar variante `.guide-hero--modal`.
+- `.guide-kpi-hero`, `.guide-kpi-hero-strong`, `.guide-kpi-progress--ready`, `.guide-kpi-progress--pending` — todos usando as variáveis novas.
 
-### Camada 5 — UX de canal
-- CTA de envio explicita canal: "Enviar por e-mail", "Enviar por WhatsApp", "Enviar pelos dois canais" — deriva de `channelOptions(company)`.
-- Se `canalPreferido='ambos'` e ambos válidos → botão único "Enviar pelos dois canais" + dropdown "Alterar canal desta guia".
-- Backend recebe `channel_override` opcional em `dispatch-guide` (já suportado via overrides).
+## Fora de escopo
+- Faixa abaixo do hero (seções `Pendências`, `Prontas`, `Guias encontradas`) — apenas ajuste dos 5 SummaryCards → 2, sem mexer no restante.
+- Modal `ContactResolutionDialog`, lógica de scan, hooks, testes.
+- Outras rotas.
 
-### Camada 6 — Copy PT-BR
-- Auditoria completa das strings em `Guias.tsx`, `guide-contact-rules.ts`, exceptions surfacing, toasts em `useGuideOps.ts`.
-- Alinhar aos rótulos padronizados listados na tarefa.
+## Validação
+- `bunx tsgo --noEmit`
+- `bunx vitest run` (garantir que 117 testes seguem verdes).
+- Screenshot Playwright autenticado em 1440 e 390 px para conferir contraste e legibilidade.
 
-### Camada 7 — Testes
-- Ampliar `guide-contact-rules.test.ts`:
-  - telefones estrangeiros rejeitados;
-  - celular BR sem 9 rejeitado;
-  - canal `ambos` com um lado ausente → `missing_email`/`missing_phone`;
-  - fila com múltiplas pendências → ordem estável.
-- Novo `use-resolve-guide-contact.test.ts` (com msw ou mocks Supabase): garante que dispatch só é chamado após save OK e que campos de consent não são setados.
-- Manter todos os testes existentes verdes.
-
-## Fora de escopo (não vou mexer)
-- Parser PDF (`_shared/guide-parser.ts`).
-- Regras de dispatch/idempotência no `run-guide-scan-now` além do `contactPreconditionIssue`.
-- Envio WhatsApp/Gmail (mantém Cloud API atual — não reintroduzo Twilio).
-- Design system global.
-- Módulos Fator R, Tax Reform, Classifica.
-
-## Validação (Evidence)
-- `npx tsc --noEmit`
-- `npm run test -- src/features/guias`
-- `npm run test`
-- `npm run build`
-- Playwright autenticado: screenshots de `/guias` em 1440, 1280 e 390 CSS px + modal aberto.
-- Anexar tudo no resumo final com resumo dos diffs por arquivo.
-
-## Entrega
-- Commit único com mensagem: `Refina fluxo de envio de guias e pendências de contato`.
-- Texto pronto de PR (Resumo, Mapa, Problemas, Correções, Arquivos, Alertas, Modal, Persistência, Reprocessamento, Canais, Testes, Validação visual, Limitações) para colar no GitHub, já que não posso abrir a PR pelo agente.
-
-Confirma esse escopo? Se sim, sigo direto pelas 7 camadas.
+Ao aprovar, aplico as mudanças em uma única rodada.
