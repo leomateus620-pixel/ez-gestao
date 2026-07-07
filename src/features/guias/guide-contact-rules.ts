@@ -42,21 +42,30 @@ export function normalizeGuideEmail(value: string) {
 export function normalizeBrazilianPhone(value: string) {
   const raw = value.trim();
   if (!raw) return '';
-  if (/^\+[1-9]\d{7,14}$/.test(raw)) return raw;
-
   let digits = raw.replace(/\D/g, '');
   if (digits.startsWith('0')) digits = digits.replace(/^0+/, '');
   if (digits.length === 10 || digits.length === 11) {
-    return `+55${digits}`;
+    return isValidBrazilianDigits(digits) ? `+55${digits}` : '';
   }
   if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {
-    return `+${digits}`;
+    const local = digits.slice(2);
+    return isValidBrazilianDigits(local) ? `+55${local}` : '';
   }
   return '';
 }
 
+function isValidBrazilianDigits(digits: string) {
+  // 10 (fixo) ou 11 (celular). DDD 11-99; celular obrigatoriamente inicia com 9.
+  if (digits.length !== 10 && digits.length !== 11) return false;
+  const ddd = Number(digits.slice(0, 2));
+  if (!Number.isFinite(ddd) || ddd < 11 || ddd > 99) return false;
+  if (digits.length === 11 && digits[2] !== '9') return false;
+  return true;
+}
+
 export function isValidBrazilianPhone(value: string) {
-  return /^\+55\d{10,11}$/.test(normalizeBrazilianPhone(value));
+  const normalized = normalizeBrazilianPhone(value);
+  return /^\+55\d{10,11}$/.test(normalized);
 }
 
 export function guideCompanyName(guide: Guia, company?: Empresa | null) {
@@ -79,7 +88,7 @@ export function hasValidGuideEmail(company: Empresa | null | undefined) {
 }
 
 export function hasValidGuidePhone(company: Empresa | null | undefined) {
-  return Boolean(normalizeBrazilianPhone(company?.whatsappPrincipal || ''));
+  return isValidBrazilianPhone(company?.whatsappPrincipal || '');
 }
 
 function issueCopy(kind: GuideContactIssueKind) {
